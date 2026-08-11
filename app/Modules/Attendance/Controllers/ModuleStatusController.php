@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Attendance module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 3b Attendance migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,14 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Attendance',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Phase 3b Slice 1: student day attendance (mark/save). Next: by-date report, subject/period, staff attendance.',
+            'slices' => [
+                'student_day' => 'done',
+                'attendance_by_date' => 'pending',
+                'subject_period' => 'pending',
+                'staff_attendance' => 'pending',
+            ],
         ]);
     }
 }
