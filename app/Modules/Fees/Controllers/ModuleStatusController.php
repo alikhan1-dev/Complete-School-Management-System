@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Fees module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 3 Fees migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,19 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Fees',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Slices 1–5 core done: types, groups, master, assign, discounts, collect (deposit). Deferred: transport, multi-collect, print/SMS, due-fees report, carry-forward.',
+            'slices' => [
+                'fee_types' => 'done',
+                'fee_groups' => 'done',
+                'fee_master' => 'done',
+                'assign' => 'done',
+                'discounts' => 'done',
+                'collect' => 'done',
+                'collect_transport' => 'pending',
+                'collect_multi' => 'pending',
+                'fees_carry_forward' => 'pending',
+            ],
         ]);
     }
 }
