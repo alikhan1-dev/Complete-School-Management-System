@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * CI Studentfee + Studentfeemaster_model deposit/ledger (fees category only for Slice 5 core).
+ * CI Studentfee + Studentfeemaster_model deposit/ledger (fees category; transport deferred).
  */
 class FeeCollectService
 {
@@ -75,6 +75,149 @@ class FeeCollectService
         }
 
         return $query->get();
+    }
+
+    /**
+     * Fee master options for due-fees search (CI feesessiongrouplist; transport deferred).
+     *
+     * @return Collection<int, object>
+     */
+    public function feeOptionsForDueSearch(): Collection
+    {
+        $sessionId = $this->currentSession->id();
+
+        return DB::table('fee_session_groups')
+            ->join('fee_groups', 'fee_groups.id', '=', 'fee_session_groups.fee_groups_id')
+            ->join('fee_groups_feetype', 'fee_groups_feetype.fee_session_group_id', '=', 'fee_session_groups.id')
+            ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
+            ->where('fee_session_groups.session_id', $sessionId)
+            ->where('fee_groups.nature', '!=', 'custom')
+            ->where('fee_groups.is_system', 0)
+            ->orderBy('fee_groups.name')
+            ->orderBy('feetype.type')
+            ->select([
+                'fee_session_groups.id as fee_session_group_id',
+                'fee_groups.name as group_name',
+                'fee_groups_feetype.id as fee_groups_feetype_id',
+                'feetype.type as fee_type',
+                'feetype.code as fee_code',
+            ])
+            ->get();
+    }
+
+    /**
+     * CI Studentfee::feesearch / getMultipleDueFees (fees only; unpaid/partial remaining balance).
+     *
+     * @param  list<int>  $feeGroupsFeetypeIds
+     * @return array<int, array{student:object,fees:list<array<string,mixed>>}>
+     */
+    public function searchDueFees(array $feeGroupsFeetypeIds, ?int $classId = null, ?int $sectionId = null): array
+    {
+        $feeGroupsFeetypeIds = array_values(array_unique(array_filter(array_map('intval', $feeGroupsFeetypeIds))));
+        if ($feeGroupsFeetypeIds === []) {
+            return [];
+        }
+
+        $sessionId = $this->currentSession->id();
+
+        $query = DB::table('student_fees_master')
+            ->join('fee_session_groups', 'fee_session_groups.id', '=', 'student_fees_master.fee_session_group_id')
+            ->join('fee_groups', 'fee_groups.id', '=', 'fee_session_groups.fee_groups_id')
+            ->join('fee_groups_feetype', 'fee_groups_feetype.fee_session_group_id', '=', 'fee_session_groups.id')
+            ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
+            ->join('student_session', 'student_session.id', '=', 'student_fees_master.student_session_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->leftJoin('student_fees_deposite', function ($join) {
+                $join->on('student_fees_deposite.student_fees_master_id', '=', 'student_fees_master.id')
+                    ->on('student_fees_deposite.fee_groups_feetype_id', '=', 'fee_groups_feetype.id');
+            })
+            ->where('student_session.session_id', $sessionId)
+            ->where('students.is_active', 'yes')
+            ->whereIn('fee_groups_feetype.id', $feeGroupsFeetypeIds)
+            ->select([
+                'students.id as student_id',
+                'students.admission_no',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.father_name',
+                'students.mobileno',
+                'students.guardian_phone',
+                'student_session.id as student_session_id',
+                'classes.class',
+                'sections.section',
+                'student_fees_master.id as student_fees_master_id',
+                'student_fees_master.is_system',
+                'student_fees_master.amount as fee_master_amount',
+                'fee_groups.name as fee_group',
+                'feetype.type as fee_type',
+                'feetype.code as fee_code',
+                'fee_groups_feetype.id as fee_groups_feetype_id',
+                'fee_groups_feetype.amount',
+                DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
+            ])
+            ->orderBy('students.admission_no')
+            ->orderBy('fee_groups.name');
+
+        if ($classId) {
+            $query->where('student_session.class_id', $classId);
+        }
+        if ($sectionId) {
+            $query->where('student_session.section_id', $sectionId);
+        }
+
+        $rows = $query->get();
+        $students = [];
+
+        foreach ($rows as $row) {
+            $due = ((int) $row->is_system === 1)
+                ? (float) $row->fee_master_amount
+                : (float) $row->amount;
+            $totals = $this->sumAmountDetail($row->amount_detail);
+            $balance = round($due - ($totals['amount'] + $totals['amount_discount']), 2);
+            if ($balance <= 0) {
+                continue;
+            }
+
+            $sid = (int) $row->student_session_id;
+            if (! isset($students[$sid])) {
+                $students[$sid] = [
+                    'student' => (object) [
+                        'student_id' => (int) $row->student_id,
+                        'student_session_id' => $sid,
+                        'admission_no' => $row->admission_no,
+                        'firstname' => $row->firstname,
+                        'middlename' => $row->middlename,
+                        'lastname' => $row->lastname,
+                        'father_name' => $row->father_name,
+                        'mobileno' => $row->mobileno,
+                        'guardian_phone' => $row->guardian_phone,
+                        'class' => $row->class,
+                        'section' => $row->section,
+                    ],
+                    'fees' => [],
+                    'total_balance' => 0.0,
+                ];
+            }
+
+            $students[$sid]['fees'][] = [
+                'fee_group' => $row->fee_group,
+                'fee_type' => $row->fee_type,
+                'fee_code' => $row->fee_code,
+                'amount' => $due,
+                'amount_deposite' => $totals['amount'],
+                'amount_discount' => $totals['amount_discount'],
+                'amount_fine' => $totals['amount_fine'],
+                'balance' => $balance,
+                'student_fees_master_id' => (int) $row->student_fees_master_id,
+                'fee_groups_feetype_id' => (int) $row->fee_groups_feetype_id,
+            ];
+            $students[$sid]['total_balance'] = round($students[$sid]['total_balance'] + $balance, 2);
+        }
+
+        return $students;
     }
 
     public function findStudentBySession(int $studentSessionId): ?object
@@ -382,6 +525,101 @@ class FeeCollectService
 
             return ['invoice_id' => (int) $deposit->id, 'sub_invoice_id' => 1];
         });
+    }
+
+    /**
+     * CI fee_deposit_collections / addfeegrp — multi fee lines, no payment-time discounts.
+     *
+     * @param  list<array{student_fees_master_id:int,fee_groups_feetype_id:int,amount:float|string,amount_fine?:float|string}>  $lines
+     * @return list<array{invoice_id:int,sub_invoice_id:int,student_fees_master_id:int,fee_groups_feetype_id:int}>
+     */
+    public function depositCollections(
+        array $lines,
+        Staff $staff,
+        string $date,
+        string $paymentMode,
+        string $description = '',
+        int $studentSessionId = 0
+    ): array {
+        if ($lines === []) {
+            throw new InvalidArgumentException('Select at least one fee with amount greater than zero.');
+        }
+
+        if (! in_array($paymentMode, self::PAYMENT_MODES, true)) {
+            throw new InvalidArgumentException('Invalid payment mode.');
+        }
+
+        return DB::transaction(function () use ($lines, $staff, $date, $paymentMode, $description, $studentSessionId) {
+            $results = [];
+
+            foreach ($lines as $line) {
+                $amount = round((float) ($line['amount'] ?? 0), 2);
+                if ($amount <= 0) {
+                    continue;
+                }
+
+                $masterId = (int) $line['student_fees_master_id'];
+                $feetypeId = (int) $line['fee_groups_feetype_id'];
+                $fine = round((float) ($line['amount_fine'] ?? 0), 2);
+
+                $deposit = $this->deposit([
+                    'student_fees_master_id' => $masterId,
+                    'fee_groups_feetype_id' => $feetypeId,
+                    'student_session_id' => $studentSessionId,
+                    'date' => $date,
+                    'amount' => $amount,
+                    'amount_discount' => 0,
+                    'amount_fine' => $fine,
+                    'payment_mode' => $paymentMode,
+                    'description' => $description,
+                    'discounts' => [],
+                ], $staff);
+
+                $results[] = [
+                    'invoice_id' => $deposit['invoice_id'],
+                    'sub_invoice_id' => $deposit['sub_invoice_id'],
+                    'student_fees_master_id' => $masterId,
+                    'fee_groups_feetype_id' => $feetypeId,
+                ];
+            }
+
+            if ($results === []) {
+                throw new InvalidArgumentException('Select at least one fee with amount greater than zero.');
+            }
+
+            return $results;
+        });
+    }
+
+    /**
+     * Resolve selected fee lines for group collect UI.
+     *
+     * @param  list<string>  $selected  values "masterId:feeGroupsFeetypeId"
+     * @return list<object>
+     */
+    public function resolveSelectedLines(int $studentSessionId, array $selected): array
+    {
+        $ledger = $this->getStudentFees($studentSessionId);
+        $map = [];
+        foreach ($ledger as $line) {
+            $key = $line->student_fees_master_id.':'.$line->fee_groups_feetype_id;
+            $map[$key] = $line;
+        }
+
+        $resolved = [];
+        foreach ($selected as $raw) {
+            $key = trim((string) $raw);
+            if ($key === '' || ! isset($map[$key])) {
+                continue;
+            }
+            $line = $map[$key];
+            if ($line->balance <= 0) {
+                continue;
+            }
+            $resolved[] = $line;
+        }
+
+        return $resolved;
     }
 
     public function deletePayment(int $invoiceId, int $subInvoice): void

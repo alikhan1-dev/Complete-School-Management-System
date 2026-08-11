@@ -25,11 +25,17 @@
 </div>
 
 <div class="box box-primary">
-    <div class="box-header with-border"><h3 class="box-title">Fees</h3></div>
+    <div class="box-header with-border">
+        <h3 class="box-title">Fees</h3>
+        <div class="box-tools">
+            <button type="button" class="btn btn-primary btn-sm" id="btn_collect_selected">Collect Selected</button>
+        </div>
+    </div>
     <div class="box-body table-responsive no-padding">
         <table class="table table-striped table-bordered">
             <thead>
             <tr>
+                <th style="width:36px;"><input type="checkbox" id="select_all_fees"></th>
                 <th>Fees Group</th>
                 <th>Fees Code</th>
                 <th>Due Date</th>
@@ -52,8 +58,14 @@
                     $grandPaid += $line->paid_amount;
                     $grandBalance += max(0, $line->balance);
                     $status = $line->balance <= 0 ? 'Paid' : ($line->paid_amount > 0 ? 'Partial' : 'Unpaid');
+                    $selectValue = $line->student_fees_master_id.':'.$line->fee_groups_feetype_id;
                 @endphp
                 <tr>
+                    <td>
+                        @if($line->balance > 0)
+                            <input type="checkbox" class="fee_line_cb" value="{{ $selectValue }}">
+                        @endif
+                    </td>
                     <td>{{ $line->fee_group_name }}</td>
                     <td>{{ $line->fee_type }} ({{ $line->fee_code }})</td>
                     <td>{{ $line->due_date ?: '—' }}</td>
@@ -84,6 +96,7 @@
                 </tr>
                 @foreach($line->payments as $pay)
                     <tr class="bg-gray-light">
+                        <td></td>
                         <td colspan="4" class="text-right">
                             Payment {{ $pay->payment_id }} — {{ $pay->date }} — {{ $pay->payment_mode }}
                             @if($pay->collected_by) <small>({{ $pay->collected_by }})</small>@endif
@@ -109,10 +122,11 @@
                     </tr>
                 @endforeach
             @empty
-                <tr><td colspan="10" class="text-center">No fees assigned</td></tr>
+                <tr><td colspan="11" class="text-center">No fees assigned</td></tr>
             @endforelse
             @if(count($ledger))
                 <tr>
+                    <th></th>
                     <th colspan="4" class="text-right">Grand Total</th>
                     <th>{{ number_format($grandDue, 2) }}</th>
                     <th>{{ number_format($grandDiscount, 2) }}</th>
@@ -126,6 +140,37 @@
         </table>
     </div>
 </div>
+
+<form method="post" action="{{ route('fees.studentfee.collect_group') }}" id="multi_collect_select_form" style="display:none;">
+    @csrf
+    <input type="hidden" name="student_session_id" value="{{ $student->student_session_id }}">
+    <div id="multi_collect_selected_fields"></div>
+</form>
+
+@push('scripts')
+<script>
+$(function () {
+    $('#select_all_fees').on('change', function () {
+        $('.fee_line_cb').prop('checked', $(this).prop('checked'));
+    });
+    $('#btn_collect_selected').on('click', function () {
+        var $checked = $('.fee_line_cb:checked');
+        if ($checked.length === 0) {
+            alert('Select at least one unpaid fee line.');
+            return;
+        }
+        if (!confirm('Collect selected fees?')) {
+            return;
+        }
+        var $fields = $('#multi_collect_selected_fields').empty();
+        $checked.each(function () {
+            $fields.append($('<input>', {type: 'hidden', name: 'selected[]', value: $(this).val()}));
+        });
+        $('#multi_collect_select_form').trigger('submit');
+    });
+});
+</script>
+@endpush
 
 @if($discounts->isNotEmpty())
     <div class="box box-primary">

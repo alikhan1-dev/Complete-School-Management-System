@@ -5,6 +5,7 @@ use App\Modules\Fees\Controllers\FeeDiscountController;
 use App\Modules\Fees\Controllers\FeeGroupController;
 use App\Modules\Fees\Controllers\FeeMasterController;
 use App\Modules\Fees\Controllers\FeeTypeController;
+use App\Modules\Fees\Controllers\FeesForwardController;
 use App\Modules\Fees\Controllers\ModuleStatusController;
 use App\Modules\Fees\Controllers\StudentFeeController;
 use Illuminate\Support\Facades\Route;
@@ -61,6 +62,13 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('studentfee/addfee/{id}', [StudentFeeController::class, 'addfee'])->name('fees.studentfee.addfee');
     Route::get('studentfee/collect', [StudentFeeController::class, 'collectForm'])->name('fees.studentfee.collect');
     Route::post('studentfee/addstudentfee', [StudentFeeController::class, 'addstudentfee'])->name('fees.studentfee.addstudentfee');
+    Route::post('studentfee/getcollectfee', [StudentFeeController::class, 'collectGroupForm'])->name('fees.studentfee.collect_group');
+    Route::post('studentfee/addfeegrp', [StudentFeeController::class, 'addfeegrp'])->name('fees.studentfee.addfeegrp');
     Route::post('studentfee/deleteFee', [StudentFeeController::class, 'deleteFee'])->name('fees.studentfee.deleteFee');
     Route::match(['get', 'post'], 'studentfee/searchpayment', [StudentFeeController::class, 'searchpayment'])->name('fees.studentfee.searchpayment');
+    Route::match(['get', 'post'], 'studentfee/feesearch', [StudentFeeController::class, 'feesearch'])->name('fees.studentfee.feesearch');
+
+    // Fees carry forward (CI admin/feesforward)
+    Route::match(['get', 'post'], 'admin/feesforward', [FeesForwardController::class, 'index'])->name('fees.feesforward.index');
+    Route::match(['get', 'post'], 'admin/feesforward/index', [FeesForwardController::class, 'index']);
 });

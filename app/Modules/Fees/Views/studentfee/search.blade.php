@@ -17,6 +17,7 @@
         <h3 class="box-title">Collect Fees</h3>
         <div class="box-tools">
             <a href="{{ route('fees.studentfee.searchpayment') }}" class="btn btn-default btn-sm">Search Payment</a>
+            <a href="{{ route('fees.studentfee.feesearch') }}" class="btn btn-default btn-sm">Search Due Fees</a>
         </div>
     </div>
     <div class="box-body">

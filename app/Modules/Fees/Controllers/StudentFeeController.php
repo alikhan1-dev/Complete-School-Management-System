@@ -13,7 +13,7 @@ use Illuminate\View\View;
 use InvalidArgumentException;
 
 /**
- * CI Studentfee — collect fees (core): search, ledger, deposit, delete, payment search.
+ * CI Studentfee — collect fees: search, ledger, single deposit, multi-collect, delete, payment search.
  */
 class StudentFeeController extends Controller
 {
@@ -168,6 +168,108 @@ class StudentFeeController extends Controller
             ->with('success', $message);
     }
 
+    /**
+     * CI getcollectfee — prepare multi-collect form from selected ledger lines.
+     */
+    public function collectGroupForm(Request $request): View|RedirectResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        $data = $request->validate([
+            'student_session_id' => ['required', 'integer'],
+            'selected' => ['required', 'array', 'min:1'],
+            'selected.*' => ['string'],
+        ]);
+
+        $studentSessionId = (int) $data['student_session_id'];
+        $student = $this->collect->findStudentBySession($studentSessionId);
+        abort_if(! $student, 404);
+
+        $lines = $this->collect->resolveSelectedLines($studentSessionId, $data['selected']);
+        if ($lines === []) {
+            return redirect()
+                ->route('fees.studentfee.addfee', $studentSessionId)
+                ->withErrors(['selected' => 'Select at least one unpaid fee line.']);
+        }
+
+        return view('shared::layouts.admin', [
+            'title' => 'Collect Fees (Group)',
+            'contentView' => 'fees::studentfee.collect_group',
+            'student' => $student,
+            'lines' => $lines,
+            'paymentModes' => FeeCollectService::PAYMENT_MODES,
+        ]);
+    }
+
+    /**
+     * CI addfeegrp — deposit multiple fee lines (no payment-time discounts).
+     */
+    public function addfeegrp(Request $request): JsonResponse|RedirectResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        $data = $request->validate([
+            'student_session_id' => ['required', 'integer'],
+            'collected_date' => ['required', 'date'],
+            'payment_mode_fee' => ['required', 'string', 'in:'.implode(',', FeeCollectService::PAYMENT_MODES)],
+            'fee_gupcollected_note' => ['nullable', 'string'],
+            'row_counter' => ['required', 'array', 'min:1'],
+            'row_counter.*' => ['integer'],
+        ]);
+
+        $studentSessionId = (int) $data['student_session_id'];
+        $lines = [];
+        foreach ($data['row_counter'] as $row) {
+            $masterId = (int) $request->input('student_fees_master_id_'.$row);
+            $feetypeId = (int) $request->input('fee_groups_feetype_id_'.$row);
+            $amount = (float) $request->input('fee_amount_'.$row, 0);
+            $fine = (float) $request->input('fee_groups_feetype_fine_amount_'.$row, 0);
+            if ($masterId <= 0 || $feetypeId <= 0 || $amount <= 0) {
+                continue;
+            }
+            $lines[] = [
+                'student_fees_master_id' => $masterId,
+                'fee_groups_feetype_id' => $feetypeId,
+                'amount' => $amount,
+                'amount_fine' => $fine,
+            ];
+        }
+
+        /** @var \App\Modules\Staff\Models\Staff $staff */
+        $staff = $request->user('staff');
+
+        try {
+            $results = $this->collect->depositCollections(
+                $lines,
+                $staff,
+                $data['collected_date'],
+                $data['payment_mode_fee'],
+                (string) ($data['fee_gupcollected_note'] ?? ''),
+                $studentSessionId
+            );
+        } catch (InvalidArgumentException $e) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['status' => 0, 'error' => ['row_counter' => $e->getMessage()]], 422);
+            }
+
+            return back()->withInput()->withErrors(['row_counter' => $e->getMessage()]);
+        }
+
+        $ids = array_map(
+            fn (array $r) => $r['invoice_id'].'/'.$r['sub_invoice_id'],
+            $results
+        );
+        $message = 'Fees collected. Payment IDs: '.implode(', ', $ids);
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['status' => 1, 'error' => '', 'message' => $message, 'invoices' => $results]);
+        }
+
+        return redirect()
+            ->route('fees.studentfee.addfee', $studentSessionId)
+            ->with('success', $message);
+    }
+
     public function deleteFee(Request $request): JsonResponse|RedirectResponse
     {
         abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_delete'), 403);
@@ -211,6 +313,71 @@ class StudentFeeController extends Controller
             'payment' => $payment,
             'paymentId' => $request->input('payment_id'),
             'searched' => $request->isMethod('post') || $request->filled('payment_id'),
+        ]);
+    }
+
+    /**
+     * CI studentfee/feesearch — search due/unpaid fee lines by fee type + class/section.
+     */
+    public function feesearch(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('search_due_fees', 'can_view')
+            || $this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        $feeOptions = $this->collect->feeOptionsForDueSearch();
+        $results = null;
+        $selected = [];
+
+        if ($request->isMethod('post')) {
+            $data = $request->validate([
+                'feegroup' => ['required', 'array', 'min:1'],
+                'feegroup.*' => ['string'],
+                'class_id' => ['nullable', 'integer', 'exists:classes,id'],
+                'section_id' => ['nullable', 'integer', 'exists:sections,id'],
+            ]);
+
+            $selected = $data['feegroup'];
+            $feetypeIds = [];
+            foreach ($selected as $raw) {
+                $parts = explode('-', (string) $raw, 2);
+                if (count($parts) === 2 && is_numeric($parts[1])) {
+                    $feetypeIds[] = (int) $parts[1];
+                } elseif (is_numeric($raw)) {
+                    $feetypeIds[] = (int) $raw;
+                }
+            }
+
+            $results = $this->collect->searchDueFees(
+                $feetypeIds,
+                $request->filled('class_id') ? (int) $data['class_id'] : null,
+                $request->filled('section_id') ? (int) $data['section_id'] : null
+            );
+        }
+
+        $groupedOptions = [];
+        foreach ($feeOptions as $opt) {
+            $gid = (int) $opt->fee_session_group_id;
+            if (! isset($groupedOptions[$gid])) {
+                $groupedOptions[$gid] = [
+                    'id' => $gid,
+                    'group_name' => $opt->group_name,
+                    'feetypes' => [],
+                ];
+            }
+            $groupedOptions[$gid]['feetypes'][] = $opt;
+        }
+
+        return view('shared::layouts.admin', [
+            'title' => 'Search Due Fees',
+            'contentView' => 'fees::studentfee.feesearch',
+            'classes' => SchoolClass::query()->orderBy('id')->get(),
+            'groupedOptions' => $groupedOptions,
+            'results' => $results,
+            'filters' => [
+                'feegroup' => $selected,
+                'class_id' => $request->input('class_id'),
+                'section_id' => $request->input('section_id'),
+            ],
         ]);
     }
 }
