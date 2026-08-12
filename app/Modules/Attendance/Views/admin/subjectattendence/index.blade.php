@@ -13,15 +13,13 @@
 
 <div class="box box-primary">
     <div class="box-header with-border">
-        <h3 class="box-title">Student Attendance</h3>
+        <h3 class="box-title">Period Attendance</h3>
         <div class="box-tools">
-            <a href="{{ route('attendance.stuattendence.attendencereport') }}" class="btn btn-default btn-sm">Attendance By Date</a>
-            <a href="{{ route('attendance.subjectattendence.index') }}" class="btn btn-default btn-sm">Period Attendance</a>
-            <a href="{{ route('attendance.staffattendance.index') }}" class="btn btn-default btn-sm">Staff Attendance</a>
+            <a href="{{ route('attendance.stuattendence.index') }}" class="btn btn-default btn-sm">Student Attendance</a>
         </div>
     </div>
     <div class="box-body">
-        <form method="post" action="{{ route('attendance.stuattendence.index') }}" class="row" id="attendance_search_form">
+        <form method="post" action="{{ route('attendance.subjectattendence.index') }}" class="row" id="period_attendance_search_form">
             @csrf
             <input type="hidden" name="search" value="search">
             <div class="col-sm-3">
@@ -43,16 +41,35 @@
                     </select>
                 </div>
             </div>
-            <div class="col-sm-3">
+            <div class="col-sm-2">
                 <div class="form-group">
                     <label>Date <span class="text-danger">*</span></label>
-                    <input type="date" name="date" class="form-control" value="{{ old('date', $filters['date'] ?? date('Y-m-d')) }}" required>
+                    <input type="date" id="date" name="date" class="form-control" value="{{ old('date', $filters['date'] ?? date('Y-m-d')) }}" required>
                 </div>
             </div>
-            <div class="col-sm-3">
+            <div class="col-sm-4">
                 <div class="form-group">
-                    <label>&nbsp;</label>
-                    <button type="submit" class="btn btn-primary btn-sm btn-block"><i class="fa fa-search"></i> Search</button>
+                    <label>Subject / Period <span class="text-danger">*</span></label>
+                    <select id="subject_timetable_id" name="subject_timetable_id" class="form-control" required>
+                        <option value="">Select</option>
+                        @foreach($periodOptions as $period)
+                            @php
+                                $staffName = trim(($period->name ?? '').' '.($period->surname ?? ''));
+                                $label = ($period->subject_name ?? 'Subject')
+                                    .' ('.($period->time_from ?? '').'- '.($period->time_to ?? '').')'
+                                    .' By '.$staffName
+                                    .' ('.($period->employee_id ?? '').')';
+                            @endphp
+                            <option value="{{ $period->id }}" @selected((string) ($filters['subject_timetable_id'] ?? '') === (string) $period->id)>
+                                {{ $label }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+            <div class="col-sm-12">
+                <div class="form-group text-right">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="fa fa-search"></i> Search</button>
                 </div>
             </div>
         </form>
@@ -65,12 +82,17 @@
             <h3 class="box-title">Student List</h3>
         </div>
         <div class="box-body">
-            <form method="post" action="{{ route('attendance.stuattendence.index') }}" id="attendance_save_form">
+            @if($resultList->isNotEmpty() && ! empty($resultList->first()->attendence_type_id))
+                <div class="alert alert-success">Attendance already submitted — you can edit the record.</div>
+            @endif
+
+            <form method="post" action="{{ route('attendance.subjectattendence.index') }}" id="period_attendance_save_form">
                 @csrf
                 <input type="hidden" name="search" value="saveattendence">
                 <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
                 <input type="hidden" name="section_id" value="{{ $filters['section_id'] }}">
                 <input type="hidden" name="date" value="{{ $filters['date'] }}">
+                <input type="hidden" name="subject_timetable_id" value="{{ $filters['subject_timetable_id'] }}">
                 <input type="hidden" name="is_first_time_attendance" value="{{ $isFirstTime ? '1' : '0' }}">
 
                 @if($canAdd && $types->isNotEmpty())
@@ -94,9 +116,6 @@
                             <th>Roll No</th>
                             <th>Name</th>
                             <th>Attendance</th>
-                            <th>Source</th>
-                            <th>Entry Time</th>
-                            <th>Exit Time</th>
                             <th>Note</th>
                         </tr>
                         </thead>
@@ -105,18 +124,12 @@
                             @php
                                 $ssid = (int) $row->student_session_id;
                                 $currentType = (int) ($row->attendence_type_id ?: 0);
-                                $source = 'Manual';
-                                if ((int) ($row->biometric_attendence ?? 0) === 1) {
-                                    $source = 'Biometric';
-                                } elseif ((int) ($row->qrcode_attendance ?? 0) === 1) {
-                                    $source = 'QR';
-                                }
                             @endphp
                             <tr>
                                 <td>
                                     {{ $i + 1 }}
                                     <input type="hidden" name="student_session[]" value="{{ $ssid }}">
-                                    <input type="hidden" name="attendendence_id{{ $ssid }}" value="{{ (int) $row->attendence_id }}">
+                                    <input type="hidden" name="attendance_id{{ $ssid }}" value="{{ (int) $row->student_subject_attendance_id }}">
                                 </td>
                                 <td>{{ $row->admission_no }}</td>
                                 <td>{{ $row->roll_no }}</td>
@@ -128,26 +141,12 @@
                                                    class="student_att_type"
                                                    name="attendencetype{{ $ssid }}"
                                                    value="{{ $type->id }}"
-                                                   data-student="{{ $ssid }}"
                                                    @checked($currentType === (int) $type->id || ($currentType === 0 && (int) $type->id === 1))
                                                    @disabled(! $canAdd)
                                                    required>
                                             {{ $type->type }}
                                         </label>
                                     @endforeach
-                                </td>
-                                <td>{{ $source }}</td>
-                                <td>
-                                    <input type="time" class="form-control in_time"
-                                           name="in_time_{{ $ssid }}"
-                                           value="{{ $row->in_time ? substr((string) $row->in_time, 0, 5) : '' }}"
-                                           @disabled(! $canAdd)>
-                                </td>
-                                <td>
-                                    <input type="time" class="form-control out_time"
-                                           name="out_time_{{ $ssid }}"
-                                           value="{{ $row->out_time ? substr((string) $row->out_time, 0, 5) : '' }}"
-                                           @disabled(! $canAdd)>
                                 </td>
                                 <td>
                                     <input type="text" class="form-control"
@@ -158,7 +157,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="9" class="text-center">No students found</td></tr>
+                            <tr><td colspan="6" class="text-center">No students found</td></tr>
                         @endforelse
                         </tbody>
                     </table>
@@ -166,7 +165,7 @@
 
                 @if($canAdd && $resultList->isNotEmpty())
                     <button type="submit" class="btn btn-primary"
-                            onclick="return confirm('Save attendance for this class/section/date?');">
+                            onclick="return confirm('Save period attendance for this class/section/subject/date?');">
                         <i class="fa fa-save"></i> Save Attendance
                     </button>
                 @endif
@@ -179,6 +178,9 @@
 <script>
 $(function () {
     var oldSection = '{{ $filters['section_id'] ?? '' }}';
+    var oldTimetable = '{{ $filters['subject_timetable_id'] ?? '' }}';
+    var csrfToken = $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}';
+
     function loadSections(classId, selected) {
         $('#section_id').html('<option value="">Select</option>');
         if (!classId) return;
@@ -190,33 +192,69 @@ $(function () {
             });
         });
     }
-    $('#class_id').on('change', function () { loadSections($(this).val(), ''); });
+
+    function periodLabel(obj) {
+        var staff = $.trim((obj.name || '') + ' ' + (obj.surname || ''));
+        return (obj.subject_name || 'Subject')
+            + ' (' + (obj.time_from || '') + '- ' + (obj.time_to || '') + ') By '
+            + staff + ' (' + (obj.employee_id || '') + ')';
+    }
+
+    function loadPeriods(classId, sectionId, date, selected) {
+        $('#subject_timetable_id').html('<option value="">Select</option>');
+        if (!classId || !sectionId || !date) return;
+        $.ajax({
+            type: 'POST',
+            url: '{{ url('admin/subjectgroup/getSubjectByClassandSectionDate') }}',
+            data: {
+                _token: csrfToken,
+                class_id: classId,
+                section_id: sectionId,
+                date: date
+            },
+            dataType: 'json',
+            success: function (data) {
+                if (!$.isArray(data)) return;
+                $.each(data, function (i, obj) {
+                    var opt = $('<option>', {value: obj.id, text: periodLabel(obj)});
+                    if (String(selected) === String(obj.id)) opt.prop('selected', true);
+                    $('#subject_timetable_id').append(opt);
+                });
+            }
+        });
+    }
+
+    function refreshPeriods(keepSelected) {
+        loadPeriods(
+            $('#class_id').val(),
+            $('#section_id').val(),
+            $('#date').val(),
+            keepSelected ? oldTimetable : ''
+        );
+    }
+
+    $('#class_id').on('change', function () {
+        loadSections($(this).val(), '');
+        $('#subject_timetable_id').html('<option value="">Select</option>');
+    });
+    $('#section_id, #date').on('change', function () {
+        oldTimetable = '';
+        refreshPeriods(false);
+    });
+
     loadSections($('#class_id').val(), oldSection);
+    @if(empty($periodOptions) || $periodOptions->isEmpty())
+        refreshPeriods(true);
+    @endif
 
     $('.set_all_type').on('change', function () {
         var typeId = $(this).val();
         $('.student_att_type').each(function () {
             if (String($(this).val()) === String(typeId)) {
-                $(this).prop('checked', true).trigger('change');
+                $(this).prop('checked', true);
             }
         });
     });
-
-    function toggleTimes($radio) {
-        var typeId = parseInt($radio.val(), 10);
-        var student = $radio.data('student');
-        var clear = (typeId === 4 || typeId === 5); // Absent / Holiday
-        var $row = $radio.closest('tr');
-        if (clear) {
-            $row.find('.in_time, .out_time').val('').prop('disabled', true);
-        } else {
-            $row.find('.in_time, .out_time').prop('disabled', false);
-        }
-    }
-    $(document).on('change', '.student_att_type', function () {
-        toggleTimes($(this));
-    });
-    $('.student_att_type:checked').each(function () { toggleTimes($(this)); });
 });
 </script>
 @endpush
