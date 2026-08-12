@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Finance module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 4 Finance migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,16 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Finance',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Income/expense heads + income/expense CRUD with documents done. Deferred: search_income/search_expense date screens, finance reports.',
+            'slices' => [
+                'income_heads' => 'done',
+                'expense_heads' => 'done',
+                'income' => 'done',
+                'expense' => 'done',
+                'search_screens' => 'deferred',
+                'reports' => 'deferred',
+            ],
         ]);
     }
 }

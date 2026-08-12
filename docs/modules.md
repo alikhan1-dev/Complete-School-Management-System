@@ -47,7 +47,7 @@ Source reference: `smart_7.2/` (read-only). Target: `complete_school_management_
 | **Inventory** | Items, stock, issue | `admin/Item.php`, `admin/Itemstock.php`, `admin/Issueitem.php` | `item`, `item_stock`, `item_issue`, `item_category`, `item_store`, `item_supplier` | `app/Modules/Inventory/` | Pending |
 | **Payroll** | Payroll & payslips | `admin/Payroll.php` | `staff_payroll`, `staff_payslip`, `payslip_allowance` | `app/Modules/Payroll/` | Pending |
 | **Leave** | Leave types & requests | `admin/Leavetypes.php`, `admin/Leaverequest.php`, `admin/Approve_leave.php` | `leave_types`, `staff_leave_request`, `staff_leave_details`, `student_applyleave` | `app/Modules/Leave/` | Pending |
-| **Finance** | Income & expense | `admin/Income.php`, `admin/Expense.php`, `admin/Incomehead.php`, `admin/Expensehead.php` | `income`, `expenses`, `income_head`, `expense_head` | `app/Modules/Finance/` | Pending |
+| **Finance** | Income & expense | `admin/Income.php`, `admin/Expense.php`, `admin/Incomehead.php`, `admin/Expensehead.php` | `income`, `expenses`, `income_head`, `expense_head` | `app/Modules/Finance/` | In progress (heads + income/expense CRUD + documents done; deferred: search screens, finance reports) |
 | **Communication** | Email, SMS, notifications | `admin/Mailsms.php`, `admin/Notification.php`, `Emailconfig.php`, `Smsconfig.php` | `messages`, `send_notification`, `email_config`, `sms_config`, `notification_setting` | `app/Modules/Communication/` | Pending |
 | **Chat** | In-app chat | `admin/Chat.php`, `user/Chat.php` | `chat_users`, `chat_connections`, `chat_messages` | `app/Modules/Chat/` | Pending |
 | **FrontCms** | Public website CMS | `admin/Frontcms.php`, `admin/front/*`, `Welcome.php` | `front_cms_*` | `app/Modules/FrontCms/` | Pending |
