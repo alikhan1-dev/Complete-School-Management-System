@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Exams module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 5 Exams migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,19 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Exams',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Exam groups + exams-within-group CRUD done. Deferred: exam subjects, assign students, marks entry, link exams, marksheets/admit cards, OnlineExam, Certificates.',
+            'slices' => [
+                'exam_groups' => 'done',
+                'exams_in_group' => 'done',
+                'exam_subjects' => 'pending',
+                'assign_students' => 'pending',
+                'marks_entry' => 'pending',
+                'link_exams' => 'pending',
+                'marksheets_admit_cards' => 'pending',
+                'online_exam' => 'pending',
+                'certificates' => 'pending',
+            ],
         ]);
     }
 }
