@@ -31,9 +31,9 @@ A module is complete when routes, validation, permissions, views, AJAX, reports,
 |-------|-------|--------|
 | **0** | Inventory + docs (`docs/modules.md`, `database.md`, `known_issues.md`) | Done (baseline) |
 | **1** | Shared, Auth, Roles, Staff — foundation | Done (core) |
-| **2** | Academics, Students (Parents/Timetable partial deferred) | Done (core Academics + Students; Parents/Timetable pending) |
+| **2** | Academics, Students (Parents/Timetable partial deferred) | Done (core Academics + Students; Parents pending; Timetable class create/report in progress) |
 | **3** | **Fees** (delivery pivot: Fees first; Attendance follows as 3b) — was Phase 4 in original plan | In progress (operational core done incl. multi-collect, due-fees, carry-forward; deferred: transport, print/SMS) |
-| **3b** | Attendance (day / subject / staff) + remaining student history | In progress (Slices 1–4: day + by-date + subject/period + staff mark-save; deferred: period reportbydate, SMS, biometric) |
+| **3b** | Attendance (day / subject / staff) + remaining student history | Operational core done (day + by-date + subject/period + staff mark-save); deferred: period reportbydate, SMS, biometric |
 | **4** | Finance, Payments (gateway infrastructure) | Pending |
 | **5** | Exams, OnlineExam, Certificates | Pending |
 | **6** | Library, Transport, Hostel, Inventory, Payroll, Leave, Homework, LessonPlan | Pending |

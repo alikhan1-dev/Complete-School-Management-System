@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Timetable module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase Timetable migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,14 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Timetable',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Class timetable create/save + class report done. Deferred: teacher mytimetable, print, duplicate-check AJAX, quick period generator.',
+            'slices' => [
+                'class_create_save' => 'done',
+                'class_report' => 'done',
+                'teacher_timetable' => 'deferred',
+                'print' => 'deferred',
+            ],
         ]);
     }
 }

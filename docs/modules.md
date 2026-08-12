@@ -38,7 +38,7 @@ Source reference: `smart_7.2/` (read-only). Target: `complete_school_management_
 | **Exams** | Exams, schedules, results | `admin/Exam.php`, `admin/Examschedule.php`, `admin/Examresult.php`, `admin/Mark.php` | `exams`, `exam_schedules`, `exam_groups`, `exam_group_*` | `app/Modules/Exams/` | Pending |
 | **Exams** | Marksheets & admit cards | `admin/Marksheet.php`, `admin/Admitcard.php` | `template_marksheets`, `template_admitcards` | `app/Modules/Exams/` | Pending |
 | **OnlineExam** | Online exams & question bank | `admin/Onlineexam.php`, `admin/Question.php` | `onlineexam`, `onlineexam_questions`, `onlineexam_students`, `questions` | `app/Modules/OnlineExam/` | Pending |
-| **Timetable** | Class timetable | `admin/Timetable.php` | `subject_timetable`, `class_section_times` | `app/Modules/Timetable/` | Pending |
+| **Timetable** | Class timetable | `admin/Timetable.php` | `subject_timetable`, `class_section_times` | `app/Modules/Timetable/` | In progress (class create/save + class report done; deferred: teacher timetable, print, duplicate-check) |
 | **Homework** | Homework & daily assignments | `Homework.php`, `admin/` (homework views) | `homework`, `homework_evaluation`, `daily_assignment`, `submit_assignment` | `app/Modules/Homework/` | Pending |
 | **LessonPlan** | Lessons, topics, syllabus | `admin/Lessonplan.php`, `admin/Syllabus.php` | `lesson`, `topic`, `subject_syllabus`, `lesson_plan_forum` | `app/Modules/LessonPlan/` | Pending |
 | **Library** | Books & issues | `admin/Book.php`, `admin/Member.php` | `books`, `book_issues`, `libarary_members` | `app/Modules/Library/` | Pending |
