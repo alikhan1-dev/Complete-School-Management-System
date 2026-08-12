@@ -15,10 +15,10 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Attendance',
             'status' => 'in_progress',
-            'message' => 'Phase 3b Slice 1: student day attendance (mark/save). Next: by-date report, subject/period, staff attendance.',
+            'message' => 'Phase 3b: student day attendance + by-date report done. Next: subject/period, staff attendance. Deferred: class-teacher filter, SMS, biometric.',
             'slices' => [
                 'student_day' => 'done',
-                'attendance_by_date' => 'pending',
+                'attendance_by_date' => 'done',
                 'subject_period' => 'pending',
                 'staff_attendance' => 'pending',
             ],

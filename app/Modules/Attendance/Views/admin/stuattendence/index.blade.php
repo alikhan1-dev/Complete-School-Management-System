@@ -14,6 +14,9 @@
 <div class="box box-primary">
     <div class="box-header with-border">
         <h3 class="box-title">Student Attendance</h3>
+        <div class="box-tools">
+            <a href="{{ route('attendance.stuattendence.attendencereport') }}" class="btn btn-default btn-sm">Attendance By Date</a>
+        </div>
     </div>
     <div class="box-body">
         <form method="post" action="{{ route('attendance.stuattendence.index') }}" class="row" id="attendance_search_form">

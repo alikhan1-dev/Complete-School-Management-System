@@ -84,6 +84,47 @@ class StudentDayAttendanceService
     }
 
     /**
+     * CI searchAttendenceClassSectionPrepare — Attendance By Date.
+     * Only students who already have an attendance row for that date (RIGHT JOIN semantics).
+     * Class-teacher class filter deferred (CI teacher role_id=2 path).
+     *
+     * @return Collection<int, object>
+     */
+    public function searchPreparedByDate(int $classId, int $sectionId, string $date): Collection
+    {
+        $sessionId = $this->currentSession->id();
+        if ($sessionId <= 0) {
+            throw new InvalidArgumentException('Current academic session is not configured.');
+        }
+
+        return DB::table('student_attendences')
+            ->join('student_session', 'student_session.id', '=', 'student_attendences.student_session_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->leftJoin('attendence_type', 'attendence_type.id', '=', 'student_attendences.attendence_type_id')
+            ->where('student_attendences.date', $date)
+            ->where('student_session.session_id', $sessionId)
+            ->where('student_session.class_id', $classId)
+            ->where('student_session.section_id', $sectionId)
+            ->orderBy('students.admission_no')
+            ->select([
+                'students.id as student_id',
+                'students.admission_no',
+                'students.roll_no',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'student_session.id as student_session_id',
+                'student_attendences.id as attendence_id',
+                'student_attendences.date',
+                'student_attendences.attendence_type_id',
+                'student_attendences.remark',
+                'attendence_type.type as att_type',
+                'attendence_type.long_lang_name',
+            ])
+            ->get();
+    }
+
+    /**
      * CI addorUpdate — upsert by (student_session_id, date). No DB unique key.
      *
      * @param  list<array{

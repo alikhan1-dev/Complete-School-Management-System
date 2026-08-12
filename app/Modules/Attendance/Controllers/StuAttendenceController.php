@@ -117,4 +117,58 @@ class StuAttendenceController extends Controller
             'canAdd' => $this->permissions->hasPrivilege('student_attendance', 'can_add'),
         ]);
     }
+
+    /**
+     * CI admin/stuattendence/attendencereport — Attendance By Date (read-only prepared list).
+     * Privilege: attendance_by_date can_view.
+     * Class-teacher restricted class list deferred.
+     */
+    public function attendencereport(Request $request): View|RedirectResponse
+    {
+        abort_unless(
+            $this->permissions->hasPrivilege('attendance_by_date', 'can_view')
+            || $this->permissions->hasPrivilege('student_attendance', 'can_view'),
+            403
+        );
+
+        $resultList = null;
+        $types = collect();
+        $filters = [
+            'class_id' => $request->input('class_id'),
+            'section_id' => $request->input('section_id'),
+            'date' => $request->input('date', date('Y-m-d')),
+        ];
+
+        if ($request->isMethod('post')) {
+            $data = $request->validate([
+                'class_id' => ['required', 'integer', 'exists:classes,id'],
+                'section_id' => ['required', 'integer', 'exists:sections,id'],
+                'date' => ['required', 'date'],
+            ]);
+
+            $filters['class_id'] = $data['class_id'];
+            $filters['section_id'] = $data['section_id'];
+            $filters['date'] = $data['date'];
+            $types = $this->attendance->activeTypes();
+
+            try {
+                $resultList = $this->attendance->searchPreparedByDate(
+                    (int) $data['class_id'],
+                    (int) $data['section_id'],
+                    $data['date']
+                );
+            } catch (InvalidArgumentException $e) {
+                return back()->withInput()->withErrors(['class_id' => $e->getMessage()]);
+            }
+        }
+
+        return view('shared::layouts.admin', [
+            'title' => 'Attendance By Date',
+            'contentView' => 'attendance::admin.stuattendence.attendencereport',
+            'classes' => SchoolClass::query()->orderBy('id')->get(),
+            'types' => $types,
+            'resultList' => $resultList,
+            'filters' => $filters,
+        ]);
+    }
 }
