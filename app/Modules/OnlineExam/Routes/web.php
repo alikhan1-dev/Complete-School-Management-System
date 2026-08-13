@@ -6,9 +6,28 @@ use App\Modules\OnlineExam\Controllers\OnlineExamController;
 use App\Modules\OnlineExam\Controllers\OnlineExamQuestionController;
 use App\Modules\OnlineExam\Controllers\OnlineExamResultController;
 use App\Modules\OnlineExam\Controllers\QuestionBankController;
+use App\Modules\OnlineExam\Controllers\StudentOnlineExamController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('migration-status/onlineexam', [ModuleStatusController::class, 'status'])->name('onlineexam.migration_status');
+
+Route::middleware([
+    'student_parent.auth',
+    'student_parent.login_token',
+    'student_parent.selected_class',
+    'student_parent.permission:online_examination',
+])->group(function () {
+    // Student portal take-exam (CI user/onlineexam) — first slice
+    Route::get('user/onlineexam', [StudentOnlineExamController::class, 'index'])->name('user.onlineexam.index');
+    Route::get('user/onlineexam/index', [StudentOnlineExamController::class, 'index']);
+    Route::get('user/onlineexam/view/{id}', [StudentOnlineExamController::class, 'view'])
+        ->whereNumber('id')
+        ->name('user.onlineexam.view');
+    Route::get('user/onlineexam/take/{id}', [StudentOnlineExamController::class, 'take'])
+        ->whereNumber('id')
+        ->name('user.onlineexam.take');
+    Route::post('user/onlineexam/save', [StudentOnlineExamController::class, 'save'])->name('user.onlineexam.save');
+});
 
 Route::middleware(['staff.auth'])->group(function () {
     // Question bank (CI admin/question) — CSV import / CMS images deferred

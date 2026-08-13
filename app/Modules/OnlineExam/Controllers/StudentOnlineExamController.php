@@ -1,0 +1,110 @@
+<?php
+
+namespace App\Modules\OnlineExam\Controllers;
+
+use App\Http\Controllers\Controller;
+use App\Modules\OnlineExam\Services\StudentOnlineExamService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\View\View;
+
+/**
+ * CI user/Onlineexam — student portal take-exam (first slice).
+ * Deferred: descriptive uploads, print, ranking, reports, mail/SMS.
+ */
+class StudentOnlineExamController extends Controller
+{
+    public function __construct(protected StudentOnlineExamService $portal)
+    {
+    }
+
+    protected function isStudentRole(): bool
+    {
+        $user = Auth::guard('student_parent')->user();
+
+        return $user && (string) ($user->role ?? '') === 'student';
+    }
+
+    public function index(): View
+    {
+        $sessionId = $this->portal->currentStudentSessionId();
+        $lists = $this->portal->listExams($sessionId);
+
+        return view('shared::layouts.student_parent', [
+            'title' => 'Online Examinations',
+            'contentView' => 'onlineexam::user.index',
+            'upcoming' => $lists['upcoming'],
+            'closed' => $lists['closed'],
+            'isStudent' => $this->isStudentRole(),
+        ]);
+    }
+
+    public function view(int $id): View
+    {
+        $sessionId = $this->portal->currentStudentSessionId();
+        $exam = $this->portal->exam($id);
+        $assignment = $this->portal->assignment($sessionId, $id);
+        $published = $assignment ? $this->portal->isResultPublished($exam, $assignment) : false;
+        $canStart = $this->portal->canStart($exam, $assignment, $this->isStudentRole());
+        $score = $assignment && $published
+            ? $this->portal->publishedScore($exam, $assignment)
+            : null;
+
+        return view('shared::layouts.student_parent', [
+            'title' => $exam->exam,
+            'contentView' => 'onlineexam::user.view',
+            'exam' => $exam,
+            'assignment' => $assignment,
+            'canStart' => $canStart,
+            'resultPublished' => $published,
+            'score' => $score,
+            'isStudent' => $this->isStudentRole(),
+            'attemptCount' => $assignment ? $this->portal->attemptCount((int) $assignment->id) : 0,
+        ]);
+    }
+
+    public function take(int $id): View|RedirectResponse
+    {
+        $sessionId = $this->portal->currentStudentSessionId();
+        $payload = $this->portal->beginTake($sessionId, $id, $this->isStudentRole());
+
+        if ($payload['blocked']) {
+            return redirect()
+                ->route('user.onlineexam.view', $id)
+                ->with('error', $payload['block_message'] ?? 'Unable to start exam.');
+        }
+
+        return view('shared::layouts.student_parent', [
+            'title' => 'Take Exam — '.$payload['exam']->exam,
+            'contentView' => 'onlineexam::user.take',
+            'exam' => $payload['exam'],
+            'assignment' => $payload['assignment'],
+            'questions' => $payload['questions'],
+            'durationSeconds' => $payload['duration_seconds'],
+        ]);
+    }
+
+    public function save(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'exam_id' => ['required', 'integer'],
+            'onlineexam_student_id' => ['required', 'integer'],
+            'answers' => ['nullable', 'array'],
+        ]);
+
+        $sessionId = $this->portal->currentStudentSessionId();
+
+        $this->portal->submit(
+            $sessionId,
+            (int) $data['exam_id'],
+            (int) $data['onlineexam_student_id'],
+            (array) ($data['answers'] ?? []),
+            $this->isStudentRole()
+        );
+
+        return redirect()
+            ->route('user.onlineexam.index')
+            ->with('success', 'Exam submitted successfully.');
+    }
+}
