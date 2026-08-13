@@ -3,6 +3,7 @@
 use App\Modules\Homework\Controllers\AdminDailyAssignmentController;
 use App\Modules\Homework\Controllers\HomeworkController;
 use App\Modules\Homework\Controllers\HomeworkEvaluationController;
+use App\Modules\Homework\Controllers\HomeworkReportController;
 use App\Modules\Homework\Controllers\ModuleStatusController;
 use App\Modules\Homework\Controllers\StudentDailyAssignmentController;
 use App\Modules\Homework\Controllers\StudentHomeworkController;
@@ -90,4 +91,16 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('homework/dailyassigmnetdownload/{id}', [AdminDailyAssignmentController::class, 'download'])
         ->whereNumber('id')
         ->name('homework.daily.download');
+
+    // CI homework reports (daily assignment report deferred)
+    Route::get('homework/homeworkordailyassignmentreport', [HomeworkReportController::class, 'hub'])
+        ->name('homework.reports.hub');
+    Route::match(['get', 'post'], 'homework/homeworkreport', [HomeworkReportController::class, 'homeworkReport'])
+        ->name('homework.reports.homework');
+    Route::get('homework/homeworkreport/students', [HomeworkReportController::class, 'homeworkReportStudents'])
+        ->name('homework.reports.homework.students');
+    Route::match(['get', 'post'], 'homework/evaluation_report', [HomeworkReportController::class, 'evaluationReport'])
+        ->name('homework.reports.evaluation');
+    Route::match(['get', 'post'], 'homework/homework_marksreport', [HomeworkReportController::class, 'marksReport'])
+        ->name('homework.reports.marks');
 });
