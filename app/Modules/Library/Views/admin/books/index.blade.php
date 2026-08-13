@@ -20,11 +20,12 @@
 <div class="box box-primary">
     <div class="box-header with-border">
         <h3 class="box-title">{{ $isEdit ? 'Edit Book' : 'Add Book' }}</h3>
-        @if($isEdit)
-            <div class="box-tools pull-right">
+        <div class="box-tools pull-right">
+            <a href="{{ route('library.members.index') }}" class="btn btn-default btn-sm">Members</a>
+            @if($isEdit)
                 <a href="{{ route('library.books.getall') }}" class="btn btn-default btn-sm">Cancel</a>
-            </div>
-        @endif
+            @endif
+        </div>
     </div>
     <form method="post"
           action="{{ $isEdit ? route('library.books.update', $editing->id) : route('library.books.store') }}">
