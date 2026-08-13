@@ -30,6 +30,7 @@
             <ul class="sidebar-menu">
                 <li><a href="{{ route('student_parent.dashboard') }}"><i class="fa fa-dashboard"></i> <span>Dashboard</span></a></li>
                 <li><a href="{{ route('user.onlineexam.index') }}"><i class="fa fa-wifi"></i> <span>Online Exam</span></a></li>
+                <li><a href="{{ route('user.homework.index') }}"><i class="fa fa-flask"></i> <span>Homework</span></a></li>
             </ul>
         </section>
     </aside>
