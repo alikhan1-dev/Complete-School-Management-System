@@ -21,6 +21,7 @@
     <div class="box-header with-border">
         <h3 class="box-title">{{ $isEdit ? 'Edit Book' : 'Add Book' }}</h3>
         <div class="box-tools pull-right">
+            <a href="{{ route('library.books.import') }}" class="btn btn-info btn-sm">Import Book</a>
             <a href="{{ route('library.members.index') }}" class="btn btn-default btn-sm">Members</a>
             @if($isEdit)
                 <a href="{{ route('library.books.getall') }}" class="btn btn-default btn-sm">Cancel</a>

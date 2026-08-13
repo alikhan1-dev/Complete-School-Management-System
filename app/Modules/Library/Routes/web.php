@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('migration-status/library', [ModuleStatusController::class, 'status'])->name('library.migration_status');
 
 Route::middleware(['staff.auth'])->group(function () {
-    // CI admin/book — catalog CRUD (import deferred)
+    // CI admin/book — catalog CRUD + CSV import
     Route::get('admin/book', [BookController::class, 'index'])->name('library.books.index');
     Route::get('admin/book/index', [BookController::class, 'index']);
     Route::get('admin/book/getall', [BookController::class, 'index'])->name('library.books.getall');
@@ -16,8 +16,12 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/book/edit/{id}', [BookController::class, 'edit'])->whereNumber('id')->name('library.books.edit');
     Route::post('admin/book/edit/{id}', [BookController::class, 'update'])->whereNumber('id')->name('library.books.update');
     Route::get('admin/book/delete/{id}', [BookController::class, 'destroy'])->whereNumber('id')->name('library.books.destroy');
+    Route::match(['get', 'post'], 'admin/book/import', [BookController::class, 'import'])
+        ->name('library.books.import');
+    Route::get('admin/book/exportformat', [BookController::class, 'exportFormat'])
+        ->name('library.books.exportformat');
 
-    // CI admin/member — list + enroll + surrender (issue/return deferred)
+    // CI admin/member — list + enroll + surrender + issue/return
     Route::get('admin/member', [MemberController::class, 'index'])->name('library.members.index');
     Route::get('admin/member/index', [MemberController::class, 'index']);
     Route::match(['get', 'post'], 'admin/member/student', [MemberController::class, 'students'])

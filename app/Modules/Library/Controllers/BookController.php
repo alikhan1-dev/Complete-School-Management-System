@@ -8,10 +8,11 @@ use App\Modules\Roles\Services\PermissionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * CI admin/book — list/create/edit/delete.
- * Deferred: import, getAvailQuantity, issue reports.
+ * CI admin/book — list/create/edit/delete/import.
+ * Deferred: getAvailQuantity, issue reports.
  */
 class BookController extends Controller
 {
@@ -83,6 +84,55 @@ class BookController extends Controller
         return redirect()
             ->route('library.books.getall')
             ->with('success', 'Book deleted successfully.');
+    }
+
+    public function import(Request $request): View|RedirectResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('books', 'can_view'), 403);
+
+        if ($request->isMethod('post')) {
+            abort_unless($this->permissions->hasPrivilege('books', 'can_add'), 403);
+
+            $request->validate([
+                'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+            ]);
+
+            $uploaded = $request->file('file');
+            abort_unless($uploaded !== null, 422);
+
+            $extension = strtolower($uploaded->getClientOriginalExtension());
+            if ($extension !== 'csv') {
+                return redirect()
+                    ->route('library.books.import')
+                    ->withErrors(['file' => 'Only CSV files are allowed.']);
+            }
+
+            $count = $this->books->importFromCsv($uploaded->getRealPath());
+
+            return redirect()
+                ->route('library.books.import')
+                ->with('success', 'Total '.$count.' records found in CSV file. Records imported successfully.');
+        }
+
+        return view('shared::layouts.admin', [
+            'title' => 'Import Book',
+            'contentView' => 'library::admin.books.import',
+            'fields' => BookService::IMPORT_FIELDS,
+            'canAdd' => $this->permissions->hasPrivilege('books', 'can_add'),
+        ]);
+    }
+
+    public function exportFormat(): StreamedResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('books', 'can_view'), 403);
+
+        $content = $this->books->sampleCsvContent();
+
+        return response()->streamDownload(static function () use ($content) {
+            echo $content;
+        }, 'import_book_sample_file.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
     }
 
     /**
