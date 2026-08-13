@@ -276,4 +276,202 @@ class HomeworkReportService
             ->where('students.is_active', 'yes')
             ->count();
     }
+
+    /**
+     * CI Customlib::get_searchtype keys (labels for UI).
+     *
+     * @return array<string, string>
+     */
+    public function searchTypes(): array
+    {
+        return [
+            'today' => 'Today',
+            'this_week' => 'This Week',
+            'last_week' => 'Last Week',
+            'this_month' => 'This Month',
+            'last_month' => 'Last Month',
+            'last_3_month' => 'Last 3 Month',
+            'last_6_month' => 'Last 6 Month',
+            'last_12_month' => 'Last 12 Month',
+            'this_year' => 'This Year',
+            'last_year' => 'Last Year',
+            'period' => 'Period',
+        ];
+    }
+
+    /**
+     * CI Customlib::get_betweendate — returns Y-m-d from/to.
+     *
+     * @return array{from:string,to:string}
+     */
+    public function dateRange(string $searchType, ?string $dateFrom = null, ?string $dateTo = null): array
+    {
+        $now = now();
+
+        return match ($searchType) {
+            'today' => [
+                'from' => $now->toDateString(),
+                'to' => $now->toDateString(),
+            ],
+            'this_week' => $this->thisWeekRange(),
+            'last_week' => [
+                'from' => $now->copy()->startOfWeek()->subWeek()->toDateString(),
+                'to' => $now->copy()->startOfWeek()->subWeek()->endOfWeek()->toDateString(),
+            ],
+            'this_month' => [
+                'from' => $now->copy()->startOfMonth()->toDateString(),
+                'to' => $now->copy()->endOfMonth()->toDateString(),
+            ],
+            'last_month' => [
+                'from' => $now->copy()->subMonthNoOverflow()->startOfMonth()->toDateString(),
+                'to' => $now->copy()->subMonthNoOverflow()->endOfMonth()->toDateString(),
+            ],
+            'last_3_month' => [
+                'from' => $now->copy()->subMonthsNoOverflow(2)->startOfMonth()->toDateString(),
+                'to' => $now->copy()->endOfMonth()->toDateString(),
+            ],
+            'last_6_month' => [
+                'from' => $now->copy()->subMonthsNoOverflow(5)->startOfMonth()->toDateString(),
+                'to' => $now->copy()->endOfMonth()->toDateString(),
+            ],
+            'last_12_month' => [
+                'from' => $now->copy()->subMonthsNoOverflow(11)->startOfMonth()->toDateString(),
+                'to' => $now->copy()->endOfMonth()->toDateString(),
+            ],
+            'this_year' => [
+                'from' => $now->copy()->startOfYear()->toDateString(),
+                'to' => $now->copy()->endOfYear()->toDateString(),
+            ],
+            'last_year' => [
+                'from' => $now->copy()->subYear()->startOfYear()->toDateString(),
+                'to' => $now->copy()->subYear()->endOfYear()->toDateString(),
+            ],
+            'period' => [
+                'from' => (string) ($dateFrom ?: $now->toDateString()),
+                'to' => (string) ($dateTo ?: $now->toDateString()),
+            ],
+            default => [
+                'from' => $now->copy()->startOfYear()->toDateString(),
+                'to' => $now->copy()->endOfYear()->toDateString(),
+            ],
+        };
+    }
+
+    /**
+     * CI dailyassignmentreport — students with assignment counts in range.
+     *
+     * @param  array{class_id:mixed,section_id:mixed,subject_group_id:mixed,subject_id:mixed,search_type:mixed,date_from?:mixed,date_to?:mixed}  $filters
+     * @return array{rows:Collection<int,object>,range:array{from:string,to:string}}
+     */
+    public function dailyAssignmentReport(array $filters): array
+    {
+        $sessionId = $this->sessionId();
+        $classId = (int) ($filters['class_id'] ?? 0);
+        $sectionId = (int) ($filters['section_id'] ?? 0);
+        $subjectGroupId = (int) ($filters['subject_group_id'] ?? 0);
+        $subjectGroupSubjectId = (int) ($filters['subject_id'] ?? 0);
+        $searchType = (string) ($filters['search_type'] ?? 'this_year');
+        $range = $this->dateRange(
+            $searchType,
+            isset($filters['date_from']) ? (string) $filters['date_from'] : null,
+            isset($filters['date_to']) ? (string) $filters['date_to'] : null
+        );
+
+        $rows = DB::table('daily_assignment')
+            ->join('student_session', 'student_session.id', '=', 'daily_assignment.student_session_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'daily_assignment.subject_group_subject_id')
+            ->where('student_session.class_id', $classId)
+            ->where('student_session.section_id', $sectionId)
+            ->where('student_session.session_id', $sessionId)
+            ->where('subject_group_subjects.subject_group_id', $subjectGroupId)
+            ->where('subject_group_subjects.id', $subjectGroupSubjectId)
+            ->whereBetween(DB::raw("date_format(daily_assignment.date,'%Y-%m-%d')"), [$range['from'], $range['to']])
+            ->groupBy(
+                'students.id',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.admission_no',
+                'classes.class',
+                'sections.section'
+            )
+            ->orderBy('students.firstname')
+            ->select([
+                'students.id as student_id',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.admission_no',
+                'classes.class',
+                'sections.section',
+                DB::raw('count(daily_assignment.id) as total_assignment'),
+            ])
+            ->get();
+
+        return ['rows' => $rows, 'range' => $range];
+    }
+
+    /**
+     * CI assignmentdetails — one student's daily rows in range for subject.
+     *
+     * @return Collection<int, object>
+     */
+    public function dailyAssignmentDetails(
+        int $studentId,
+        int $subjectGroupSubjectId,
+        string $searchType,
+        ?string $dateFrom = null,
+        ?string $dateTo = null
+    ): Collection {
+        $range = $this->dateRange($searchType, $dateFrom, $dateTo);
+
+        return DB::table('daily_assignment')
+            ->join('student_session', 'student_session.id', '=', 'daily_assignment.student_session_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'daily_assignment.subject_group_subject_id')
+            ->join('subjects', 'subjects.id', '=', 'subject_group_subjects.subject_id')
+            ->leftJoin('staff', 'staff.id', '=', 'daily_assignment.evaluated_by')
+            ->where('students.id', $studentId)
+            ->where('daily_assignment.subject_group_subject_id', $subjectGroupSubjectId)
+            ->whereBetween(DB::raw("date_format(daily_assignment.date,'%Y-%m-%d')"), [$range['from'], $range['to']])
+            ->orderByDesc('daily_assignment.date')
+            ->select([
+                'daily_assignment.*',
+                'classes.class',
+                'sections.section',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.admission_no',
+                'subjects.name as subject_name',
+                'subjects.code as subject_code',
+                'staff.name as staff_name',
+                'staff.surname as staff_surname',
+                'staff.employee_id as staff_employee_id',
+            ])
+            ->get();
+    }
+
+    /**
+     * @return array{from:string,to:string}
+     */
+    protected function thisWeekRange(): array
+    {
+        $monday = now()->startOfWeek(); // Carbon default Monday when locale ISO
+        $sunday = now()->endOfWeek();
+        if ($monday->gt(now()->startOfDay())) {
+            $monday = now()->subWeek()->startOfWeek();
+            $sunday = now()->startOfWeek()->subDay()->endOfDay();
+        }
+
+        return [
+            'from' => $monday->toDateString(),
+            'to' => $sunday->toDateString(),
+        ];
+    }
 }

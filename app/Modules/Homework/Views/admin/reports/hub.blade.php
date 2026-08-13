@@ -5,7 +5,6 @@
         <h3 class="box-title"><i class="fa fa-search"></i> Homework Report</h3>
     </div>
     <div class="box-body">
-        <p class="text-muted">Choose a report below. Daily Assignment Report will follow in a later slice.</p>
         <div class="row">
             @if(!empty($canHomeworkReport))
                 <div class="col-md-4" style="margin-bottom:12px;">
@@ -18,6 +17,13 @@
                 <div class="col-md-4" style="margin-bottom:12px;">
                     <a class="btn btn-default btn-block" href="{{ route('homework.reports.evaluation') }}">
                         <i class="fa fa-file-text-o"></i> Homework Evaluation Report
+                    </a>
+                </div>
+            @endif
+            @if(!empty($canDailyReport))
+                <div class="col-md-4" style="margin-bottom:12px;">
+                    <a class="btn btn-default btn-block" href="{{ route('homework.reports.daily') }}">
+                        <i class="fa fa-file-text-o"></i> Daily Assignment Report
                     </a>
                 </div>
             @endif

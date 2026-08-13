@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Homework',
             'status' => 'in_progress',
-            'message' => 'Admin CRUD + evaluation + student portal + daily assignment + core reports done. Deferred: daily assignment report, mail/SMS.',
+            'message' => 'Homework module reports complete. Deferred: mail/SMS (Communication module).',
             'slices' => [
                 'admin_list_filter' => 'done',
                 'admin_crud' => 'done',
@@ -27,8 +27,8 @@ class ModuleStatusController extends Controller
                 'homework_report' => 'done',
                 'evaluation_report' => 'done',
                 'marks_report' => 'done',
-                'daily_assignment_report' => 'deferred',
-                'publish_mail_sms' => 'deferred',
+                'daily_assignment_report' => 'done',
+                'publish_mail_sms' => 'deferred_to_communication',
             ],
         ]);
     }

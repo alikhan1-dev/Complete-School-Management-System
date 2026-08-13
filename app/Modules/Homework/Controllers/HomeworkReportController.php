@@ -11,8 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI homework reports hub + homework / evaluation / marks reports.
- * Deferred: dailyassignmentreport.
+ * CI homework reports hub + homework / evaluation / marks / daily assignment reports.
  */
 class HomeworkReportController extends Controller
 {
@@ -26,14 +25,10 @@ class HomeworkReportController extends Controller
     {
         abort_unless($this->canOpenHub(), 403);
 
-        return view('shared::layouts.admin', [
+        return view('shared::layouts.admin', array_merge([
             'title' => 'Homework Report',
             'contentView' => 'homework::admin.reports.hub',
-            'canHomeworkReport' => $this->permissions->hasPrivilege('homework', 'can_view'),
-            'canEvaluationReport' => $this->permissions->hasPrivilege('homehork_evaluation_report', 'can_view'),
-            'canDailyReport' => false, // deferred
-            'canMarksReport' => $this->permissions->hasPrivilege('homework_marks_report', 'can_view'),
-        ]);
+        ], $this->navFlags()));
     }
 
     public function homeworkReport(Request $request): View
@@ -46,18 +41,14 @@ class HomeworkReportController extends Controller
             $rows = $this->reports->homeworkReport($filters);
         }
 
-        return view('shared::layouts.admin', [
+        return view('shared::layouts.admin', array_merge([
             'title' => 'Homework Report',
             'contentView' => 'homework::admin.reports.homework',
             'classes' => SchoolClass::query()->orderBy('class')->get(),
             'sections' => Section::query()->orderBy('section')->get(),
             'filters' => $filters,
             'rows' => $rows,
-            'canHomeworkReport' => true,
-            'canEvaluationReport' => $this->permissions->hasPrivilege('homehork_evaluation_report', 'can_view'),
-            'canDailyReport' => false,
-            'canMarksReport' => $this->permissions->hasPrivilege('homework_marks_report', 'can_view'),
-        ]);
+        ], $this->navFlags()));
     }
 
     public function homeworkReportStudents(Request $request): View
@@ -114,7 +105,7 @@ class HomeworkReportController extends Controller
             $stats = $payload['stats'];
         }
 
-        return view('shared::layouts.admin', [
+        return view('shared::layouts.admin', array_merge([
             'title' => 'Homework Evaluation Report',
             'contentView' => 'homework::admin.reports.evaluation',
             'classes' => SchoolClass::query()->orderBy('class')->get(),
@@ -123,11 +114,7 @@ class HomeworkReportController extends Controller
             'rows' => $rows,
             'stats' => $stats,
             'requireAllFilters' => true,
-            'canHomeworkReport' => $this->permissions->hasPrivilege('homework', 'can_view'),
-            'canEvaluationReport' => true,
-            'canDailyReport' => false,
-            'canMarksReport' => $this->permissions->hasPrivilege('homework_marks_report', 'can_view'),
-        ]);
+        ], $this->navFlags()));
     }
 
     public function marksReport(Request $request): View
@@ -147,7 +134,7 @@ class HomeworkReportController extends Controller
             $rows = $this->reports->marksReport($filters);
         }
 
-        return view('shared::layouts.admin', [
+        return view('shared::layouts.admin', array_merge([
             'title' => 'Homework Marks Report',
             'contentView' => 'homework::admin.reports.marks',
             'classes' => SchoolClass::query()->orderBy('class')->get(),
@@ -155,10 +142,84 @@ class HomeworkReportController extends Controller
             'filters' => $filters,
             'rows' => $rows,
             'requireClassOnly' => true,
-            'canHomeworkReport' => $this->permissions->hasPrivilege('homework', 'can_view'),
-            'canEvaluationReport' => $this->permissions->hasPrivilege('homehork_evaluation_report', 'can_view'),
-            'canDailyReport' => false,
-            'canMarksReport' => true,
+        ], $this->navFlags()));
+    }
+
+    public function dailyAssignmentReport(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('daily_assignment', 'can_view'), 403);
+
+        $filters = array_merge($this->filterInput($request), [
+            'search_type' => $request->input('search_type', 'this_year'),
+            'date_from' => $request->input('date_from'),
+            'date_to' => $request->input('date_to'),
+        ]);
+
+        $rows = collect();
+        $range = null;
+
+        if ($request->filled('class_id') || $request->filled('search')) {
+            $rules = [
+                'search_type' => ['required', 'in:'.implode(',', array_keys($this->reports->searchTypes()))],
+                'class_id' => ['required', 'integer', 'exists:classes,id'],
+                'section_id' => ['required', 'integer', 'exists:sections,id'],
+                'subject_group_id' => ['required', 'integer', 'exists:subject_groups,id'],
+                'subject_id' => ['required', 'integer', 'exists:subject_group_subjects,id'],
+            ];
+            if ($request->input('search_type') === 'period') {
+                $rules['date_from'] = ['required', 'date'];
+                $rules['date_to'] = ['required', 'date', 'after_or_equal:date_from'];
+            }
+            $request->validate($rules);
+
+            $payload = $this->reports->dailyAssignmentReport($filters);
+            $rows = $payload['rows'];
+            $range = $payload['range'];
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => 'Daily Assignment Report',
+            'contentView' => 'homework::admin.reports.daily',
+            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'sections' => Section::query()->orderBy('section')->get(),
+            'filters' => $filters,
+            'rows' => $rows,
+            'range' => $range,
+            'searchTypes' => $this->reports->searchTypes(),
+            'requireAllFilters' => true,
+        ], $this->navFlags()));
+    }
+
+    public function dailyAssignmentDetails(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('daily_assignment', 'can_view'), 403);
+
+        $data = $request->validate([
+            'student_id' => ['required', 'integer'],
+            'subject_id' => ['required', 'integer', 'exists:subject_group_subjects,id'],
+            'search_type' => ['required', 'in:'.implode(',', array_keys($this->reports->searchTypes()))],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+            'class_id' => ['nullable', 'integer'],
+            'section_id' => ['nullable', 'integer'],
+            'subject_group_id' => ['nullable', 'integer'],
+        ]);
+
+        $assignments = $this->reports->dailyAssignmentDetails(
+            (int) $data['student_id'],
+            (int) $data['subject_id'],
+            (string) $data['search_type'],
+            $data['date_from'] ?? null,
+            $data['date_to'] ?? null
+        );
+
+        return view('shared::layouts.admin', [
+            'title' => 'Daily Assignment Details',
+            'contentView' => 'homework::admin.reports.daily_details',
+            'assignments' => $assignments,
+            'backUrl' => route('homework.reports.daily', $request->only([
+                'search_type', 'date_from', 'date_to', 'class_id', 'section_id', 'subject_group_id', 'subject_id', 'search',
+            ])),
         ]);
     }
 
@@ -175,11 +236,26 @@ class HomeworkReportController extends Controller
         ];
     }
 
+    /**
+     * @return array{canHomeworkReport:bool,canEvaluationReport:bool,canDailyReport:bool,canMarksReport:bool}
+     */
+    protected function navFlags(): array
+    {
+        return [
+            'canHomeworkReport' => $this->permissions->hasPrivilege('homework', 'can_view'),
+            'canEvaluationReport' => $this->permissions->hasPrivilege('homehork_evaluation_report', 'can_view'),
+            'canDailyReport' => $this->permissions->hasPrivilege('daily_assignment', 'can_view'),
+            'canMarksReport' => $this->permissions->hasPrivilege('homework_marks_report', 'can_view'),
+        ];
+    }
+
     protected function canOpenHub(): bool
     {
-        return $this->permissions->hasPrivilege('homework', 'can_view')
-            || $this->permissions->hasPrivilege('homehork_evaluation_report', 'can_view')
-            || $this->permissions->hasPrivilege('daily_assignment', 'can_view')
-            || $this->permissions->hasPrivilege('homework_marks_report', 'can_view');
+        $flags = $this->navFlags();
+
+        return $flags['canHomeworkReport']
+            || $flags['canEvaluationReport']
+            || $flags['canDailyReport']
+            || $flags['canMarksReport'];
     }
 }

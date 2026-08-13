@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Library module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 6 Library migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,16 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Library',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Books catalog CRUD done. Deferred: CSV import, members, issue/return, reports.',
+            'slices' => [
+                'books_crud' => 'done',
+                'books_import' => 'deferred',
+                'members_student_staff' => 'deferred',
+                'issue_return' => 'deferred',
+                'reports' => 'deferred',
+                'student_portal' => 'deferred',
+            ],
         ]);
     }
 }

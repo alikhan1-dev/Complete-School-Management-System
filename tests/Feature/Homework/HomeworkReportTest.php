@@ -25,6 +25,9 @@ class HomeworkReportTest extends TestCase
     private array $cleanupHomeworkIds = [];
 
     /** @var list<int> */
+    private array $cleanupDailyIds = [];
+
+    /** @var list<int> */
     private array $cleanupStudentIds = [];
 
     /** @var list<int> */
@@ -47,6 +50,11 @@ class HomeworkReportTest extends TestCase
             DB::table('homework')->whereIn('id', $this->cleanupHomeworkIds)->delete();
         }
         $this->cleanupHomeworkIds = [];
+
+        if ($this->cleanupDailyIds !== []) {
+            DB::table('daily_assignment')->whereIn('id', $this->cleanupDailyIds)->delete();
+        }
+        $this->cleanupDailyIds = [];
 
         foreach ($this->cleanupStudentIds as $studentId) {
             DB::table('users')->where('user_id', $studentId)->where('role', 'student')->delete();
@@ -291,6 +299,7 @@ class HomeworkReportTest extends TestCase
             ->assertOk()
             ->assertSee('Homework Report', false)
             ->assertSee('Homework Evaluation Report', false)
+            ->assertSee('Daily Assignment Report', false)
             ->assertSee('Homework Marks Report', false);
 
         $this->get('/homework/homeworkreport?'.http_build_query([
@@ -335,5 +344,52 @@ class HomeworkReportTest extends TestCase
             ->assertSee('Homework Marks Report', false)
             ->assertSee('Good work '.$ctx['suffix'], false)
             ->assertSee('8', false);
+    }
+
+    public function test_daily_assignment_report_list_and_details(): void
+    {
+        $ctx = $this->seedReportContext();
+        $title = 'Daily report title '.$ctx['suffix'];
+
+        $dailyId = DB::table('daily_assignment')->insertGetId([
+            'student_session_id' => $ctx['studentSessionId'],
+            'subject_group_subject_id' => $ctx['groupSubject']->id,
+            'title' => $title,
+            'description' => 'Daily report desc '.$ctx['suffix'],
+            'attachment' => '',
+            'evaluated_by' => null,
+            'date' => now()->format('Y-m-d'),
+            'evaluation_date' => null,
+            'remark' => '',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->cleanupDailyIds[] = $dailyId;
+
+        $this->get('/homework/dailyassignmentreport?'.http_build_query([
+            'search' => 1,
+            'search_type' => 'this_year',
+            'class_id' => $ctx['class']->id,
+            'section_id' => $ctx['section']->id,
+            'subject_group_id' => $ctx['group']->id,
+            'subject_id' => $ctx['groupSubject']->id,
+        ]))
+            ->assertOk()
+            ->assertSee('Daily Assignment Report', false)
+            ->assertSee('Report Pupil', false)
+            ->assertSee('1', false);
+
+        $this->get('/homework/dailyassignmentreport/details?'.http_build_query([
+            'student_id' => $ctx['student']->id,
+            'search_type' => 'this_year',
+            'subject_id' => $ctx['groupSubject']->id,
+            'class_id' => $ctx['class']->id,
+            'section_id' => $ctx['section']->id,
+            'subject_group_id' => $ctx['group']->id,
+        ]))
+            ->assertOk()
+            ->assertSee('Daily Assignment Details', false)
+            ->assertSee($title, false)
+            ->assertSee('Daily report desc '.$ctx['suffix'], false);
     }
 }

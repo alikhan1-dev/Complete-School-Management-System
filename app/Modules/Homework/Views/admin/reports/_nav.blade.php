@@ -10,8 +10,8 @@
         </li>
     @endif
     @if(!empty($canDailyReport))
-        <li>
-            <a href="#">Daily Assignment Report</a>
+        <li class="{{ request()->routeIs('homework.reports.daily*') ? 'active' : '' }}">
+            <a href="{{ route('homework.reports.daily') }}">Daily Assignment Report</a>
         </li>
     @endif
     @if(!empty($canMarksReport))

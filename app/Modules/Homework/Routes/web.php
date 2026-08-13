@@ -103,4 +103,8 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('homework.reports.evaluation');
     Route::match(['get', 'post'], 'homework/homework_marksreport', [HomeworkReportController::class, 'marksReport'])
         ->name('homework.reports.marks');
+    Route::match(['get', 'post'], 'homework/dailyassignmentreport', [HomeworkReportController::class, 'dailyAssignmentReport'])
+        ->name('homework.reports.daily');
+    Route::get('homework/dailyassignmentreport/details', [HomeworkReportController::class, 'dailyAssignmentDetails'])
+        ->name('homework.reports.daily.details');
 });
