@@ -17,8 +17,8 @@ use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
- * CI Homework.php — admin list/create/edit/delete/download (first slice).
- * Deferred: evaluation, daily assignment, reports, mail/SMS, student portal.
+ * CI Homework.php — admin list/create/edit/delete/download.
+ * Deferred: daily assignment, reports, mail/SMS, student portal.
  */
 class HomeworkController extends Controller
 {
@@ -62,6 +62,7 @@ class HomeworkController extends Controller
             'canAdd' => $this->permissions->hasPrivilege('homework', 'can_add'),
             'canEdit' => $this->permissions->hasPrivilege('homework', 'can_edit'),
             'canDelete' => $this->permissions->hasPrivilege('homework', 'can_delete'),
+            'canEvaluate' => $this->permissions->hasPrivilege('homework_evaluation', 'can_view'),
             'uploadMeta' => $this->documents->uploadRulesFromFiletypes(),
         ]);
     }

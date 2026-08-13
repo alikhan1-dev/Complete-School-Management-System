@@ -12,8 +12,8 @@ use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
- * CI Homework admin — list/create/edit/delete/download (first slice).
- * Deferred: evaluation, student submissions, daily assignment, reports, mail/SMS, SaaS quota.
+ * CI Homework admin — list/create/edit/delete/download.
+ * Deferred: student portal submissions, daily assignment, reports, mail/SMS, SaaS quota.
  */
 class HomeworkService
 {

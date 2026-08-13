@@ -83,4 +83,32 @@ class HomeworkDocumentService
 
         return response()->download($path, $safe);
     }
+
+    public function assignmentDirectory(): string
+    {
+        return public_path('uploads/homework/assignment');
+    }
+
+    public function storeAssignment(UploadedFile $file): string
+    {
+        $dir = $this->assignmentDirectory();
+        File::ensureDirectoryExists($dir);
+
+        $original = basename((string) $file->getClientOriginalName());
+        $saved = time().'-'.uniqid((string) random_int(1000, 9999), false).'!'.$original;
+        $file->move($dir, $saved);
+
+        return $saved;
+    }
+
+    public function downloadAssignment(string $filename): BinaryFileResponse
+    {
+        $safe = basename($filename);
+        abort_unless($safe !== '' && $safe === $filename && ! str_contains($safe, '..'), 404);
+
+        $path = $this->assignmentDirectory().DIRECTORY_SEPARATOR.$safe;
+        abort_unless(is_file($path), 404);
+
+        return response()->download($path, $safe);
+    }
 }

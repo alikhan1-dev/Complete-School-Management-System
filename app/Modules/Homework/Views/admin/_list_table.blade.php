@@ -39,6 +39,11 @@
                         @endif
                     </td>
                     <td>
+                        @if(!empty($canEvaluate))
+                            <a href="{{ route('homework.evaluation', $row->id) }}" class="btn btn-info btn-xs" title="Evaluate">
+                                <i class="fa fa-check-square-o"></i>
+                            </a>
+                        @endif
                         @if(!empty($row->document))
                             <a href="{{ route('homework.download', $row->id) }}" class="btn btn-default btn-xs" title="Download">
                                 <i class="fa fa-download"></i>

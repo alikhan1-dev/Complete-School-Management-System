@@ -15,12 +15,12 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Homework',
             'status' => 'in_progress',
-            'message' => 'Admin Homework CRUD (list/create/edit/delete/download) done. Deferred: evaluation, student portal submit, daily assignment, reports, mail/SMS.',
+            'message' => 'Admin Homework CRUD + evaluation done. Deferred: student portal submit, daily assignment, reports, mail/SMS.',
             'slices' => [
                 'admin_list_filter' => 'done',
                 'admin_crud' => 'done',
                 'admin_document_upload_download' => 'done',
-                'evaluation' => 'deferred',
+                'evaluation' => 'done',
                 'student_portal_submit' => 'deferred',
                 'daily_assignment' => 'deferred',
                 'reports' => 'deferred',

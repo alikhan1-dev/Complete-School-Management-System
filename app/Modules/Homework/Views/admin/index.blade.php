@@ -85,12 +85,14 @@
         'rows' => $upcoming,
         'canEdit' => $canEdit,
         'canDelete' => $canDelete,
+        'canEvaluate' => $canEvaluate,
     ])
     @include('homework::admin._list_table', [
         'title' => 'Closed Homework',
         'rows' => $closed,
         'canEdit' => $canEdit,
         'canDelete' => $canDelete,
+        'canEvaluate' => $canEvaluate,
     ])
 @else
     <div class="alert alert-info">Select a class and search to view homework.</div>
