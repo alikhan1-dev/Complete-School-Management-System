@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI Examgroup_model — exam groups + exams within a group.
- * Deferred: subjects, student assign, marks, link exams, marksheet publish SMS.
+ * Deferred: student assign, marks, link exams, marksheet publish SMS.
  */
 class ExamGroupService
 {

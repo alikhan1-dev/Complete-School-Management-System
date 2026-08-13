@@ -125,6 +125,9 @@
                         <td class="text-center">{{ (int) $row->is_active === 1 ? 'Yes' : 'No' }}</td>
                         <td>{{ $row->description }}</td>
                         <td class="text-right">
+                            @can('privilege', ['exam_subject', 'can_view'])
+                                <a href="{{ route('exams.exam_subjects.index', $row->id) }}" class="btn btn-primary btn-xs">Subjects</a>
+                            @endcan
                             @can('privilege', ['exam', 'can_edit'])
                                 <a href="{{ route('exams.exam_group_exams.edit', [$group->id, $row->id]) }}" class="btn btn-primary btn-xs">Edit</a>
                             @endcan

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Exams\Models;
 
+use App\Modules\Academics\Models\Subject;
 use App\Modules\Shared\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -31,5 +32,10 @@ class ExamGroupExamSubject extends BaseModel
     public function exam(): BelongsTo
     {
         return $this->belongsTo(ExamGroupExam::class, 'exam_group_class_batch_exams_id');
+    }
+
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class, 'subject_id');
     }
 }

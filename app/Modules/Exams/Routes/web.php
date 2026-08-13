@@ -2,6 +2,7 @@
 
 use App\Modules\Exams\Controllers\ExamGroupController;
 use App\Modules\Exams\Controllers\ExamGroupExamController;
+use App\Modules\Exams\Controllers\ExamGroupExamSubjectController;
 use App\Modules\Exams\Controllers\ModuleStatusController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,4 +24,11 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/examgroup/addexam/{groupId}/edit/{id}', [ExamGroupExamController::class, 'edit'])->name('exams.exam_group_exams.edit');
     Route::post('admin/examgroup/addexam/{groupId}/edit/{id}', [ExamGroupExamController::class, 'update'])->name('exams.exam_group_exams.update');
     Route::get('admin/examgroup/addexam/{groupId}/delete/{id}', [ExamGroupExamController::class, 'destroy'])->name('exams.exam_group_exams.destroy');
+
+    // Exam subjects on a batch exam (CI getexamSubjects + addexamsubject)
+    Route::get('admin/examgroup/examsubject/{examId}', [ExamGroupExamSubjectController::class, 'index'])->name('exams.exam_subjects.index');
+    Route::post('admin/examgroup/examsubject/{examId}', [ExamGroupExamSubjectController::class, 'store'])->name('exams.exam_subjects.store');
+    Route::get('admin/examgroup/examsubject/{examId}/edit/{id}', [ExamGroupExamSubjectController::class, 'edit'])->name('exams.exam_subjects.edit');
+    Route::post('admin/examgroup/examsubject/{examId}/edit/{id}', [ExamGroupExamSubjectController::class, 'update'])->name('exams.exam_subjects.update');
+    Route::get('admin/examgroup/examsubject/{examId}/delete/{id}', [ExamGroupExamSubjectController::class, 'destroy'])->name('exams.exam_subjects.destroy');
 });

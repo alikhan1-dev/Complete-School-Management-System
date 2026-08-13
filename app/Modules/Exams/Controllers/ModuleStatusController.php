@@ -15,11 +15,11 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Exams',
             'status' => 'in_progress',
-            'message' => 'Exam groups + exams-within-group CRUD done. Deferred: exam subjects, assign students, marks entry, link exams, marksheets/admit cards, OnlineExam, Certificates.',
+            'message' => 'Exam groups + exams + exam subjects CRUD done. Deferred: assign students, marks entry, link exams, marksheets/admit cards, OnlineExam, Certificates.',
             'slices' => [
                 'exam_groups' => 'done',
                 'exams_in_group' => 'done',
-                'exam_subjects' => 'pending',
+                'exam_subjects' => 'done',
                 'assign_students' => 'pending',
                 'marks_entry' => 'pending',
                 'link_exams' => 'pending',
