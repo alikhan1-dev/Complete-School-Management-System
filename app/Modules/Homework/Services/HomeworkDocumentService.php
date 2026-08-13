@@ -111,4 +111,45 @@ class HomeworkDocumentService
 
         return response()->download($path, $safe);
     }
+
+    public function dailyDirectory(): string
+    {
+        return public_path('uploads/homework/daily_assignment');
+    }
+
+    public function storeDaily(UploadedFile $file): string
+    {
+        $dir = $this->dailyDirectory();
+        File::ensureDirectoryExists($dir);
+
+        $original = basename((string) $file->getClientOriginalName());
+        $saved = time().'-'.uniqid((string) random_int(1000, 9999), false).'!'.$original;
+        $file->move($dir, $saved);
+
+        return $saved;
+    }
+
+    public function deleteDaily(?string $filename): void
+    {
+        if ($filename === null || $filename === '') {
+            return;
+        }
+
+        $safe = basename($filename);
+        $path = $this->dailyDirectory().DIRECTORY_SEPARATOR.$safe;
+        if (File::isFile($path)) {
+            File::delete($path);
+        }
+    }
+
+    public function downloadDaily(string $filename): BinaryFileResponse
+    {
+        $safe = basename($filename);
+        abort_unless($safe !== '' && $safe === $filename && ! str_contains($safe, '..'), 404);
+
+        $path = $this->dailyDirectory().DIRECTORY_SEPARATOR.$safe;
+        abort_unless(is_file($path), 404);
+
+        return response()->download($path, $safe);
+    }
 }

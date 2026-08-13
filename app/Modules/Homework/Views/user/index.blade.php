@@ -10,6 +10,14 @@
     <div class="alert alert-success">{{ session('success') }}</div>
 @endif
 
+<div class="box box-solid" style="margin-bottom:10px;">
+    <div class="box-body" style="padding:10px 15px;">
+        <a href="{{ route('user.homework.daily.index') }}" class="btn btn-primary btn-sm">
+            Daily Assignment
+        </a>
+    </div>
+</div>
+
 <div class="box box-primary">
     <div class="box-header with-border">
         <h3 class="box-title">Upcoming Homework</h3>

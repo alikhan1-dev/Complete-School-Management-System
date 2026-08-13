@@ -19,6 +19,7 @@
     <div class="box-header with-border">
         <h3 class="box-title">Select Criteria</h3>
         <div class="box-tools pull-right">
+            <a href="{{ route('homework.daily.index') }}" class="btn btn-default btn-sm">Daily Assignment</a>
             @if(!empty($canAdd))
                 <a href="{{ route('homework.create') }}" class="btn btn-primary btn-sm">
                     <i class="fa fa-plus"></i> Add Homework
