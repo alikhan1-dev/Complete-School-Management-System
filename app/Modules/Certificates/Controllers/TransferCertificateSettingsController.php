@@ -38,6 +38,9 @@ class TransferCertificateSettingsController extends Controller
             'assetUrls' => $this->settings->assetUrls($row),
             'canEdit' => $this->permissions->hasPrivilege('tc_settings', 'can_edit')
                 || $this->permissions->hasPrivilege('tc_settings', 'can_add'),
+            'canDownload' => $this->permissions->hasPrivilege('download_tc', 'can_view'),
+            'canVerify' => $this->permissions->hasPrivilege('verify_tc', 'can_view'),
+            'canPrepare' => $this->permissions->hasPrivilege('prepare_tc', 'can_view'),
             'fieldLabels' => $fields->mapWithKeys(
                 fn ($f) => [$f->id => $this->settings->fieldLabel($f)]
             ),

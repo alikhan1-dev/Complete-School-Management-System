@@ -1,13 +1,16 @@
 <?php
 
 use App\Modules\Certificates\Controllers\CertificateTemplateController;
+use App\Modules\Certificates\Controllers\DownloadTransferCertificateController;
 use App\Modules\Certificates\Controllers\GenerateCertificateController;
 use App\Modules\Certificates\Controllers\GenerateStaffIdCardController;
 use App\Modules\Certificates\Controllers\GenerateStudentIdCardController;
 use App\Modules\Certificates\Controllers\ModuleStatusController;
+use App\Modules\Certificates\Controllers\PrepareTransferCertificateController;
 use App\Modules\Certificates\Controllers\StaffIdCardTemplateController;
 use App\Modules\Certificates\Controllers\StudentIdCardTemplateController;
 use App\Modules\Certificates\Controllers\TransferCertificateSettingsController;
+use App\Modules\Certificates\Controllers\VerifyTransferCertificateController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('migration-status/certificates', [ModuleStatusController::class, 'status'])->name('certificates.migration_status');
@@ -76,7 +79,7 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::post('admin/generatestaffidcard/print', [GenerateStaffIdCardController::class, 'print'])
         ->name('certificates.staffidcard_generate.print');
 
-    // Transfer Certificate settings (CI admin/transfercertificate) — download/verify deferred
+    // Transfer Certificate settings (CI admin/transfercertificate)
     Route::get('admin/transfercertificate', [TransferCertificateSettingsController::class, 'index'])
         ->name('certificates.tc_settings.index');
     Route::get('admin/transfercertificate/index', [TransferCertificateSettingsController::class, 'index']);
@@ -88,4 +91,29 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('certificates.tc_settings.image');
     Route::post('admin/transfercertificate/fields', [TransferCertificateSettingsController::class, 'updateFields'])
         ->name('certificates.tc_settings.fields');
+
+    // Transfer Certificate download / mPDF print (CI download + print_transfer_certificate)
+    Route::match(['get', 'post'], 'admin/transfercertificate/download', [DownloadTransferCertificateController::class, 'index'])
+        ->name('certificates.tc_download.index');
+    Route::match(['get', 'post'], 'admin/transfercertificate/download/search', [DownloadTransferCertificateController::class, 'index'])
+        ->name('certificates.tc_download.search');
+    Route::post('admin/transfercertificate/print_transfer_certificate', [DownloadTransferCertificateController::class, 'print'])
+        ->name('certificates.tc_download.print');
+    Route::post('admin/transfercertificate/print_transfer_certificate_html', [DownloadTransferCertificateController::class, 'printHtml'])
+        ->name('certificates.tc_download.print_html');
+
+    // Transfer Certificate verify (CI verify_tc)
+    Route::match(['get', 'post'], 'admin/transfercertificate/verify_tc', [VerifyTransferCertificateController::class, 'index'])
+        ->name('certificates.tc_verify.index');
+
+    // Transfer Certificate prepare + custom fields (CI prepare_tc / edit_custom_field)
+    Route::match(['get', 'post'], 'admin/transfercertificate/prepare_tc', [PrepareTransferCertificateController::class, 'index'])
+        ->name('certificates.tc_prepare.index');
+    Route::match(['get', 'post'], 'admin/transfercertificate/prepare_tc/search', [PrepareTransferCertificateController::class, 'index'])
+        ->name('certificates.tc_prepare.search');
+    Route::get('admin/transfercertificate/edit_custom_field/{id}', [PrepareTransferCertificateController::class, 'edit'])
+        ->whereNumber('id')
+        ->name('certificates.tc_prepare.edit');
+    Route::post('admin/transfercertificate/save_custom_fields', [PrepareTransferCertificateController::class, 'save'])
+        ->name('certificates.tc_prepare.save');
 });

@@ -26,6 +26,19 @@
 <div class="box box-primary">
     <div class="box-header with-border">
         <h3 class="box-title">Transfer Certificate Settings</h3>
+        @if(!empty($canDownload) || !empty($canVerify) || !empty($canPrepare))
+            <div class="box-tools pull-right">
+                @if(!empty($canPrepare))
+                    <a href="{{ route('certificates.tc_prepare.index') }}" class="btn btn-default btn-sm">Prepare TC</a>
+                @endif
+                @if(!empty($canVerify))
+                    <a href="{{ route('certificates.tc_verify.index') }}" class="btn btn-default btn-sm">Verify TC</a>
+                @endif
+                @if(!empty($canDownload))
+                    <a href="{{ route('certificates.tc_download.index') }}" class="btn btn-default btn-sm">Download TC</a>
+                @endif
+            </div>
+        @endif
     </div>
     <div class="box-body">
         <ul class="nav nav-tabs" style="margin-bottom:15px;">

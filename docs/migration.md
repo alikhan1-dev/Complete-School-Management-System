@@ -35,7 +35,7 @@ A module is complete when routes, validation, permissions, views, AJAX, reports,
 | **3** | **Fees** (delivery pivot: Fees first; Attendance follows as 3b) — was Phase 4 in original plan | In progress (operational core done incl. multi-collect, due-fees, carry-forward; deferred: transport, print/SMS) |
 | **3b** | Attendance (day / subject / staff) + remaining student history | Operational core done (day + by-date + subject/period + staff mark-save); deferred: period reportbydate, SMS, biometric |
 | **4** | Finance, Payments (gateway infrastructure) | In progress (Finance heads + income/expense CRUD done; Payments + finance search/reports pending) |
-| **5** | Exams, OnlineExam, Certificates | In progress (Exams + OnlineExam admin + Certificates student/staff ID+cert generate + TC settings done; TC download/verify + OnlineExam portal pending) |
+| **5** | Exams, OnlineExam, Certificates | In progress (Exams + OnlineExam admin + Certificates/TC with mPDF done; OnlineExam portal pending) |
 | **6** | Library, Transport, Hostel, Inventory, Payroll, Leave, Homework, LessonPlan | Pending |
 | **7** | Communication, Chat, FrontCms, FrontOffice, OnlineAdmission | Pending |
 | **8** | Reports, Settings, Content, remaining checklist items | Pending |
