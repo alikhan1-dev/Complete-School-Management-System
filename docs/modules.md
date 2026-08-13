@@ -54,7 +54,7 @@ Source reference: `smart_7.2/` (read-only). Target: `complete_school_management_
 | **FrontCms** | Public website CMS | `admin/Frontcms.php`, `admin/front/*`, `Welcome.php` | `front_cms_*` | `app/Modules/FrontCms/` | Pending |
 | **FrontOffice** | Enquiry, visitors, complaints | `admin/Enquiry.php`, `admin/Visitors.php`, `admin/Complaint.php`, `admin/Dispatch.php` | `enquiry`, `visitors_book`, `complaint`, `dispatch_receive`, `general_calls` | `app/Modules/FrontOffice/` | Pending |
 | **OnlineAdmission** | Online admission forms & payment | `admin/Onlineadmission.php`, `onlineadmission/*`, `Welcome.php` | `online_admissions`, `online_admission_*` | `app/Modules/OnlineAdmission/` | Pending |
-| **Certificates** | ID cards, certificates, TC | `admin/Certificate.php`, `admin/Generatecertificate.php`, `admin/Transfercertificate.php`, `admin/Studentidcard.php` | `certificates`, `id_card`, `staff_id_card`, `transfer_certificate_*` | `app/Modules/Certificates/` | In progress (student cert + ID card templates/generate done; staff ID & TC deferred) |
+| **Certificates** | ID cards, certificates, TC | `admin/Certificate.php`, `admin/Generatecertificate.php`, `admin/Transfercertificate.php`, `admin/Studentidcard.php` | `certificates`, `id_card`, `staff_id_card`, `transfer_certificate_*` | `app/Modules/Certificates/` | In progress (student/staff cert+ID templates & generate + TC settings done; TC download/verify pending) |
 | **Reports** | Academic, attendance, finance reports | `Report.php`, `Attendencereports.php`, `Financereports.php`, `Balancefees.php` | (reads many domain tables) | `app/Modules/Reports/` | Pending |
 | **Settings** | School settings, modules, themes | `Schsettings.php`, `admin/Module.php`, `Theme.php`, `admin/Currency.php` | `sch_settings`, `sidebar_menus`, `currencies` | `app/Modules/Settings/` | Pending |
 | **Content** | Download center / upload contents | `admin/Content.php`, `admin/Contenttype.php`, `user/Content.php` | `contents`, `content_types`, `upload_contents`, `share_contents`, `share_upload_contents` | `app/Modules/Content/` | Pending |
@@ -108,7 +108,7 @@ CI stores files under `uploads/` (web root). Laravel mirrors this at `public/upl
 | `uploads/staff_images/`, `uploads/teacher_images/`, `uploads/accountant_images/`, `uploads/librarian_images/` | Staff role photos |
 | `uploads/student_documents/` | Student docs |
 | `uploads/staff_documents/` | Staff docs |
-| `uploads/student_id_card/`, `uploads/staff_id_card/` | ID card assets, barcodes, QR |
+| `uploads/student_id_card/`, `uploads/staff_id_card/`, `uploads/transfer_certificate/` | ID card assets, barcodes, QR; TC header/signatures |
 | `uploads/certificate/`, `uploads/marksheet/`, `uploads/admit_card/` | Generated PDFs/images |
 | `uploads/homework/`, `uploads/syllabus_attachment/` | Assignments & syllabus |
 | `uploads/gallery/`, `uploads/school_content/` | CMS media |

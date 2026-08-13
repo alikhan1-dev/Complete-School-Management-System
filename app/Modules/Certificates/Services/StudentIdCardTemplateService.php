@@ -8,7 +8,7 @@ use Illuminate\Support\Collection;
 
 /**
  * CI Student_id_card_model — student ID card template CRUD.
- * Deferred: staff ID, TC, SaaS quota.
+ * Deferred: TC, SaaS quota.
  */
 class StudentIdCardTemplateService
 {

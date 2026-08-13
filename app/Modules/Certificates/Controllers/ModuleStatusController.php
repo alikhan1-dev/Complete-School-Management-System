@@ -15,14 +15,17 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Certificates',
             'status' => 'in_progress',
-            'message' => 'Student certificates + ID card templates/generate done. Deferred: staff ID, TC, mPDF, QR matrix.',
+            'message' => 'Student + staff ID card/cert templates and generate done. TC settings done; download/verify deferred.',
             'slices' => [
                 'student_certificate_templates' => 'done',
                 'generate_student_certificate' => 'done',
                 'student_id_card_templates' => 'done',
                 'generate_student_id_card' => 'done',
-                'staff_id_card' => 'deferred',
-                'transfer_certificate' => 'deferred',
+                'staff_id_card_templates' => 'done',
+                'generate_staff_id_card' => 'done',
+                'transfer_certificate_settings' => 'done',
+                'transfer_certificate_download' => 'pending',
+                'transfer_certificate_verify' => 'deferred',
                 'mpdf_email' => 'deferred',
             ],
         ]);

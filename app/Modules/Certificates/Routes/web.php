@@ -2,9 +2,12 @@
 
 use App\Modules\Certificates\Controllers\CertificateTemplateController;
 use App\Modules\Certificates\Controllers\GenerateCertificateController;
+use App\Modules\Certificates\Controllers\GenerateStaffIdCardController;
 use App\Modules\Certificates\Controllers\GenerateStudentIdCardController;
 use App\Modules\Certificates\Controllers\ModuleStatusController;
+use App\Modules\Certificates\Controllers\StaffIdCardTemplateController;
 use App\Modules\Certificates\Controllers\StudentIdCardTemplateController;
+use App\Modules\Certificates\Controllers\TransferCertificateSettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('migration-status/certificates', [ModuleStatusController::class, 'status'])->name('certificates.migration_status');
@@ -49,4 +52,40 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('certificates.idcard_generate.search');
     Route::post('admin/generateidcard/print', [GenerateStudentIdCardController::class, 'print'])
         ->name('certificates.idcard_generate.print');
+
+    // Staff ID card templates (CI admin/staffidcard)
+    Route::get('admin/staffidcard', [StaffIdCardTemplateController::class, 'index'])
+        ->name('certificates.staffidcard_templates.index');
+    Route::get('admin/staffidcard/index', [StaffIdCardTemplateController::class, 'index']);
+    Route::post('admin/staffidcard/create', [StaffIdCardTemplateController::class, 'store'])
+        ->name('certificates.staffidcard_templates.store');
+    Route::get('admin/staffidcard/edit/{id}', [StaffIdCardTemplateController::class, 'edit'])
+        ->name('certificates.staffidcard_templates.edit');
+    Route::post('admin/staffidcard/edit/{id}', [StaffIdCardTemplateController::class, 'update'])
+        ->name('certificates.staffidcard_templates.update');
+    Route::get('admin/staffidcard/delete/{id}', [StaffIdCardTemplateController::class, 'destroy'])
+        ->name('certificates.staffidcard_templates.destroy');
+    Route::get('admin/staffidcard/preview/{id}', [StaffIdCardTemplateController::class, 'preview'])
+        ->name('certificates.staffidcard_templates.preview');
+
+    // Generate staff ID cards (CI admin/generatestaffidcard)
+    Route::match(['get', 'post'], 'admin/generatestaffidcard', [GenerateStaffIdCardController::class, 'index'])
+        ->name('certificates.staffidcard_generate.index');
+    Route::match(['get', 'post'], 'admin/generatestaffidcard/search', [GenerateStaffIdCardController::class, 'index'])
+        ->name('certificates.staffidcard_generate.search');
+    Route::post('admin/generatestaffidcard/print', [GenerateStaffIdCardController::class, 'print'])
+        ->name('certificates.staffidcard_generate.print');
+
+    // Transfer Certificate settings (CI admin/transfercertificate) — download/verify deferred
+    Route::get('admin/transfercertificate', [TransferCertificateSettingsController::class, 'index'])
+        ->name('certificates.tc_settings.index');
+    Route::get('admin/transfercertificate/index', [TransferCertificateSettingsController::class, 'index']);
+    Route::post('admin/transfercertificate/edit_header', [TransferCertificateSettingsController::class, 'updateHeader'])
+        ->name('certificates.tc_settings.header');
+    Route::post('admin/transfercertificate/save_generation_id', [TransferCertificateSettingsController::class, 'updateSerial'])
+        ->name('certificates.tc_settings.serial');
+    Route::post('admin/transfercertificate/update_signature', [TransferCertificateSettingsController::class, 'updateImage'])
+        ->name('certificates.tc_settings.image');
+    Route::post('admin/transfercertificate/fields', [TransferCertificateSettingsController::class, 'updateFields'])
+        ->name('certificates.tc_settings.fields');
 });
