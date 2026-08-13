@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Inventory module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 6 Inventory migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,17 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Inventory',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'done',
+            'message' => 'Inventory masters, items, stock, issue, and reports done.',
+            'slices' => [
+                'item_category' => 'done',
+                'item_store' => 'done',
+                'item_supplier' => 'done',
+                'items' => 'done',
+                'item_stock' => 'done',
+                'issue_item' => 'done',
+                'reports' => 'done',
+            ],
         ]);
     }
 }
