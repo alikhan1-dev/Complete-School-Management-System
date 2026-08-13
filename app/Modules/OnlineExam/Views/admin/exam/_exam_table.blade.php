@@ -30,6 +30,14 @@
                 <td>{{ (string) $row->is_active === '1' ? 'Yes' : 'No' }}</td>
                 <td>{{ (int) $row->publish_result === 1 ? 'Yes' : 'No' }}</td>
                 <td class="text-right">
+                    @can('privilege', ['add_questions_in_exam', 'can_view'])
+                        <a href="{{ route('onlineexam.exam_questions.index', $row->id) }}" class="btn btn-default btn-xs">Questions</a>
+                        <a href="{{ route('onlineexam.results.index', $row->id) }}" class="btn btn-default btn-xs">Results</a>
+                        <a href="{{ route('onlineexam.evaluation.index', $row->id) }}" class="btn btn-default btn-xs">Evaluation</a>
+                    @endcan
+                    @can('privilege', ['online_assign_view_student', 'can_view'])
+                        <a href="{{ route('onlineexam.assign.index', $row->id) }}" class="btn btn-default btn-xs">Assign</a>
+                    @endcan
                     @can('privilege', ['online_examination', 'can_edit'])
                         <a href="{{ route('onlineexam.exams.edit', $row->id) }}" class="btn btn-primary btn-xs">Edit</a>
                     @endcan
