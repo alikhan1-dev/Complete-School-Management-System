@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Leave module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 6 Leave migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,15 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Leave',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'done',
+            'message' => 'Leave types, staff approve/self-apply, student approve_leave, and leave reports done. Deferred: class-teacher scope, SaaS quota, mail/SMS.',
+            'slices' => [
+                'leave_types' => 'done',
+                'approve_leave_request' => 'done',
+                'staff_self_apply' => 'done',
+                'student_approve_leave' => 'done',
+                'reports' => 'done',
+            ],
         ]);
     }
 }
