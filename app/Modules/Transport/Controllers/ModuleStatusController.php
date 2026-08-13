@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Transport module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 6 Transport migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,19 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Transport',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Transport admin + student transport report done. Deferred: reorder, student fees, maps.',
+            'slices' => [
+                'vehicles_crud' => 'done',
+                'routes' => 'done',
+                'vehicle_routes' => 'done',
+                'pickup_points' => 'done',
+                'route_pickup_assign' => 'done',
+                'student_transport_report' => 'done',
+                'student_transport_fees' => 'deferred',
+                'pickup_reorder' => 'deferred',
+                'maps' => 'deferred',
+            ],
         ]);
     }
 }
