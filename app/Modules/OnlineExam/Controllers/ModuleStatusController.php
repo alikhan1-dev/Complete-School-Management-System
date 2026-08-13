@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the OnlineExam module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 5 OnlineExam migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,21 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'OnlineExam',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Question bank + online exam CRUD (open/closed) done. Deferred: attach questions, assign students, results, ranking, reports, mail/SMS, student portal.',
+            'slices' => [
+                'question_bank' => 'done',
+                'question_csv_import' => 'deferred',
+                'question_cms_images' => 'deferred',
+                'online_exam_crud' => 'done',
+                'attach_questions' => 'pending',
+                'assign_students' => 'pending',
+                'evaluation_results' => 'pending',
+                'ranking' => 'deferred',
+                'reports' => 'deferred',
+                'student_portal_take_exam' => 'deferred',
+                'publish_mail_sms' => 'deferred',
+            ],
         ]);
     }
 }
