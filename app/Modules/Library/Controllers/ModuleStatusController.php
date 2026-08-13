@@ -14,15 +14,15 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Library',
-            'status' => 'in_progress',
-            'message' => 'Books CRUD + import + members + issue/return done. Deferred: reports, portal.',
+            'status' => 'done',
+            'message' => 'Library admin + reports + student portal done. Deferred: admin issue_report list, superadmin_visible filtering.',
             'slices' => [
                 'books_crud' => 'done',
                 'books_import' => 'done',
                 'members_student_staff' => 'done',
                 'issue_return' => 'done',
-                'reports' => 'deferred',
-                'student_portal' => 'deferred',
+                'reports' => 'done',
+                'student_portal' => 'done',
             ],
         ]);
     }
