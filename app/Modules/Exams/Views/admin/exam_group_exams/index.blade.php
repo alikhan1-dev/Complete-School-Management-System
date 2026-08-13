@@ -22,6 +22,9 @@
     <div class="box-header with-border">
         <h3 class="box-title">Exam List</h3>
         <div class="box-tools">
+            @can('privilege', ['link_exam', 'can_view'])
+                <a href="{{ route('exams.exam_links.index', $group->id) }}" class="btn btn-primary btn-sm">Link Exams</a>
+            @endcan
             <a href="{{ route('exams.exam_groups.index') }}" class="btn btn-default btn-sm">Exam Groups</a>
         </div>
     </div>
@@ -127,6 +130,12 @@
                         <td class="text-right">
                             @can('privilege', ['exam_subject', 'can_view'])
                                 <a href="{{ route('exams.exam_subjects.index', $row->id) }}" class="btn btn-primary btn-xs">Subjects</a>
+                            @endcan
+                            @can('privilege', ['exam_assign_view_student', 'can_view'])
+                                <a href="{{ route('exams.exam_students.assign', $row->id) }}" class="btn btn-primary btn-xs">Assign</a>
+                            @endcan
+                            @can('privilege', ['exam_marks', 'can_view'])
+                                <a href="{{ route('exams.exam_marks.index', $row->id) }}" class="btn btn-primary btn-xs">Marks</a>
                             @endcan
                             @can('privilege', ['exam', 'can_edit'])
                                 <a href="{{ route('exams.exam_group_exams.edit', [$group->id, $row->id]) }}" class="btn btn-primary btn-xs">Edit</a>

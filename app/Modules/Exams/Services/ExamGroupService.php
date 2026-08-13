@@ -101,12 +101,25 @@ class ExamGroupService
                 ->pluck('id');
 
             if ($examIds->isNotEmpty()) {
+                $examStudentIds = DB::table('exam_group_class_batch_exam_students')
+                    ->whereIn('exam_group_class_batch_exam_id', $examIds)
+                    ->pluck('id');
+                if ($examStudentIds->isNotEmpty()) {
+                    DB::table('exam_group_exam_results')
+                        ->whereIn('exam_group_class_batch_exam_student_id', $examStudentIds)
+                        ->delete();
+                }
+                DB::table('exam_group_class_batch_exam_students')
+                    ->whereIn('exam_group_class_batch_exam_id', $examIds)
+                    ->delete();
                 DB::table('exam_group_class_batch_exam_subjects')
                     ->whereIn('exam_group_class_batch_exams_id', $examIds)
                     ->delete();
                 ExamGroupExam::query()->whereIn('id', $examIds)->delete();
             }
 
+            DB::table('exam_group_exam_connections')->where('exam_group_id', $group->id)->delete();
+            DB::table('exam_group_students')->where('exam_group_id', $group->id)->delete();
             $group->delete();
         });
     }
@@ -140,6 +153,17 @@ class ExamGroupService
     public function deleteExam(ExamGroupExam $exam): void
     {
         DB::transaction(function () use ($exam) {
+            $examStudentIds = DB::table('exam_group_class_batch_exam_students')
+                ->where('exam_group_class_batch_exam_id', $exam->id)
+                ->pluck('id');
+            if ($examStudentIds->isNotEmpty()) {
+                DB::table('exam_group_exam_results')
+                    ->whereIn('exam_group_class_batch_exam_student_id', $examStudentIds)
+                    ->delete();
+            }
+            DB::table('exam_group_class_batch_exam_students')
+                ->where('exam_group_class_batch_exam_id', $exam->id)
+                ->delete();
             DB::table('exam_group_class_batch_exam_subjects')
                 ->where('exam_group_class_batch_exams_id', $exam->id)
                 ->delete();

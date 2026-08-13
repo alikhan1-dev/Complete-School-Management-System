@@ -61,6 +61,9 @@
                                 @can('privilege', ['exam', 'can_view'])
                                     <a href="{{ route('exams.exam_group_exams.index', $row->id) }}" class="btn btn-primary btn-xs">Exams</a>
                                 @endcan
+                                @can('privilege', ['exam_assign_view_student', 'can_view'])
+                                    <a href="{{ route('exams.exam_groups.assign', $row->id) }}" class="btn btn-primary btn-xs">Assign</a>
+                                @endcan
                                 @can('privilege', ['exam_group', 'can_edit'])
                                     <a href="{{ route('exams.exam_groups.edit', $row->id) }}" class="btn btn-primary btn-xs">Edit</a>
                                 @endcan

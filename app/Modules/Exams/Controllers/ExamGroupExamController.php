@@ -14,7 +14,8 @@ use Illuminate\View\View;
 
 /**
  * CI admin/examgroup/addexam + ajaxaddexam — exams within an exam group.
- * Deferred: subjects, assign students, marks, link exams, marksheet/SMS on publish.
+ * Publish Exam (is_publish) / Publish Result (is_active) are set here.
+ * Deferred: marksheet selection + SMS when publishing.
  */
 class ExamGroupExamController extends Controller
 {

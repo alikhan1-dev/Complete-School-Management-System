@@ -1,8 +1,12 @@
 <?php
 
+use App\Modules\Exams\Controllers\ExamExamStudentAssignController;
+use App\Modules\Exams\Controllers\ExamGroupAssignController;
 use App\Modules\Exams\Controllers\ExamGroupController;
 use App\Modules\Exams\Controllers\ExamGroupExamController;
 use App\Modules\Exams\Controllers\ExamGroupExamSubjectController;
+use App\Modules\Exams\Controllers\ExamLinkController;
+use App\Modules\Exams\Controllers\ExamMarksController;
 use App\Modules\Exams\Controllers\ModuleStatusController;
 use Illuminate\Support\Facades\Route;
 
@@ -31,4 +35,21 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/examgroup/examsubject/{examId}/edit/{id}', [ExamGroupExamSubjectController::class, 'edit'])->name('exams.exam_subjects.edit');
     Route::post('admin/examgroup/examsubject/{examId}/edit/{id}', [ExamGroupExamSubjectController::class, 'update'])->name('exams.exam_subjects.update');
     Route::get('admin/examgroup/examsubject/{examId}/delete/{id}', [ExamGroupExamSubjectController::class, 'destroy'])->name('exams.exam_subjects.destroy');
+
+    // Assign students to exam group (CI admin/examgroup/assign + addstudent)
+    Route::match(['get', 'post'], 'admin/examgroup/assign/{groupId}', [ExamGroupAssignController::class, 'assign'])->name('exams.exam_groups.assign');
+    Route::post('admin/examgroup/addstudent/{groupId}', [ExamGroupAssignController::class, 'save'])->name('exams.exam_groups.assign_save');
+
+    // Assign students to a batch exam (CI examstudent + entrystudents)
+    Route::match(['get', 'post'], 'admin/examgroup/assignexam/{examId}', [ExamExamStudentAssignController::class, 'assign'])->name('exams.exam_students.assign');
+    Route::post('admin/examgroup/entrystudents/{examId}', [ExamExamStudentAssignController::class, 'save'])->name('exams.exam_students.assign_save');
+
+    // Exam marks entry (CI subjectstudent + entrymarks)
+    Route::match(['get', 'post'], 'admin/examgroup/marks/{examId}', [ExamMarksController::class, 'index'])->name('exams.exam_marks.index');
+    Route::post('admin/examgroup/entrymarks/{examId}', [ExamMarksController::class, 'save'])->name('exams.exam_marks.save');
+
+    // Link exams within a group (CI connectexams + ajaxConnectForm)
+    Route::get('admin/examgroup/link/{groupId}', [ExamLinkController::class, 'index'])->name('exams.exam_links.index');
+    Route::post('admin/examgroup/link/{groupId}', [ExamLinkController::class, 'save'])->name('exams.exam_links.save');
+    Route::post('admin/examgroup/link/{groupId}/reset', [ExamLinkController::class, 'reset'])->name('exams.exam_links.reset');
 });
