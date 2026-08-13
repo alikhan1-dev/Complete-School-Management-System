@@ -44,6 +44,10 @@
                     <td>{{ $member->member_type === 'teacher' ? 'Staff' : 'Student' }}</td>
                     <td>{{ $member->phone ?: '—' }}</td>
                     <td>
+                        <a href="{{ route('library.members.issue', $member->lib_member_id) }}"
+                           class="btn btn-primary btn-xs">
+                            Issue / Return
+                        </a>
                         <a href="{{ route('library.members.surrender', $member->lib_member_id) }}"
                            class="btn btn-danger btn-xs"
                            onclick="return confirm('Surrender this library membership? Issued books for this member will also be removed.');">

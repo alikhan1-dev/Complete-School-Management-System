@@ -5,6 +5,7 @@ namespace App\Modules\Library\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Academics\Models\Section;
+use App\Modules\Library\Services\BookIssueService;
 use App\Modules\Library\Services\LibraryMemberService;
 use App\Modules\Roles\Services\PermissionService;
 use Illuminate\Http\RedirectResponse;
@@ -12,14 +13,14 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI admin/member — members list + student/staff enroll + surrender.
- * Deferred: issue/return.
+ * CI admin/member — list / enroll / surrender / issue / return.
  */
 class MemberController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
         protected LibraryMemberService $members,
+        protected BookIssueService $issues,
     ) {
     }
 
@@ -125,5 +126,57 @@ class MemberController extends Controller
         return redirect()
             ->route('library.members.index')
             ->with('success', 'Library membership surrendered successfully.');
+    }
+
+    public function issue(Request $request, int $id): View|RedirectResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('issue_return', 'can_view'), 403);
+
+        $member = $this->members->findDetailed($id);
+
+        if ($request->isMethod('post')) {
+            $data = $request->validate([
+                'member_id' => ['required', 'integer'],
+                'book_id' => ['required', 'integer', 'exists:books,id'],
+                'return_date' => ['required', 'date'],
+            ]);
+
+            abort_unless((int) $data['member_id'] === $id, 422);
+
+            $this->issues->issue($id, (int) $data['book_id'], (string) $data['return_date']);
+
+            return redirect()
+                ->route('library.members.issue', $id)
+                ->with('success', 'Book issued successfully.');
+        }
+
+        return view('shared::layouts.admin', [
+            'title' => 'Issue Book',
+            'contentView' => 'library::admin.members.issue',
+            'member' => $member,
+            'bookList' => $this->issues->catalogWithAvailability(),
+            'issuedBooks' => $this->issues->booksForMember($id),
+        ]);
+    }
+
+    public function returnBook(Request $request): RedirectResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('issue_return', 'can_view'), 403);
+
+        $data = $request->validate([
+            'id' => ['required', 'integer'],
+            'member_id' => ['required', 'integer'],
+            'date' => ['required', 'date'],
+        ]);
+
+        $this->issues->returnBook(
+            (int) $data['id'],
+            (int) $data['member_id'],
+            (string) $data['date']
+        );
+
+        return redirect()
+            ->route('library.members.issue', (int) $data['member_id'])
+            ->with('success', 'Book returned successfully.');
     }
 }

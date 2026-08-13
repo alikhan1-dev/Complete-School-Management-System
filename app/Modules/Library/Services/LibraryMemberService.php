@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * CI admin/member — list / enroll student & staff / surrender.
- * Deferred: issue/return, superadmin_visible staff filtering.
+ * CI admin/member — list / enroll student & staff / surrender / detail for issue.
+ * Deferred: superadmin_visible staff filtering.
  */
 class LibraryMemberService
 {
@@ -150,6 +150,57 @@ class LibraryMemberService
             DB::table('book_issues')->where('member_id', $member->id)->delete();
             $member->delete();
         });
+    }
+
+    /**
+     * CI Librarymember_model::getByMemberID detail payload.
+     */
+    public function findDetailed(int $libraryMemberId): object
+    {
+        $member = LibraryMember::query()->findOrFail($libraryMemberId);
+
+        if ($member->member_type === 'student') {
+            $row = DB::table('libarary_members')
+                ->join('students', 'students.id', '=', 'libarary_members.member_id')
+                ->leftJoin('student_session', 'student_session.student_id', '=', 'students.id')
+                ->leftJoin('sessions', 'sessions.id', '=', 'student_session.session_id')
+                ->where('libarary_members.id', $libraryMemberId)
+                ->orderByDesc('student_session.id')
+                ->select([
+                    'libarary_members.id as lib_member_id',
+                    'libarary_members.library_card_no',
+                    'libarary_members.member_type',
+                    'students.admission_no',
+                    'students.firstname',
+                    'students.middlename',
+                    'students.lastname',
+                    'students.gender',
+                    'students.mobileno',
+                    'sessions.session as session_year',
+                ])
+                ->first();
+        } else {
+            $row = DB::table('libarary_members')
+                ->join('staff', 'staff.id', '=', 'libarary_members.member_id')
+                ->where('libarary_members.id', $libraryMemberId)
+                ->select([
+                    'libarary_members.id as lib_member_id',
+                    'libarary_members.library_card_no',
+                    'libarary_members.member_type',
+                    'staff.employee_id as admission_no',
+                    'staff.name as firstname',
+                    DB::raw('null as middlename'),
+                    'staff.surname as lastname',
+                    'staff.gender',
+                    'staff.contact_no as mobileno',
+                    DB::raw('null as session_year'),
+                ])
+                ->first();
+        }
+
+        abort_unless($row !== null, 404);
+
+        return $row;
     }
 
     protected function enroll(string $memberType, int $memberId, string $libraryCardNo): LibraryMember

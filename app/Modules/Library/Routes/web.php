@@ -31,4 +31,9 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/member/surrender/{id}', [MemberController::class, 'surrender'])
         ->whereNumber('id')
         ->name('library.members.surrender');
+    Route::match(['get', 'post'], 'admin/member/issue/{id}', [MemberController::class, 'issue'])
+        ->whereNumber('id')
+        ->name('library.members.issue');
+    Route::post('admin/member/bookreturn', [MemberController::class, 'returnBook'])
+        ->name('library.members.return');
 });

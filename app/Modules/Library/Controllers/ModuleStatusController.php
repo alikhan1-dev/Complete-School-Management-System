@@ -15,12 +15,12 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Library',
             'status' => 'in_progress',
-            'message' => 'Books CRUD + members enroll/surrender done. Deferred: issue/return, CSV import, reports, portal.',
+            'message' => 'Books CRUD + members + issue/return done. Deferred: CSV import, reports, portal.',
             'slices' => [
                 'books_crud' => 'done',
                 'books_import' => 'deferred',
                 'members_student_staff' => 'done',
-                'issue_return' => 'deferred',
+                'issue_return' => 'done',
                 'reports' => 'deferred',
                 'student_portal' => 'deferred',
             ],
