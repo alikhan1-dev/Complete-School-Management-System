@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Hostel module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 6 Hostel migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,14 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Hostel',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'done',
+            'message' => 'Hostel admin core + student hostel report done.',
+            'slices' => [
+                'room_types' => 'done',
+                'hostels' => 'done',
+                'hostel_rooms' => 'done',
+                'student_hostel_report' => 'done',
+            ],
         ]);
     }
 }
