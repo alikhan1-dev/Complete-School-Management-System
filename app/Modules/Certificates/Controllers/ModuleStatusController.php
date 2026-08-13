@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Certificates module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 5 Certificates migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,17 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Certificates',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Student certificates + ID card templates/generate done. Deferred: staff ID, TC, mPDF, QR matrix.',
+            'slices' => [
+                'student_certificate_templates' => 'done',
+                'generate_student_certificate' => 'done',
+                'student_id_card_templates' => 'done',
+                'generate_student_id_card' => 'done',
+                'staff_id_card' => 'deferred',
+                'transfer_certificate' => 'deferred',
+                'mpdf_email' => 'deferred',
+            ],
         ]);
     }
 }
