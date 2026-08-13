@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Payroll module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 6 Payroll migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,17 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Payroll',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'done',
+            'message' => 'Payroll admin core + report done. Deferred: currency helpers, payslip print header image, SMS/mail, superadmin_visible filter.',
+            'slices' => [
+                'staff_list_search' => 'done',
+                'generate_payslip' => 'done',
+                'edit_payslip' => 'done',
+                'proceed_to_pay' => 'done',
+                'view_payslip' => 'done',
+                'delete_revert' => 'done',
+                'payroll_report' => 'done',
+            ],
         ]);
     }
 }

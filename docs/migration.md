@@ -36,7 +36,7 @@ A module is complete when routes, validation, permissions, views, AJAX, reports,
 | **3b** | Attendance (day / subject / staff) + remaining student history | Operational core done (day + by-date + subject/period + staff mark-save); deferred: period reportbydate, SMS, biometric |
 | **4** | Finance, Payments (gateway infrastructure) | In progress (Finance heads + income/expense CRUD done; Payments + finance search/reports pending) |
 | **5** | Exams, OnlineExam, Certificates | In progress (Exams + Certificates done; OnlineExam admin + student take-exam incl. descriptive/upload done; ranking/reports/mail deferred) |
-| **6** | Library, Transport, Hostel, Inventory, Payroll, Leave, Homework, LessonPlan | In progress (Homework + Library + Transport + Hostel + Inventory done; others pending) |
+| **6** | Library, Transport, Hostel, Inventory, Payroll, Leave, Homework, LessonPlan | In progress (Homework + Library + Transport + Hostel + Inventory + Payroll done; Leave + LessonPlan pending) |
 | **7** | Communication, Chat, FrontCms, FrontOffice, OnlineAdmission | Pending |
 | **8** | Reports, Settings, Content, remaining checklist items | Pending |
 
