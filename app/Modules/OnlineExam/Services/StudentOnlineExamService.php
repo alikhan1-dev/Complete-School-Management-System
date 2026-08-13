@@ -4,20 +4,25 @@ namespace App\Modules\OnlineExam\Services;
 
 use App\Modules\OnlineExam\Models\OnlineExam;
 use Carbon\Carbon;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * CI user/Onlineexam — student take-exam portal (first slice).
- * Deferred: descriptive file uploads, print, ranking, reports, mail/SMS, AJAX modal.
+ * CI user/Onlineexam — student take-exam portal.
+ * Deferred: print, ranking, reports, mail/SMS, AJAX modal, SaaS storage quota.
  */
 class StudentOnlineExamService
 {
     public const OBJECTIVE_TYPES = ['singlechoice', 'true_false', 'multichoice'];
 
-    public function __construct(protected OnlineExamResultService $results)
-    {
+    public const DESCRIPTIVE_TYPE = 'descriptive';
+
+    public function __construct(
+        protected OnlineExamResultService $results,
+        protected OnlineExamDocumentService $documents,
+    ) {
     }
 
     public function currentStudentSessionId(): int
@@ -229,6 +234,7 @@ class StudentOnlineExamService
                 'questions.opt_c',
                 'questions.opt_d',
                 'questions.opt_e',
+                'questions.descriptive_word_limit',
             ]);
 
         if ($random) {
@@ -241,12 +247,19 @@ class StudentOnlineExamService
     }
 
     /**
-     * Persist objective answers and mark attempted (CI save + updateExamResult).
+     * Persist objective + descriptive answers and mark attempted (CI save + updateExamResult).
      *
      * @param  array<string, mixed>  $answers  keyed by onlineexam_question_id
+     * @param  array<int, UploadedFile>  $attachments  keyed by onlineexam_question_id
      */
-    public function submit(int $studentSessionId, int $examId, int $onlineexamStudentId, array $answers, bool $isStudentRole): void
-    {
+    public function submit(
+        int $studentSessionId,
+        int $examId,
+        int $onlineexamStudentId,
+        array $answers,
+        array $attachments,
+        bool $isStudentRole
+    ): void {
         if (! $isStudentRole) {
             throw ValidationException::withMessages([
                 'exam' => 'Only students can submit this exam.',
@@ -268,50 +281,78 @@ class StudentOnlineExamService
             ]);
         }
 
-        if (now()->greaterThan(Carbon::parse((string) $exam->exam_to))) {
-            // Still allow save if already in take (CI still posts); but if far past, block.
-            // CI does not re-check exam_to on save — allow submit for started attempts.
-        }
+        // CI does not re-check exam_to on save — allow submit for started attempts.
 
         $questionMap = $this->examQuestions($examId, false)->keyBy('onlineexam_question_id');
+        $wordLimit = (int) ($exam->answer_word_count ?? -1);
+        $oqIds = collect(array_keys($answers))
+            ->merge(array_keys($attachments))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->filter(fn (int $id) => $id > 0)
+            ->values();
+
         $rows = [];
 
-        foreach ($answers as $oqId => $value) {
-            $oqId = (int) $oqId;
+        foreach ($oqIds as $oqId) {
             $question = $questionMap->get($oqId);
             if (! $question) {
                 continue;
             }
 
             $type = (string) $question->question_type;
-            if (! in_array($type, self::OBJECTIVE_TYPES, true)) {
+            $value = $answers[$oqId] ?? ($answers[(string) $oqId] ?? null);
+            $file = $attachments[$oqId] ?? null;
+
+            if (in_array($type, self::OBJECTIVE_TYPES, true)) {
+                if ($type === 'multichoice') {
+                    if (! is_array($value) || $value === []) {
+                        continue;
+                    }
+                    $select = json_encode(array_values($value));
+                } else {
+                    $select = is_scalar($value) ? (string) $value : '';
+                    if ($select === '') {
+                        continue;
+                    }
+                }
+
+                $rows[] = $this->resultRow($onlineexamStudentId, $oqId, $select, '', '');
                 continue;
             }
 
-            if ($type === 'multichoice') {
-                if (! is_array($value) || $value === []) {
-                    continue;
-                }
-                $select = json_encode(array_values($value));
-            } else {
-                $select = is_scalar($value) ? (string) $value : '';
-                if ($select === '') {
-                    continue;
-                }
+            if ($type !== self::DESCRIPTIVE_TYPE) {
+                continue;
             }
 
-            $rows[] = [
-                'onlineexam_student_id' => $onlineexamStudentId,
-                'onlineexam_question_id' => $oqId,
-                'select_option' => $select,
-                // CI omits marks on student submit; schema here disallows null — store 0 until evaluation.
-                'marks' => 0,
-                'remark' => '',
-                'attachment_name' => '',
-                'attachment_upload_name' => '',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
+            $select = is_scalar($value) ? (string) $value : '';
+            $hasFile = $file instanceof UploadedFile && $file->isValid();
+
+            // CI: save descriptive if answer text isset OR attachment uploaded
+            if (trim($select) === '' && ! $hasFile) {
+                continue;
+            }
+
+            if ($wordLimit > 0 && $this->wordCount($select) > $wordLimit) {
+                throw ValidationException::withMessages([
+                    "answers.{$oqId}" => "Answer exceeds the exam word limit of {$wordLimit}.",
+                ]);
+            }
+
+            $attachmentName = '';
+            $attachmentUpload = '';
+            if ($hasFile) {
+                $attachmentName = (string) $file->getClientOriginalName();
+                $attachmentUpload = $this->documents->store($file);
+            }
+
+            $rows[] = $this->resultRow(
+                $onlineexamStudentId,
+                $oqId,
+                $select,
+                $attachmentName,
+                $attachmentUpload
+            );
         }
 
         DB::transaction(function () use ($rows, $onlineexamStudentId) {
@@ -322,6 +363,58 @@ class StudentOnlineExamService
                 ->where('id', $onlineexamStudentId)
                 ->update(['is_attempted' => 1, 'updated_at' => now()]);
         });
+    }
+
+    /**
+     * Student may download only attachments belonging to their assignment.
+     */
+    public function downloadOwnAttachment(int $studentSessionId, string $doc): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $safe = basename($doc);
+        abort_unless($safe !== '' && $safe === $doc && ! str_contains($safe, '..'), 404);
+
+        $owns = DB::table('onlineexam_student_results')
+            ->join('onlineexam_students', 'onlineexam_students.id', '=', 'onlineexam_student_results.onlineexam_student_id')
+            ->where('onlineexam_students.student_session_id', $studentSessionId)
+            ->where('onlineexam_student_results.attachment_upload_name', $safe)
+            ->exists();
+        abort_unless($owns, 404);
+
+        return $this->documents->download($safe);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function resultRow(
+        int $onlineexamStudentId,
+        int $oqId,
+        string $select,
+        string $attachmentName,
+        string $attachmentUpload
+    ): array {
+        return [
+            'onlineexam_student_id' => $onlineexamStudentId,
+            'onlineexam_question_id' => $oqId,
+            'select_option' => $select,
+            // CI omits marks on student submit; schema here disallows null — store 0 until evaluation.
+            'marks' => 0,
+            'remark' => '',
+            'attachment_name' => $attachmentName,
+            'attachment_upload_name' => $attachmentUpload,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+    }
+
+    protected function wordCount(string $text): int
+    {
+        $plain = trim(preg_replace('/\s+/u', ' ', strip_tags($text)) ?? '');
+        if ($plain === '') {
+            return 0;
+        }
+
+        return count(preg_split('/\s+/u', $plain, -1, PREG_SPLIT_NO_EMPTY) ?: []);
     }
 
     /**

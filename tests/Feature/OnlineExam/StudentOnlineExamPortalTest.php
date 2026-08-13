@@ -11,7 +11,9 @@ use App\Modules\OnlineExam\Models\OnlineExam;
 use App\Modules\OnlineExam\Models\Question;
 use App\Modules\Staff\Models\Staff;
 use App\Modules\Students\Models\Student;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 class StudentOnlineExamPortalTest extends TestCase
@@ -43,14 +45,29 @@ class StudentOnlineExamPortalTest extends TestCase
     /** @var list<int> */
     private array $cleanupAssignIds = [];
 
+    /** @var list<string> */
+    private array $cleanupUploadNames = [];
+
     protected function tearDown(): void
     {
         if ($this->cleanupAssignIds !== []) {
+            $uploads = DB::table('onlineexam_student_results')
+                ->whereIn('onlineexam_student_id', $this->cleanupAssignIds)
+                ->where('attachment_upload_name', '!=', '')
+                ->pluck('attachment_upload_name')
+                ->all();
+            foreach (array_merge($this->cleanupUploadNames, $uploads) as $name) {
+                $path = public_path('uploads/onlinexam_images/'.basename((string) $name));
+                if (is_file($path)) {
+                    File::delete($path);
+                }
+            }
             DB::table('onlineexam_attempts')->whereIn('onlineexam_student_id', $this->cleanupAssignIds)->delete();
             DB::table('onlineexam_student_results')->whereIn('onlineexam_student_id', $this->cleanupAssignIds)->delete();
             DB::table('onlineexam_students')->whereIn('id', $this->cleanupAssignIds)->delete();
         }
         $this->cleanupAssignIds = [];
+        $this->cleanupUploadNames = [];
 
         if ($this->cleanupExamIds !== []) {
             DB::table('onlineexam_questions')->whereIn('onlineexam_id', $this->cleanupExamIds)->delete();
@@ -331,5 +348,115 @@ class StudentOnlineExamPortalTest extends TestCase
             ->assertSee('Result', false)
             ->assertSee('Score %', false)
             ->assertDontSee('Start Exam', false);
+    }
+
+    public function test_student_can_submit_descriptive_answer_with_attachment(): void
+    {
+        $ctx = $this->seedStudentAndActAsPortal();
+        $suffix = uniqid();
+
+        $exam = OnlineExam::query()->create([
+            'session_id' => $ctx['session']->id,
+            'exam' => 'Desc Exam '.$suffix,
+            'attempt' => 1,
+            'exam_from' => now()->subHour()->format('Y-m-d H:i:s'),
+            'exam_to' => now()->addHours(2)->format('Y-m-d H:i:s'),
+            'is_quiz' => 0,
+            'auto_publish_date' => null,
+            'duration' => '01:00:00',
+            'passing_percentage' => 40,
+            'description' => 'Descriptive portal test',
+            'publish_result' => 0,
+            'answer_word_count' => 50,
+            'is_active' => 1,
+            'is_marks_display' => 1,
+            'is_neg_marking' => 0,
+            'is_random_question' => 0,
+            'is_rank_generated' => 0,
+            'publish_exam_notification' => 0,
+            'publish_result_notification' => 0,
+        ]);
+        $this->cleanupExamIds[] = $exam->id;
+
+        $subjectId = (int) DB::table('subjects')->insertGetId([
+            'name' => 'OE Desc Subject '.$suffix,
+            'code' => 'OED'.$suffix,
+            'type' => 'theory',
+            'is_active' => 'yes',
+        ]);
+        $this->cleanupSubjectIds[] = $subjectId;
+
+        $question = Question::query()->create([
+            'staff_id' => $this->createdStaffIds[0],
+            'subject_id' => $subjectId,
+            'question_type' => 'descriptive',
+            'level' => 'medium',
+            'class_id' => $ctx['classId'],
+            'section_id' => null,
+            'question' => 'Explain gravity '.$suffix,
+            'opt_a' => '',
+            'opt_b' => '',
+            'opt_c' => '',
+            'opt_d' => '',
+            'opt_e' => '',
+            'correct' => '',
+            'descriptive_word_limit' => 100,
+        ]);
+        $this->cleanupQuestionIds[] = $question->id;
+
+        $oqId = (int) DB::table('onlineexam_questions')->insertGetId([
+            'question_id' => $question->id,
+            'onlineexam_id' => $exam->id,
+            'session_id' => $ctx['session']->id,
+            'marks' => 10,
+            'neg_marks' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $assignId = (int) DB::table('onlineexam_students')->insertGetId([
+            'onlineexam_id' => $exam->id,
+            'student_session_id' => $ctx['sessionId'],
+            'is_attempted' => 0,
+            'rank' => 0,
+            'quiz_attempted' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->cleanupAssignIds[] = $assignId;
+
+        $this->get('/user/onlineexam/take/'.$exam->id)
+            ->assertOk()
+            ->assertSee('Explain gravity '.$suffix, false)
+            ->assertSee('name="attachments['.$oqId.']"', false);
+
+        $file = UploadedFile::fake()->create('answer-notes.txt', 12, 'text/plain');
+
+        $this->post('/user/onlineexam/save', [
+            'exam_id' => $exam->id,
+            'onlineexam_student_id' => $assignId,
+            'answers' => [
+                $oqId => 'Gravity pulls objects toward Earth.',
+            ],
+            'attachments' => [
+                $oqId => $file,
+            ],
+        ])->assertRedirect('/user/onlineexam');
+
+        $row = DB::table('onlineexam_student_results')
+            ->where('onlineexam_student_id', $assignId)
+            ->where('onlineexam_question_id', $oqId)
+            ->first();
+        $this->assertNotNull($row);
+        $this->assertSame('Gravity pulls objects toward Earth.', (string) $row->select_option);
+        $this->assertSame('answer-notes.txt', (string) $row->attachment_name);
+        $this->assertNotSame('', (string) $row->attachment_upload_name);
+        $this->assertFileExists(public_path('uploads/onlinexam_images/'.$row->attachment_upload_name));
+        $this->cleanupUploadNames[] = (string) $row->attachment_upload_name;
+
+        $this->assertSame(1, (int) DB::table('onlineexam_students')->where('id', $assignId)->value('is_attempted'));
+
+        $this->get('/user/onlineexam/downloadattachment/'.$row->attachment_upload_name)
+            ->assertOk();
     }
 }

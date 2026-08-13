@@ -1,5 +1,7 @@
 @php
     $optionKeys = ['opt_a' => 'A', 'opt_b' => 'B', 'opt_c' => 'C', 'opt_d' => 'D', 'opt_e' => 'E'];
+    $wordLimit = (int) ($exam->answer_word_count ?? -1);
+    $extList = implode(', ', $uploadExtensions ?? []);
 @endphp
 
 <div class="box box-danger">
@@ -11,14 +13,36 @@
             </span>
         </div>
     </div>
-    <form method="post" action="{{ route('user.onlineexam.save') }}" id="exam-take-form">
+    <form method="post"
+          action="{{ route('user.onlineexam.save') }}"
+          id="exam-take-form"
+          enctype="multipart/form-data">
         @csrf
         <input type="hidden" name="exam_id" value="{{ $exam->id }}">
         <input type="hidden" name="onlineexam_student_id" value="{{ $assignment->id }}">
         <div class="box-body">
+            @if($errors->any())
+                <div class="alert alert-danger">
+                    <ul class="mb-0" style="margin:0; padding-left:18px;">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             <p class="help-block">
-                Answer the objective questions below. Descriptive questions (with file upload) are deferred in this release and will not be submitted here.
+                Answer all questions below.
+                @if($wordLimit > 0)
+                    Descriptive answers are limited to <strong>{{ $wordLimit }}</strong> words.
+                @else
+                    Descriptive answers have no exam-level word limit.
+                @endif
+                @if($extList !== '')
+                    Allowed attachments: {{ $extList }} (max {{ (int) ($uploadMaxKb ?? 0) }} KB).
+                @endif
             </p>
+
             @forelse($questions as $index => $q)
                 @php $type = (string) $q->question_type; @endphp
                 <div class="well" style="background:#fff;">
@@ -67,10 +91,26 @@
                                 @endif
                             @endforeach
                         </div>
+                    @elseif($type === 'descriptive')
+                        <div class="form-group" style="margin-top:10px;">
+                            <label>Attachment</label>
+                            <input type="file"
+                                   class="form-control exam_attachment"
+                                   name="attachments[{{ $q->onlineexam_question_id }}]">
+                        </div>
+                        <div class="form-group">
+                            <label>Answer</label>
+                            <textarea class="form-control"
+                                      rows="8"
+                                      name="answers[{{ $q->onlineexam_question_id }}]"
+                                      @if($wordLimit > 0) data-word-limit="{{ $wordLimit }}" @endif
+                            >{{ old('answers.'.$q->onlineexam_question_id) }}</textarea>
+                            @if((int) ($q->descriptive_word_limit ?? 0) > 0)
+                                <p class="help-block">Question word guide: {{ (int) $q->descriptive_word_limit }}</p>
+                            @endif
+                        </div>
                     @else
-                        <p class="text-muted" style="margin-top:10px;">
-                            Descriptive question — skipped in this portal slice (no file upload yet).
-                        </p>
+                        <p class="text-muted" style="margin-top:10px;">Unsupported question type.</p>
                     @endif
                 </div>
             @empty

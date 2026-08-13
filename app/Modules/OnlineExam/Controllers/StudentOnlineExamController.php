@@ -3,20 +3,26 @@
 namespace App\Modules\OnlineExam\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\OnlineExam\Services\OnlineExamDocumentService;
 use App\Modules\OnlineExam\Services\StudentOnlineExamService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rules\File;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
- * CI user/Onlineexam — student portal take-exam (first slice).
- * Deferred: descriptive uploads, print, ranking, reports, mail/SMS.
+ * CI user/Onlineexam — student portal take-exam (objective + descriptive).
+ * Deferred: print, ranking, reports, mail/SMS, SaaS storage quota.
  */
 class StudentOnlineExamController extends Controller
 {
-    public function __construct(protected StudentOnlineExamService $portal)
-    {
+    public function __construct(
+        protected StudentOnlineExamService $portal,
+        protected OnlineExamDocumentService $documents,
+    ) {
     }
 
     protected function isStudentRole(): bool
@@ -75,6 +81,8 @@ class StudentOnlineExamController extends Controller
                 ->with('error', $payload['block_message'] ?? 'Unable to start exam.');
         }
 
+        $uploadMeta = $this->documents->uploadRulesFromFiletypes();
+
         return view('shared::layouts.student_parent', [
             'title' => 'Take Exam — '.$payload['exam']->exam,
             'contentView' => 'onlineexam::user.take',
@@ -82,29 +90,55 @@ class StudentOnlineExamController extends Controller
             'assignment' => $payload['assignment'],
             'questions' => $payload['questions'],
             'durationSeconds' => $payload['duration_seconds'],
+            'uploadExtensions' => $uploadMeta['extensions'],
+            'uploadMaxKb' => $uploadMeta['max_kb'],
         ]);
     }
 
     public function save(Request $request): RedirectResponse
     {
+        $meta = $this->documents->uploadRulesFromFiletypes();
+
         $data = $request->validate([
             'exam_id' => ['required', 'integer'],
             'onlineexam_student_id' => ['required', 'integer'],
             'answers' => ['nullable', 'array'],
+            'attachments' => ['nullable', 'array'],
+            'attachments.*' => [
+                'nullable',
+                'file',
+                File::types($meta['extensions'])->max($meta['max_kb']),
+            ],
         ]);
 
         $sessionId = $this->portal->currentStudentSessionId();
+
+        /** @var array<int, UploadedFile> $attachments */
+        $attachments = [];
+        foreach ($request->file('attachments', []) as $oqId => $file) {
+            if ($file instanceof UploadedFile) {
+                $attachments[(int) $oqId] = $file;
+            }
+        }
 
         $this->portal->submit(
             $sessionId,
             (int) $data['exam_id'],
             (int) $data['onlineexam_student_id'],
             (array) ($data['answers'] ?? []),
+            $attachments,
             $this->isStudentRole()
         );
 
         return redirect()
             ->route('user.onlineexam.index')
             ->with('success', 'Exam submitted successfully.');
+    }
+
+    public function downloadAttachment(string $doc): BinaryFileResponse
+    {
+        $sessionId = $this->portal->currentStudentSessionId();
+
+        return $this->portal->downloadOwnAttachment($sessionId, $doc);
     }
 }

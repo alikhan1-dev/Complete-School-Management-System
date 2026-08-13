@@ -25,6 +25,16 @@
                 <tr><th>Attempts used</th><td>{{ $attemptCount }}</td></tr>
                 <tr><th>Passing %</th><td>{{ $exam->passing_percentage }}</td></tr>
                 <tr>
+                    <th>Answer word limit</th>
+                    <td>
+                        @if((int) $exam->answer_word_count === -1 || (string) $exam->answer_word_count === '')
+                            No limit
+                        @else
+                            {{ $exam->answer_word_count }}
+                        @endif
+                    </td>
+                </tr>
+                <tr>
                     <th>Status</th>
                     <td>
                         @if((int) $assignment->is_attempted === 1)

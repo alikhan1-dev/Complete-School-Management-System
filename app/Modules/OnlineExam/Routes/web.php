@@ -27,6 +27,9 @@ Route::middleware([
         ->whereNumber('id')
         ->name('user.onlineexam.take');
     Route::post('user/onlineexam/save', [StudentOnlineExamController::class, 'save'])->name('user.onlineexam.save');
+    Route::get('user/onlineexam/downloadattachment/{doc}', [StudentOnlineExamController::class, 'downloadAttachment'])
+        ->where('doc', '[^/]+')
+        ->name('user.onlineexam.attachment');
 });
 
 Route::middleware(['staff.auth'])->group(function () {
