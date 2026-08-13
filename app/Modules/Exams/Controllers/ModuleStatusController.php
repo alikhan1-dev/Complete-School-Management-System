@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Exams',
             'status' => 'in_progress',
-            'message' => 'Examgroup core done: groups, exams, subjects, assign, marks, link exams. Publish flags on exam CRUD. Deferred: marksheet/SMS on publish, marksheets/admit cards, marks CSV, OnlineExam, Certificates.',
+            'message' => 'Examgroup core + marksheet/admitcard design templates + HTML print done. Deferred: mPDF/email print, OnlineExam, Certificates.',
             'slices' => [
                 'exam_groups' => 'done',
                 'exams_in_group' => 'done',
@@ -24,8 +24,12 @@ class ModuleStatusController extends Controller
                 'marks_entry' => 'done',
                 'link_exams' => 'done',
                 'publish_flags' => 'done',
+                'marksheet_templates' => 'done',
+                'admitcard_templates' => 'done',
+                'print_marksheet_html' => 'done',
+                'print_admitcard_html' => 'done',
+                'print_mpdf_email' => 'deferred',
                 'publish_sms_marksheet' => 'deferred',
-                'marksheets_admit_cards' => 'pending',
                 'marks_csv_import' => 'deferred',
                 'online_exam' => 'pending',
                 'certificates' => 'pending',
