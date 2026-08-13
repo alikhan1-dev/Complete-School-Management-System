@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Homework module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 6 Homework migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,18 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Homework',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Admin Homework CRUD (list/create/edit/delete/download) done. Deferred: evaluation, student portal submit, daily assignment, reports, mail/SMS.',
+            'slices' => [
+                'admin_list_filter' => 'done',
+                'admin_crud' => 'done',
+                'admin_document_upload_download' => 'done',
+                'evaluation' => 'deferred',
+                'student_portal_submit' => 'deferred',
+                'daily_assignment' => 'deferred',
+                'reports' => 'deferred',
+                'publish_mail_sms' => 'deferred',
+            ],
         ]);
     }
 }
