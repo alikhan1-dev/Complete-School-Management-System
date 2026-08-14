@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'FrontCms',
             'status' => 'in_progress',
-            'message' => 'Front CMS admin persist + public site done. Deferred: SaaS quota, live YouTube oEmbed, live contact/complain mail, admission/examresult on Welcome, CI theme pixel-parity.',
+            'message' => 'Front CMS admin persist + public site + Welcome examresult persist done. Deferred: SaaS quota, live YouTube oEmbed, live contact/complain mail, CI theme pixel-parity.',
             'slices' => [
                 'settings' => 'done',
                 'pages' => 'done',
@@ -26,6 +26,7 @@ class ModuleStatusController extends Controller
                 'events' => 'done',
                 'media' => 'done',
                 'public_site' => 'done',
+                'welcome_examresult' => 'done',
             ],
         ]);
     }

@@ -19,6 +19,8 @@ Route::match(['get', 'post'], 'page/{slug}', [FrontCmsWelcomeController::class, 
 Route::get('read/{slug}', [FrontCmsWelcomeController::class, 'read'])->where('slug', '.*');
 Route::post('welcome/ajaxPaginationData', [FrontCmsWelcomeController::class, 'ajaxPaginationData']);
 Route::post('welcome/setsitecookies', [FrontCmsWelcomeController::class, 'setSiteCookies']);
+Route::match(['get', 'post'], 'welcome/examresult', [FrontCmsWelcomeController::class, 'examresult']);
+Route::match(['get', 'post'], 'welcome/getstudentexam', [FrontCmsWelcomeController::class, 'getstudentexam']);
 
 Route::middleware(['staff.auth'])->group(function () {
     Route::match(['get', 'post'], 'admin/frontcms', [FrontCmsSettingController::class, 'index'])->name('frontcms.settings.index');

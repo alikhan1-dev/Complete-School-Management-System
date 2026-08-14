@@ -4,18 +4,24 @@ namespace App\Modules\FrontCms\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\FrontCms\Services\FrontCmsPublicService;
+use App\Modules\FrontCms\Services\WelcomeExamResultService;
+use App\Modules\Shared\Services\SchoolContext;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 /**
- * CI Welcome.php public site (admission / examresult / live mail deferred).
+ * CI Welcome.php public site (live mail deferred).
  */
 class FrontCmsWelcomeController extends Controller
 {
-    public function __construct(protected FrontCmsPublicService $public)
-    {
+    public function __construct(
+        protected FrontCmsPublicService $public,
+        protected WelcomeExamResultService $examResults,
+        protected SchoolContext $school,
+    ) {
     }
 
     public function index(): View|RedirectResponse
@@ -127,6 +133,81 @@ class FrontCmsWelcomeController extends Controller
     public function setSiteCookies(): Response
     {
         return response('')->cookie('sitecookies', '1', 60 * 24 * 30, '/');
+    }
+
+    /**
+     * CI Welcome::examresult — Front CMS must be on; sch_settings.exam_result gates the form.
+     */
+    public function examresult(Request $request): View|RedirectResponse
+    {
+        if ($redirect = $this->gate()) {
+            return $redirect;
+        }
+
+        $layout = $this->public->layoutData('examresult');
+        $page = [
+            'title' => 'Student Exam Result',
+            'meta_title' => 'student exam result',
+            'meta_keyword' => 'student exam result',
+            'meta_description' => 'student exam result',
+        ];
+
+        $payload = array_merge($layout, [
+            'page' => $page,
+            'pageSideBar' => 0,
+            'is_exam_result' => $this->examResults->isEnabled(),
+            'exam_id' => old('exam_id', ''),
+            'exam_result' => [],
+            'student_details' => [],
+            'exam_grade' => $this->examResults->gradeDetails(),
+            'marks_division' => $this->examResults->marksDivisions(),
+            'show_roll_no' => (bool) $this->school->get('roll_no'),
+            'searched' => false,
+            'examResultService' => $this->examResults,
+        ]);
+
+        if (! $request->isMethod('post')) {
+            return view('frontcms::public.examresult', $payload);
+        }
+
+        $validated = $request->validate([
+            'admission_no' => ['required'],
+            'exam_id' => ['required'],
+        ], [], [
+            'admission_no' => __('system.admission_no'),
+            'exam_id' => __('system.exam'),
+        ]);
+
+        $admissionNo = (string) $validated['admission_no'];
+        $examId = (int) $validated['exam_id'];
+        $studentDetails = $this->examResults->studentExams($admissionNo);
+        $examResult = $this->examResults->publishedExamResult(
+            $this->examResults->studentSessionIdByAdmissionNo($admissionNo),
+            $examId
+        );
+
+        if ($examResult === []) {
+            session()->flash('msg', '<div class="alert alert-danger">'.e(__('system.no_record_found')).'</div>');
+        }
+
+        $payload['exam_id'] = (string) $examId;
+        $payload['exam_result'] = $examResult;
+        $payload['student_details'] = $studentDetails;
+        $payload['searched'] = $request->has('search');
+
+        return view('frontcms::public.examresult', $payload);
+    }
+
+    /**
+     * CI Welcome::getstudentexam — JSON exam list for admission_no (CI JS posts without CSRF).
+     */
+    public function getstudentexam(Request $request): JsonResponse|RedirectResponse
+    {
+        if ($redirect = $this->gate()) {
+            return $redirect;
+        }
+
+        return response()->json($this->examResults->studentExams((string) $request->input('admission_no', '')));
     }
 
     protected function gate(): ?RedirectResponse

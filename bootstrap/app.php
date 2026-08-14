@@ -31,6 +31,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('web', [
             \App\Modules\Shared\Middleware\SetLocale::class,
         ]);
+
+        // CI Welcome::getstudentexam is posted by public JS with admission_no only.
+        $middleware->validateCsrfTokens(except: [
+            'welcome/getstudentexam',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

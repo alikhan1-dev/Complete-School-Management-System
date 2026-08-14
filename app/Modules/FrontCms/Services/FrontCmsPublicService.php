@@ -10,7 +10,7 @@ use App\Modules\FrontOffice\Models\Visitor;
 use App\Modules\Settings\Models\SchSetting;
 
 /**
- * CI Welcome + Front_Controller public site (admission / live mail / captcha deferred).
+ * CI Welcome + Front_Controller public site (live mail deferred).
  */
 class FrontCmsPublicService
 {

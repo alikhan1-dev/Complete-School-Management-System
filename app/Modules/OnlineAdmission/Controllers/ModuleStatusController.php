@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'OnlineAdmission',
             'status' => 'in_progress',
-            'message' => 'Admin persist + public form/review/status/submit/edit + checkout + applicant files + custom fields + enroll copy to student + enroll document/photo copy + enroll barcode/qrcode + admission captcha persist done. Deferred: live gateway APIs, examresult, live mail/SMS, SaaS quota.',
+            'message' => 'Admin persist + public form/review/status/submit/edit + checkout + applicant files + custom fields + enroll copy to student + enroll document/photo copy + enroll barcode/qrcode + admission captcha persist done. Deferred: live gateway APIs, live mail/SMS, SaaS quota.',
             'slices' => [
                 'settings' => 'done',
                 'form_fields' => 'done',

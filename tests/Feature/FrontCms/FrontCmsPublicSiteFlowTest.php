@@ -70,6 +70,7 @@ class FrontCmsPublicSiteFlowTest extends TestCase
 
         $this->get('/frontend')->assertRedirect('/site/userlogin');
         $this->get('/page/contact-us')->assertRedirect('/site/userlogin');
+        $this->get('/welcome/examresult')->assertRedirect('/site/userlogin');
         $this->get('/')->assertRedirect('/site/login');
     }
 
