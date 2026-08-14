@@ -11,11 +11,12 @@ use App\Modules\OnlineAdmission\Services\OnlineAdmissionSettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
- * CI Welcome admission / review / status / submit / edit (payments, mail, captcha, custom fields, files deferred).
+ * CI Welcome admission / review / status / submit / edit (captcha, custom fields, live mail deferred).
  */
 class OnlineAdmissionPublicController extends Controller
 {
@@ -40,9 +41,9 @@ class OnlineAdmissionPublicController extends Controller
         }
 
         if ($request->isMethod('post')) {
-            $errors = $this->validateAdmission($request);
+            $errors = array_merge($this->validateAdmission($request), $this->validateUploads($request));
             if ($errors === []) {
-                $reference = $this->public->submit($request->all());
+                $reference = $this->public->submit($request->all(), $request->allFiles());
                 session()->put('validlogin', $reference);
 
                 return redirect('welcome/online_admission_review/'.$reference)
@@ -67,9 +68,9 @@ class OnlineAdmissionPublicController extends Controller
         }
 
         if ($request->isMethod('post') && $request->filled('admission_id')) {
-            $errors = $this->validateAdmission($request, false);
+            $errors = array_merge($this->validateAdmission($request, false), $this->validateUploads($request));
             if ($errors === []) {
-                $this->public->updateByReference($referenceNo, $request->all());
+                $this->public->updateByReference($referenceNo, $request->all(), $request->allFiles());
                 session()->put('validlogin', $referenceNo);
 
                 return redirect('welcome/online_admission_review/'.$referenceNo)
@@ -111,6 +112,7 @@ class OnlineAdmissionPublicController extends Controller
             'student' => $row,
             'schSetting' => $lookups['schSetting'],
             'conditions' => $lookups['conditions'],
+            'isStaffReview' => Auth::guard('staff')->check(),
         ]));
     }
 
@@ -221,6 +223,11 @@ class OnlineAdmissionPublicController extends Controller
             'instruction' => $lookups['instruction'],
             'applicationForm' => $lookups['applicationForm'],
             'guardianRequired' => $lookups['guardianRequired'],
+            'showStudentPhoto' => $lookups['showStudentPhoto'],
+            'showFatherPic' => $lookups['showFatherPic'],
+            'showMotherPic' => $lookups['showMotherPic'],
+            'showGuardianPic' => $lookups['showGuardianPic'],
+            'showDocuments' => $lookups['showDocuments'],
             'formErrors' => $errors,
             'old' => $old,
             'formAction' => $referenceNo !== null
@@ -266,6 +273,41 @@ class OnlineAdmissionPublicController extends Controller
             }
             if (trim((string) $request->input('guardian_relation')) === '') {
                 $errors['guardian_relation'] = 'The Guardian Relation field is required.';
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function validateUploads(Request $request): array
+    {
+        $errors = [];
+        $imageRules = $this->files->imageRulesFromFiletypes();
+        $documentRules = $this->files->uploadRulesFromFiletypes();
+        $images = [
+            'file' => 'Student Photo',
+            'father_pic' => 'Father Photo',
+            'mother_pic' => 'Mother Photo',
+            'guardian_pic' => 'Guardian Photo',
+        ];
+        foreach ($images as $field => $label) {
+            $upload = $request->file($field);
+            if ($upload === null || ! $upload->isValid()) {
+                continue;
+            }
+            $message = $this->files->validateApplicantFile($upload, $imageRules);
+            if ($message !== null) {
+                $errors[$field] = $message;
+            }
+        }
+        $document = $request->file('document');
+        if ($document !== null && $document->isValid()) {
+            $message = $this->files->validateApplicantFile($document, $documentRules);
+            if ($message !== null) {
+                $errors['document'] = $message;
             }
         }
 

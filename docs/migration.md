@@ -34,10 +34,10 @@ A module is complete when routes, validation, permissions, views, AJAX, reports,
 | **2** | Academics, Students (Parents/Timetable partial deferred) | Done (core Academics + Students; Parents pending; Timetable class create/report in progress) |
 | **3** | **Fees** (delivery pivot: Fees first; Attendance follows as 3b) — was Phase 4 in original plan | In progress (operational core done incl. multi-collect, due-fees, carry-forward; deferred: transport, print/SMS) |
 | **3b** | Attendance (day / subject / staff) + remaining student history | Operational core done (day + by-date + subject/period + staff mark-save); deferred: period reportbydate, SMS, biometric |
-| **4** | Finance, Payments (gateway infrastructure) | In progress (Finance heads + income/expense CRUD done; Payments + finance search/reports pending) |
+| **4** | Finance, Payments (gateway infrastructure) | In progress (Finance heads + income/expense CRUD done; Payments admin method credentials + online admission checkout persist done; live gateways + finance search/reports pending) |
 | **5** | Exams, OnlineExam, Certificates | In progress (Exams + Certificates done; OnlineExam admin + student take-exam incl. descriptive/upload done; ranking/reports/mail deferred) |
 | **6** | Library, Transport, Hostel, Inventory, Payroll, Leave, Homework, LessonPlan | In progress (Homework + Library + Transport + Hostel + Inventory + Payroll + Leave done; LessonPlan core done incl. weekly syllabus + admin forum; deferred: student comments, class-teacher scope) |
-| **7** | Communication, Chat, FrontCms, FrontOffice, OnlineAdmission | In progress (Communication persist + staff/user Chat persist/polling + FrontOffice persist slices done + FrontCms admin persist + public site done + OnlineAdmission admin persist + enroll + public form/review/submit/edit done; payments + live send + SaaS quota deferred) |
+| **7** | Communication, Chat, FrontCms, FrontOffice, OnlineAdmission | In progress (Communication persist + staff/user Chat persist/polling + FrontOffice persist slices done + FrontCms admin persist + public site done + OnlineAdmission admin persist + enroll + public form/review/submit/edit + checkout + applicant files persist done; live send + live gateways + SaaS quota deferred) |
 | **8** | Reports, Settings, Content, remaining checklist items | Pending |
 
 > **Note:** Original plan had Phase 3 = Attendance and Phase 4 = Fees. Delivery now runs **Fees as Phase 3** (per product priority), then Attendance as **3b**, keeping functional parity and module boundaries.

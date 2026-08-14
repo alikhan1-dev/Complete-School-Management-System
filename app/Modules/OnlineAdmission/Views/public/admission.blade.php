@@ -8,7 +8,7 @@
     @if($applicationForm !== '')
         <p><a href="{{ url('welcome/download/'.$schSetting->id) }}">Download Application Form</a></p>
     @endif
-    <form method="post" action="{{ $formAction ?? url('online_admission') }}">
+    <form method="post" action="{{ $formAction ?? url('online_admission') }}" enctype="multipart/form-data">
         @csrf
         @if(!empty($admissionId))
             <input type="hidden" name="admission_id" value="{{ $admissionId }}">
@@ -86,6 +86,41 @@
                 <label>Guardian Relation</label>
                 <input class="form-control" name="guardian_relation" value="{{ $old['guardian_relation'] ?? '' }}">
                 @if(!empty($formErrors['guardian_relation']))<span class="text-danger">{{ $formErrors['guardian_relation'] }}</span>@endif
+            </div>
+        @endif
+        @if(!empty($showStudentPhoto))
+            <div class="form-group">
+                <label>Student Photo</label>
+                <input type="file" class="form-control" name="file">
+                @if(!empty($formErrors['file']))<span class="text-danger">{{ $formErrors['file'] }}</span>@endif
+            </div>
+        @endif
+        @if(!empty($showFatherPic))
+            <div class="form-group">
+                <label>Father Photo</label>
+                <input type="file" class="form-control" name="father_pic">
+                @if(!empty($formErrors['father_pic']))<span class="text-danger">{{ $formErrors['father_pic'] }}</span>@endif
+            </div>
+        @endif
+        @if(!empty($showMotherPic))
+            <div class="form-group">
+                <label>Mother Photo</label>
+                <input type="file" class="form-control" name="mother_pic">
+                @if(!empty($formErrors['mother_pic']))<span class="text-danger">{{ $formErrors['mother_pic'] }}</span>@endif
+            </div>
+        @endif
+        @if(!empty($showGuardianPic))
+            <div class="form-group">
+                <label>Guardian Photo</label>
+                <input type="file" class="form-control" name="guardian_pic">
+                @if(!empty($formErrors['guardian_pic']))<span class="text-danger">{{ $formErrors['guardian_pic'] }}</span>@endif
+            </div>
+        @endif
+        @if(!empty($showDocuments))
+            <div class="form-group">
+                <label>Upload Documents</label>
+                <input type="file" class="form-control" name="document">
+                @if(!empty($formErrors['document']))<span class="text-danger">{{ $formErrors['document'] }}</span>@endif
             </div>
         @endif
         <button type="submit" class="btn btn-primary">Submit</button>

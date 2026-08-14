@@ -7,11 +7,12 @@ use App\Modules\FrontCms\Services\FrontCmsPublicService;
 use App\Modules\OnlineAdmission\Models\OnlineAdmission;
 use App\Modules\Settings\Models\SchSetting;
 use App\Modules\Students\Models\Category;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Welcome admission / review / status / submit / edit (payments, mail, captcha, custom fields, files deferred).
+ * CI Welcome admission / review / status / submit / edit (captcha, custom fields, live mail, SaaS quota deferred).
  */
 class OnlineAdmissionPublicService
 {
@@ -19,6 +20,7 @@ class OnlineAdmissionPublicService
         protected OnlineAdmissionApplicationService $applications,
         protected OnlineAdmissionSettingService $settings,
         protected FrontCmsPublicService $cms,
+        protected OnlineAdmissionFormFileService $files,
     ) {
     }
 
@@ -56,6 +58,11 @@ class OnlineAdmissionPublicService
             'conditions' => (string) ($school->online_admission_conditions ?? ''),
             'applicationForm' => (string) ($school->online_admission_application_form ?? ''),
             'guardianRequired' => $this->settings->fieldEnabled('if_guardian_is'),
+            'showStudentPhoto' => $this->settings->fieldEnabled('student_photo'),
+            'showFatherPic' => $this->settings->fieldEnabled('father_pic'),
+            'showMotherPic' => $this->settings->fieldEnabled('mother_pic'),
+            'showGuardianPic' => $this->settings->fieldEnabled('guardian_photo'),
+            'showDocuments' => $this->settings->fieldEnabled('upload_documents'),
             'cmsLayout' => $this->cms->isPublicEnabled() ? $this->cms->layoutData('online_admission') : [
                 'setting' => (object) ['footer_text' => '', 'cookie_consent' => ''],
                 'schoolName' => (string) ($school->name ?? ''),
@@ -69,22 +76,24 @@ class OnlineAdmissionPublicService
 
     /**
      * @param  array<string, mixed>  $input
+     * @param  array<string, UploadedFile|null>  $uploads
      */
-    public function submit(array $input): string
+    public function submit(array $input, array $uploads = []): string
     {
         $reference = $this->uniqueReference();
-        $payload = $this->createPayload($input, $reference);
+        $payload = $this->applyUploads($this->createPayload($input, $reference), $uploads, true);
         OnlineAdmission::query()->create($payload);
 
         return $reference;
     }
 
     /**
-     * CI Welcome::editonlineadmission persist (files/custom fields deferred).
+     * CI Welcome::editonlineadmission persist (custom fields / SaaS quota deferred).
      *
      * @param  array<string, mixed>  $input
+     * @param  array<string, UploadedFile|null>  $uploads
      */
-    public function updateByReference(string $reference, array $input): bool
+    public function updateByReference(string $reference, array $input, array $uploads = []): bool
     {
         $row = OnlineAdmission::query()->where('reference_no', $reference)->first();
         if ($row === null) {
@@ -106,6 +115,7 @@ class OnlineAdmissionPublicService
             $payload['route_id'],
             $payload['vehroute_id'],
         );
+        $payload = $this->applyUploads($payload, $uploads, false);
 
         OnlineAdmission::query()->where('id', $row->id)->update($payload);
 
@@ -269,5 +279,38 @@ class OnlineAdmissionPublicService
             'form_status' => 0,
             'paid_status' => 0,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, UploadedFile|null>  $uploads
+     * @return array<string, mixed>
+     */
+    protected function applyUploads(array $payload, array $uploads, bool $onCreate): array
+    {
+        $document = $uploads['document'] ?? null;
+        if ($document instanceof UploadedFile && $document->isValid()) {
+            $payload['document'] = $this->files->storeApplicantDocument($document);
+        } elseif (! $onCreate) {
+            unset($payload['document']);
+        }
+
+        $photo = $uploads['file'] ?? null;
+        if ($photo instanceof UploadedFile && $photo->isValid()) {
+            $payload['image'] = $this->files->storeApplicantImage($photo);
+        } elseif (! $onCreate) {
+            unset($payload['image']);
+        }
+
+        foreach (['father_pic', 'mother_pic', 'guardian_pic'] as $field) {
+            $upload = $uploads[$field] ?? null;
+            if ($upload instanceof UploadedFile && $upload->isValid()) {
+                $payload[$field] = $this->files->storeApplicantImage($upload);
+            } elseif (! $onCreate) {
+                unset($payload[$field]);
+            }
+        }
+
+        return $payload;
     }
 }

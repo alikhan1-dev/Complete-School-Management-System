@@ -13,7 +13,25 @@
     <p>Email: {{ $student['email'] }}</p>
     <p>Form Status: {{ ((int) $student['form_status'] === 1) ? 'Submitted' : 'Not Submitted' }}</p>
     <p><a href="{{ url('welcome/editonlineadmission/'.$student['reference_no']) }}">Edit</a></p>
-    @if((int) $student['form_status'] !== 1)
+    @php
+        $paymentOn = (string) ($schSetting->online_admission_payment ?? '') === 'yes';
+        $paid = (int) ($student['paid_status'] ?? 0);
+        $formStatus = (int) ($student['form_status'] ?? 0);
+    @endphp
+    @if($paymentOn && $paid === 0 && empty($isStaffReview))
+        @if($conditions !== '')
+            <div>{!! $conditions !!}</div>
+        @endif
+        <form method="post" action="{{ url('onlineadmission/checkout') }}" id="paymentform">
+            @csrf
+            <input type="hidden" name="admission_id" value="{{ $student['id'] }}">
+            <input type="hidden" name="reference_no" value="{{ $student['reference_no'] }}">
+            <label>
+                <input type="checkbox" name="checkterm" value="1"> I agree to the terms and conditions
+            </label>
+            <button type="submit" class="btn btn-danger">Pay {{ $schSetting->online_admission_amount ?? '' }}</button>
+        </form>
+    @elseif($formStatus !== 1)
         @if($conditions !== '')
             <div>{!! $conditions !!}</div>
         @endif
