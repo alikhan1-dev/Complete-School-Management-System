@@ -3,22 +3,23 @@
 namespace App\Modules\Chat\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Auth\Models\PortalUser;
 use App\Modules\Chat\Services\ChatService;
-use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Shared\Services\SchoolContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * CI admin/chat — staff chat persist + polling JSON.
+ * CI user/Chat — student/parent persist + polling JSON.
  */
-class ChatController extends Controller
+class UserChatController extends Controller
 {
     public function __construct(
-        protected PermissionService $permissions,
         protected ChatService $chat,
         protected SchoolContext $school,
     ) {
@@ -26,28 +27,29 @@ class ChatController extends Controller
 
     public function index(): View
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
+        $role = $this->portalRole();
 
-        return view('shared::layouts.admin', [
+        return view('shared::layouts.student_parent', [
             'title' => 'Chat System',
             'contentView' => 'chat::admin.chat',
             'pageTitle' => 'Chat System',
-            'chatRoutePrefix' => 'admin/chat',
-            'delete_chat_enable' => $this->chat->deleteChatEnabled(),
+            'chatRoutePrefix' => 'user/chat',
+            'delete_chat_enable' => $this->chat->portalDeleteChatEnabled($role),
             'dateFormat' => $this->school->dateFormat() ?: 'd/m/Y',
         ]);
     }
 
     public function searchuser(Request $request): JsonResponse
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
-        $staffId = $this->chat->currentStaffId();
-        $mine = $this->chat->getMyId($staffId, 'staff');
+        $role = $this->portalRole();
+        $studentId = $this->portalStudentId();
+        $mine = $this->chat->getMyId($studentId, $role);
         $page = view('chat::admin._partialSearchUser', [
             'chat_user' => $this->chat->searchForUser(
                 (string) $request->input('keyword', ''),
                 $mine ? (int) $mine->id : 0,
-                $staffId,
+                $studentId,
+                $role,
             ),
             'useMiddle' => (string) $this->school->get('middlename', 'disabled') === 'enabled',
             'useLast' => (string) $this->school->get('lastname', 'enabled') !== 'disabled',
@@ -58,12 +60,12 @@ class ChatController extends Controller
 
     public function myuser(): JsonResponse
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
-        $staffId = $this->chat->currentStaffId();
-        $mine = $this->chat->getMyId($staffId, 'staff');
+        $role = $this->portalRole();
+        $studentId = $this->portalStudentId();
+        $mine = $this->chat->getMyId($studentId, $role);
         $userList = ['chat_users' => [], 'chat_user_notification' => []];
         if ($mine) {
-            $userList = $this->chat->myUser($staffId, (int) $mine->id);
+            $userList = $this->chat->myUser($studentId, (int) $mine->id);
         }
         $page = view('chat::admin._partialmyuser', [
             'chat_user' => $mine,
@@ -76,8 +78,8 @@ class ChatController extends Controller
 
     public function getChatRecord(Request $request): JsonResponse
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
-        $mine = $this->chat->getMyId($this->chat->currentStaffId(), 'staff');
+        $role = $this->portalRole();
+        $mine = $this->chat->getMyId($this->portalStudentId(), $role);
         abort_if($mine === null, 404);
 
         $connectionId = (int) $request->input('chat_connection_id');
@@ -92,7 +94,7 @@ class ChatController extends Controller
         $page = view('chat::admin._partialChatRecord', [
             'chatList' => $this->chat->myChatAndUpdate($connectionId, (int) $mine->id),
             'chat_user' => $mine,
-            'delete_chat_enable' => $this->chat->deleteChatEnabled(),
+            'delete_chat_enable' => $this->chat->portalDeleteChatEnabled($role),
             'dateFormat' => $this->school->dateFormat() ?: 'd/m/Y',
         ])->render();
 
@@ -108,7 +110,6 @@ class ChatController extends Controller
 
     public function newMessage(Request $request): JsonResponse
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
         $id = $this->chat->addMessage([
             'chat_user_id' => (int) $request->input('chat_to_user'),
             'message' => trim((string) $request->input('message', '')),
@@ -126,8 +127,7 @@ class ChatController extends Controller
 
     public function chatUpdate(Request $request): JsonResponse
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
-        $mine = $this->chat->getMyId($this->chat->currentStaffId(), 'staff');
+        $mine = $this->chat->getMyId($this->portalStudentId(), $this->portalRole());
         abort_if($mine === null, 404);
         $connectionId = (int) $request->input('chat_connection_id');
         $chatToUser = (int) $request->input('chat_to_user');
@@ -151,7 +151,6 @@ class ChatController extends Controller
 
     public function adduser(Request $request): JsonResponse
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
         $validator = Validator::make($request->all(), [
             'user_id' => ['required'],
             'user_type' => ['required', 'string'],
@@ -166,28 +165,30 @@ class ChatController extends Controller
 
         $userType = (string) $request->input('user_type');
         $userId = (int) $request->input('user_id');
-        $staffId = $this->chat->currentStaffId();
-        $insertData = ['user_type' => strtolower($userType), 'create_staff_id' => null];
+        $studentId = $this->portalStudentId();
+        $role = $this->portalRole();
+        $insertData = ['user_type' => strtolower($userType), 'create_student_id' => null];
         if (strcasecmp($userType, 'Student') === 0) {
             $insertData['student_id'] = $userId;
-        } else {
+        } elseif (strcasecmp($userType, 'Staff') === 0) {
             $insertData['staff_id'] = $userId;
         }
 
-        $created = $this->chat->addNewUser(
-            ['user_type' => 'staff', 'staff_id' => $staffId],
+        $created = $this->chat->addNewUserForStudent(
+            ['user_type' => $role, 'student_id' => $studentId],
             $insertData,
-            $staffId,
+            $studentId,
         );
         $newUser = $this->chat->getChatUserDetail($created['new_user_id']);
         abort_if($newUser === null, 404);
-        $newUser = $this->chat->formatUserForAdd($newUser);
-        $mine = $this->chat->getMyId($staffId, 'staff');
+        $newUser = $this->chat->formatUserForPortalAdd($newUser);
+        $mine = $this->chat->getMyId($studentId, $role);
+        abort_if($mine === null, 404);
         $connectionId = $created['new_user_chat_connection_id'];
         $page = view('chat::admin._partialChatRecord', [
             'chatList' => $this->chat->myChatAndUpdate($connectionId, (int) $mine->id),
             'chat_user' => $mine,
-            'delete_chat_enable' => $this->chat->deleteChatEnabled(),
+            'delete_chat_enable' => $this->chat->portalDeleteChatEnabled($role),
             'dateFormat' => $this->school->dateFormat() ?: 'd/m/Y',
         ])->render();
 
@@ -204,8 +205,8 @@ class ChatController extends Controller
 
     public function mychatnotification(): JsonResponse
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
-        $mine = $this->chat->getMyId($this->chat->currentStaffId(), 'staff');
+        // CI user/Chat::mychatnotification hardcodes user_type student.
+        $mine = $this->chat->getMyId($this->portalStudentId(), 'student');
         $notifications = $mine ? $this->chat->getChatNotification((int) $mine->id) : [];
 
         return response()->json([
@@ -217,8 +218,7 @@ class ChatController extends Controller
 
     public function mynewuser(Request $request): JsonResponse
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
-        $mine = $this->chat->getMyId($this->chat->currentStaffId(), 'staff');
+        $mine = $this->chat->getMyId($this->portalStudentId(), $this->portalRole());
         $list = ['chat_users' => [], 'chat_user_notification' => []];
         if ($mine) {
             $list = $this->chat->myNewUser((int) $mine->id, (array) $request->input('users', []));
@@ -239,16 +239,13 @@ class ChatController extends Controller
 
     public function delete_msg(Request $request): Response
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
         $this->chat->deleteMessage((int) $request->input('msg_id'));
 
-        return response('deleted');
+        return response('');
     }
 
     public function get_active_chat_msg(Request $request): JsonResponse
     {
-        abort_unless($this->permissions->hasPrivilege('chat', 'can_view'), 403);
-
         return response()->json([
             'status' => '1',
             'error' => '',
@@ -256,17 +253,43 @@ class ChatController extends Controller
         ]);
     }
 
-    public function get_chat_msg_count(): JsonResponse
+    public function get_student_parent_chat_msg_count(): JsonResponse
     {
-        $staffId = $this->chat->currentStaffId();
-        if ($staffId <= 0) {
+        $role = $this->portalRole();
+        $studentId = $this->portalStudentId();
+        if ($studentId <= 0) {
             return response()->json(['status' => 0, 'error' => 'Not logged in', 'count' => 0]);
         }
 
         return response()->json([
             'status' => '1',
             'error' => '',
-            'count' => count($this->chat->unreadConnectionCount($staffId)),
+            'count' => count($this->chat->unreadPortalConnectionCount($studentId, $role)),
         ]);
+    }
+
+    protected function portalRole(): string
+    {
+        $user = Auth::guard('student_parent')->user();
+
+        return $user && (string) ($user->role ?? '') === 'parent' ? 'parent' : 'student';
+    }
+
+    protected function portalStudentId(): int
+    {
+        $studentSessionId = (int) (session('current_class.student_session_id') ?? 0);
+        if ($studentSessionId > 0) {
+            $studentId = (int) DB::table('student_session')->where('id', $studentSessionId)->value('student_id');
+            if ($studentId > 0) {
+                return $studentId;
+            }
+        }
+
+        $user = Auth::guard('student_parent')->user();
+        if ($user instanceof PortalUser) {
+            return (int) $user->user_id;
+        }
+
+        return 0;
     }
 }

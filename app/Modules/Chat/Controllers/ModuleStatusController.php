@@ -15,10 +15,10 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Chat',
             'status' => 'in_progress',
-            'message' => 'Staff admin chat persist + polling done. Deferred: user/parent portal chat.',
+            'message' => 'Staff admin and user/parent chat persist + polling done. Deferred: live mail/SMS/push, FrontCms.',
             'slices' => [
                 'staff_chat' => 'done',
-                'user_chat' => 'pending',
+                'user_chat' => 'done',
             ],
         ]);
     }

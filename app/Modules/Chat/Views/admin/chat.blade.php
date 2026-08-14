@@ -56,7 +56,7 @@
 
 <div id="myModal" class="modal fade" role="dialog">
     <div class="modal-dialog">
-        <form id="addUser" action="{{ url('admin/chat/adduser') }}" method="POST">
+        <form id="addUser" action="{{ url(($chatRoutePrefix ?? 'admin/chat').'/adduser') }}" method="POST">
             @csrf
             <div class="modal-content">
                 <div class="modal-header">
@@ -78,6 +78,7 @@
 @push('scripts')
 <script>
 var base_url = @json(rtrim(url('/'), '/').'/');
+var chat_prefix = @json($chatRoutePrefix ?? 'admin/chat');
 var branch_base_url = @json(url('/'));
 $.ajaxSetup({ headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } });
 var timestamp = {{ time() }};
@@ -95,7 +96,7 @@ $(document).on('click', '.input_submit', function (e) {
 $(document).on('keyup', '.search-query', function () {
     var $this = $(this), keyword = $(this).val();
     if (keyword.length >= 2) {
-        $.post(base_url + 'admin/chat/searchuser', { keyword: keyword }, function (data) {
+        $.post(base_url + chat_prefix + '/searchuser', { keyword: keyword }, function (data) {
             $('.usersearchlist').html(data.page);
         }, 'json');
     } else {
@@ -103,7 +104,7 @@ $(document).on('keyup', '.search-query', function () {
     }
 });
 $(document).ready(function () {
-    $.post(base_url + 'admin/chat/myuser', {}, function (data) {
+    $.post(base_url + chat_prefix + '/myuser', {}, function (data) {
         $('#contacts ul').html(data.page);
         if (data.status === '1') {
             setInterval(getChatNotification, 15000);
@@ -115,7 +116,7 @@ var interval;
 $(document).on('click', '.contact', function () {
     var chat_connection_id = $(this).data('chatConnectionId');
     var $this = $(this);
-    $.post(base_url + 'admin/chat/getChatRecord', { chat_connection_id: chat_connection_id }, function (data) {
+    $.post(base_url + chat_prefix + '/getChatRecord', { chat_connection_id: chat_connection_id }, function (data) {
         $this.find('span.notification_count').css('display', 'none');
         $('.messages ul').html(data.page);
         $("input[name='chat_connection_id']").val(data.chat_connection_id);
@@ -144,7 +145,7 @@ function newChatMessage() {
     var chat_connection_id = $("input[name='chat_connection_id']").val();
     var chat_to_user = $("input[name='chat_to_user']").val();
     if (chat_connection_id > 0 && chat_to_user > 0) {
-        $.post(base_url + 'admin/chat/newMessage', {
+        $.post(base_url + chat_prefix + '/newMessage', {
             chat_connection_id: chat_connection_id, message: message, chat_to_user: chat_to_user, time: date_time_temp
         }, function (data) {
             $('.messages ul').append('<li class="replies chat_msg" data-msg_id="' + data.last_insert_id + '" id="reply_' + data.last_insert_id + '"><p>' + message + '</p></li>');
@@ -157,12 +158,12 @@ function newChatMessage() {
 }
 function delete_msg(msg_id) {
     if (!confirm('Are you sure?')) { return; }
-    $.post(base_url + 'admin/chat/delete_msg', { msg_id: msg_id }, function () {
+    $.post(base_url + chat_prefix + '/delete_msg', { msg_id: msg_id }, function () {
         $('#reply_' + msg_id).html('');
     });
 }
 function get_active_chat_msg() {
-    $.post(base_url + 'admin/chat/get_active_chat_msg', { chat_connection_id: $("input[name='chat_connection_id']").val() }, function (data) {
+    $.post(base_url + chat_prefix + '/get_active_chat_msg', { chat_connection_id: $("input[name='chat_connection_id']").val() }, function (data) {
         var idArray = (data.chatList || []).map(function (chat) { return chat.id; });
         $('.chat_msg').each(function () {
             if (jQuery.inArray(String($(this).data('msg_id')), idArray.map(String)) === -1) {
@@ -173,7 +174,7 @@ function get_active_chat_msg() {
 }
 function getChatsUpdates() {
     get_active_chat_msg();
-    $.post(base_url + 'admin/chat/chatUpdate', {
+    $.post(base_url + chat_prefix + '/chatUpdate', {
         chat_connection_id: $("input[name='chat_connection_id']").val(),
         chat_to_user: $("input[name='chat_to_user']").val(),
         last_chat_id: $("input[name='last_chat_id']").val()
@@ -202,7 +203,7 @@ function newUserLi(user_array, chat_connection_id) {
     return "<li class='contact' data-chat-connection-id='" + chat_connection_id + "'><div class='wrap'><div class='meta'><p class='name'>" + user_array.name + "</p><p class='preview'></p></div></div></li>";
 }
 function getChatNotification() {
-    $.post(base_url + 'admin/chat/mychatnotification', {}, function (data) {
+    $.post(base_url + chat_prefix + '/mychatnotification', {}, function (data) {
         $.each(data.notifications || [], function (index, value) {
             $('#contacts ul li[data-chat-connection-id="' + value.chat_connection_id + '"]').find('span.notification_count').text(value.no_of_notification).css('display', 'block');
         });
@@ -221,12 +222,15 @@ function js_yyyy_mm_dd_hh_mm_ss() {
 function mynewUser() {
     var users_Array = [];
     $('#contacts ul li').each(function () { users_Array.push($(this).data('chatConnectionId')); });
-    $.post(base_url + 'admin/chat/mynewuser', { users: users_Array }, function (data) {
+    $.post(base_url + chat_prefix + '/mynewuser', { users: users_Array }, function (data) {
         $('#contacts ul').prepend(data.new_user_list);
     }, 'json');
 }
 function get_chat_msg_count() {
-    $.post(base_url + 'admin/chat/get_chat_msg_count', {}, function () {}, 'json');
+    var countUrl = chat_prefix === 'user/chat'
+        ? (base_url + 'user/chat/get_student_parent_chat_msg_count')
+        : (base_url + 'admin/chat/get_chat_msg_count');
+    $.post(countUrl, {}, function () {}, 'json');
 }
 </script>
 @endpush

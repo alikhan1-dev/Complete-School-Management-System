@@ -12,8 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Chatuser_model + admin/chat persist (staff panel).
- * user/Chat portal is deferred.
+ * CI Chatuser_model + admin/chat + user/Chat persist (no live mail/SMS/push).
  */
 class ChatService
 {
@@ -33,6 +32,15 @@ class ChatService
         return (int) $this->school->get('staff_delete_chat', 0);
     }
 
+    public function portalDeleteChatEnabled(string $userType): int
+    {
+        if ($userType === 'parent') {
+            return (int) $this->school->get('guardian_delete_chat', 0);
+        }
+
+        return (int) $this->school->get('student_delete_chat', 0);
+    }
+
     public function getMyId(int $id, string $userType = 'staff'): ?object
     {
         $query = ChatUser::query()->where('user_type', $userType);
@@ -49,11 +57,15 @@ class ChatService
     /**
      * @return list<object>
      */
-    public function searchForUser(string $keyword, int $chatUserId, int $loginId): array
+    public function searchForUser(string $keyword, int $chatUserId, int $loginId, string $userType = 'staff'): array
     {
         $keyword = trim($keyword);
         if ($keyword === '') {
             return [];
+        }
+
+        if ($userType === 'student' || $userType === 'parent') {
+            return $this->searchStaffForPortal($keyword, $loginId, $userType);
         }
 
         $connectedStaff = $this->connectedPartyIds($chatUserId, 'staff_id');
@@ -297,6 +309,61 @@ class ChatService
     }
 
     /**
+     * CI Chatuser_model::addNewUserForStudent — other party is always looked up by staff_id.
+     *
+     * @return array{new_user_id: int, new_user_chat_connection_id: int}
+     */
+    public function addNewUserForStudent(array $firstEntry, array $insertData, int $studentId): array
+    {
+        $mine = ChatUser::query()
+            ->where('student_id', $firstEntry['student_id'] ?? 0)
+            ->where('user_type', $firstEntry['user_type'] ?? 'student')
+            ->first();
+
+        $other = ChatUser::query()
+            ->where('staff_id', $insertData['staff_id'] ?? 0)
+            ->where('user_type', $insertData['user_type'] ?? 'staff')
+            ->first();
+
+        if ($mine && $other) {
+            $one = (int) $mine->id;
+            $two = (int) $other->id;
+        } elseif ($mine && ! $other) {
+            $insertData['create_student_id'] = $studentId;
+            $other = ChatUser::query()->create($insertData);
+            $one = (int) $mine->id;
+            $two = (int) $other->id;
+        } elseif (! $mine && $other) {
+            $mine = ChatUser::query()->create($firstEntry);
+            $one = (int) $mine->id;
+            $two = (int) $other->id;
+        } else {
+            $mine = ChatUser::query()->create($firstEntry);
+            $insertData['create_student_id'] = $studentId;
+            $other = ChatUser::query()->create($insertData);
+            $one = (int) $mine->id;
+            $two = (int) $other->id;
+        }
+
+        $connection = ChatConnection::query()->create([
+            'chat_user_one' => $one,
+            'chat_user_two' => $two,
+        ]);
+        $this->addMessage([
+            'message' => 'you are now connected on chat',
+            'chat_user_id' => $two,
+            'is_first' => 1,
+            'chat_connection_id' => (int) $connection->id,
+            'created_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        return [
+            'new_user_id' => $two,
+            'new_user_chat_connection_id' => (int) $connection->id,
+        ];
+    }
+
+    /**
      * @param  list<int|string>  $existingConnectionIds
      * @return array{chat_users: list<object>, chat_user_notification: list<object>}
      */
@@ -378,7 +445,25 @@ class ChatService
             ->where('chat_user_id', $mine->id)
             ->where('is_read', 0)
             ->groupBy('chat_connection_id')
-            ->get(['id'])
+            ->get(['chat_connection_id'])
+            ->all();
+    }
+
+    /**
+     * @return list<object>
+     */
+    public function unreadPortalConnectionCount(int $studentId, string $userType): array
+    {
+        $mine = $this->getMyId($studentId, $userType);
+        if ($mine === null) {
+            return [];
+        }
+
+        return DB::table('chat_messages')
+            ->where('chat_user_id', $mine->id)
+            ->where('is_read', 0)
+            ->groupBy('chat_connection_id')
+            ->get(['chat_connection_id'])
             ->all();
     }
 
@@ -395,6 +480,23 @@ class ChatService
         $user->name = ! empty($user->student_id)
             ? trim(($user->firstname ?? '').' '.($user->middlename ?? '').' '.($user->lastname ?? ''))
             : trim(($user->name ?? '').' '.($user->surname ?? ''));
+
+        return $user;
+    }
+
+    /**
+     * CI user/Chat::adduser image fallback (no uploads/staff_images/ prefix).
+     */
+    public function formatUserForPortalAdd(object $detail): object
+    {
+        $user = clone $detail;
+        if (empty($user->image)) {
+            if (($user->gender ?? '') === 'Female') {
+                $user->image = 'default_female.jpg?'.time();
+            } elseif (($user->gender ?? '') === 'Male') {
+                $user->image = 'default_male.jpg?'.time();
+            }
+        }
 
         return $user;
     }
@@ -435,6 +537,38 @@ class ChatService
         }
 
         return $fallback;
+    }
+
+    /**
+     * CI searchForUser student/parent branch: staff only, one-direction connection exclude.
+     *
+     * @return list<object>
+     */
+    protected function searchStaffForPortal(string $keyword, int $loginId, string $userType): array
+    {
+        $connectedStaffIds = DB::table('chat_users as cu1')
+            ->join('chat_connections as cc', 'cc.chat_user_one', '=', 'cu1.id')
+            ->join('chat_users as cu2', 'cu2.id', '=', 'cc.chat_user_two')
+            ->where('cu1.student_id', $loginId)
+            ->where('cu1.user_type', $userType)
+            ->pluck('cu2.staff_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $query = DB::table('staff')
+            ->where('is_active', 1)
+            ->where('name', 'like', '%'.$keyword.'%')
+            ->selectRaw('staff.id as staff_id, NULL as student_id, staff.name, staff.surname, NULL as first_name, NULL as middle_name, NULL as last_name, staff.image, staff.gender');
+        if ($connectedStaffIds !== []) {
+            $query->whereNotIn('staff.id', function ($sub) use ($connectedStaffIds) {
+                $sub->select('a.staff_id')
+                    ->from('chat_users as a')
+                    ->whereIn('a.staff_id', $connectedStaffIds);
+            });
+        }
+
+        return $query->get()->all();
     }
 
     /**

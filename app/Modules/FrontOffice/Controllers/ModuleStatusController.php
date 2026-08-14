@@ -15,8 +15,15 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'FrontOffice',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Admission enquiry persist (list/search/CRUD/follow-up) done. Deferred: visitors, complaints, dispatch, phone calls, setup masters.',
+            'slices' => [
+                'admission_enquiry' => 'done',
+                'visitors' => 'pending',
+                'complaints' => 'pending',
+                'dispatch_receive' => 'pending',
+                'phone_calls' => 'pending',
+            ],
         ]);
     }
 }
