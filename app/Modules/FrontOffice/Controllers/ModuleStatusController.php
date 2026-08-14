@@ -16,13 +16,14 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'FrontOffice',
             'status' => 'in_progress',
-            'message' => 'Admission enquiry persist (list/search/CRUD/follow-up) done. Deferred: visitors, complaints, dispatch, phone calls, setup masters.',
+            'message' => 'FrontOffice persist slices done (enquiry, visitors, complaints, dispatch/receive, phone calls, setup masters). Deferred: SaaS quota.',
             'slices' => [
                 'admission_enquiry' => 'done',
-                'visitors' => 'pending',
-                'complaints' => 'pending',
-                'dispatch_receive' => 'pending',
-                'phone_calls' => 'pending',
+                'visitors' => 'done',
+                'complaints' => 'done',
+                'dispatch_receive' => 'done',
+                'phone_calls' => 'done',
+                'setup_masters' => 'done',
             ],
         ]);
     }

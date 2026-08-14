@@ -33,6 +33,7 @@
                 <li><a href="{{ route('user.homework.index') }}"><i class="fa fa-flask"></i> <span>Homework</span></a></li>
                 <li><a href="{{ route('user.homework.daily.index') }}"><i class="fa fa-tasks"></i> <span>Daily Assignment</span></a></li>
                 <li><a href="{{ route('user.chat.index') }}"><i class="fa fa-comments"></i> <span>Chat</span></a></li>
+                <li><a href="{{ route('user.visitors.index') }}"><i class="fa fa-ioxhost"></i> <span>Visitors</span></a></li>
             </ul>
         </section>
     </aside>
