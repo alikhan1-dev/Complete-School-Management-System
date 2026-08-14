@@ -37,7 +37,7 @@ A module is complete when routes, validation, permissions, views, AJAX, reports,
 | **4** | Finance, Payments (gateway infrastructure) | In progress (Finance heads + income/expense CRUD done; Payments + finance search/reports pending) |
 | **5** | Exams, OnlineExam, Certificates | In progress (Exams + Certificates done; OnlineExam admin + student take-exam incl. descriptive/upload done; ranking/reports/mail deferred) |
 | **6** | Library, Transport, Hostel, Inventory, Payroll, Leave, Homework, LessonPlan | In progress (Homework + Library + Transport + Hostel + Inventory + Payroll + Leave done; LessonPlan core done incl. weekly syllabus + admin forum; deferred: student comments, class-teacher scope) |
-| **7** | Communication, Chat, FrontCms, FrontOffice, OnlineAdmission | In progress (Communication persist + staff/user Chat persist/polling + FrontOffice persist slices done + FrontCms admin persist + public site done; OnlineAdmission pending; live send + SaaS quota deferred) |
+| **7** | Communication, Chat, FrontCms, FrontOffice, OnlineAdmission | In progress (Communication persist + staff/user Chat persist/polling + FrontOffice persist slices done + FrontCms admin persist + public site done + OnlineAdmission admin persist + enroll done; public admission form/payments + live send + SaaS quota deferred) |
 | **8** | Reports, Settings, Content, remaining checklist items | Pending |
 
 > **Note:** Original plan had Phase 3 = Attendance and Phase 4 = Fees. Delivery now runs **Fees as Phase 3** (per product priority), then Attendance as **3b**, keeping functional parity and module boundaries.
