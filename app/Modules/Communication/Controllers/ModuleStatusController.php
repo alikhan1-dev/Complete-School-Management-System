@@ -15,13 +15,14 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Communication',
             'status' => 'in_progress',
-            'message' => 'Email and SMS config save done. Deferred: notice board, compose mail/SMS, templates, test_mail/test_sms, Chat, FrontCms.',
+            'message' => 'Email/SMS config, notice board, notification templates, compose persist, schedule editors, and email/SMS template CRUD done. Deferred: live send at schedule time, Chat, FrontCms.',
             'slices' => [
                 'email_config' => 'done',
                 'sms_config' => 'done',
-                'notice_board' => 'pending',
-                'compose_mailsms' => 'pending',
-                'templates' => 'pending',
+                'notice_board' => 'done',
+                'compose_mailsms' => 'done',
+                'templates' => 'done',
+                'email_sms_templates' => 'done',
                 'test_send' => 'pending',
             ],
         ]);

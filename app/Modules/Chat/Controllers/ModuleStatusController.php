@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Chat module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 7 Chat migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,12 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Chat',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Staff admin chat persist + polling done. Deferred: user/parent portal chat.',
+            'slices' => [
+                'staff_chat' => 'done',
+                'user_chat' => 'pending',
+            ],
         ]);
     }
 }
