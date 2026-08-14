@@ -143,6 +143,13 @@ class OnlineAdmissionSettingService
         $this->school->clearCache();
     }
 
+    public function fieldEnabled(string $name): bool
+    {
+        $row = OnlineAdmissionField::query()->where('name', $name)->first();
+
+        return $row !== null && (int) $row->status === 1;
+    }
+
     public function saveFormField(string $name, int $status): void
     {
         $existing = OnlineAdmissionField::query()->where('name', $name)->first();

@@ -15,13 +15,14 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'OnlineAdmission',
             'status' => 'in_progress',
-            'message' => 'Admin settings + application list/edit/enroll/delete persist done. Deferred: public Welcome admission/examresult, payment gateways, fees/transport on enroll, live mail/SMS, barcode, SaaS quota, CI DataTables JSON.',
+            'message' => 'Admin persist + public form/review/status/submit/edit done. Deferred: payments, captcha, custom fields, file uploads, examresult, live mail/SMS, SaaS quota.',
             'slices' => [
                 'settings' => 'done',
                 'form_fields' => 'done',
                 'applications' => 'done',
                 'enroll' => 'done',
-                'public_form' => 'deferred',
+                'public_form' => 'done',
+                'public_edit' => 'done',
                 'payments' => 'deferred',
             ],
         ]);

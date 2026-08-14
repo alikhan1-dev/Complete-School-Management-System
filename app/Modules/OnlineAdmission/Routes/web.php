@@ -1,11 +1,23 @@
 <?php
 
 use App\Modules\OnlineAdmission\Controllers\ModuleStatusController;
+use App\Modules\OnlineAdmission\Controllers\OnlineAdmissionPublicController;
 use App\Modules\OnlineAdmission\Controllers\OnlineAdmissionSettingController;
 use App\Modules\OnlineAdmission\Controllers\OnlineStudentController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('migration-status/onlineadmission', [ModuleStatusController::class, 'status'])->name('onlineadmission.migration_status');
+
+Route::get('online_admission', [OnlineAdmissionPublicController::class, 'admission']);
+Route::post('online_admission', [OnlineAdmissionPublicController::class, 'admission']);
+Route::get('welcome/admission', [OnlineAdmissionPublicController::class, 'admission']);
+Route::post('welcome/admission', [OnlineAdmissionPublicController::class, 'admission']);
+Route::get('welcome/online_admission_review/{reference_no}', [OnlineAdmissionPublicController::class, 'review']);
+Route::match(['get', 'post'], 'welcome/editonlineadmission/{reference_no}', [OnlineAdmissionPublicController::class, 'editonlineadmission']);
+Route::post('welcome/checkadmissionstatus', [OnlineAdmissionPublicController::class, 'checkadmissionstatus']);
+Route::post('welcome/submitadmission', [OnlineAdmissionPublicController::class, 'submitadmission']);
+Route::post('welcome/getSections', [OnlineAdmissionPublicController::class, 'getSections']);
+Route::get('welcome/download/{id}', [OnlineAdmissionPublicController::class, 'download'])->whereNumber('id');
 
 Route::middleware(['staff.auth'])->group(function () {
     Route::match(['get', 'post'], 'admin/onlineadmission/admissionsetting', [OnlineAdmissionSettingController::class, 'admissionsetting'])
