@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the FrontCms module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Front CMS migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,19 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'FrontCms',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Front CMS admin persist + public site done. Deferred: SaaS quota, live YouTube oEmbed, live contact/complain mail, admission/examresult on Welcome, CI theme pixel-parity.',
+            'slices' => [
+                'settings' => 'done',
+                'pages' => 'done',
+                'banners' => 'done',
+                'gallery' => 'done',
+                'menus' => 'done',
+                'notices' => 'done',
+                'events' => 'done',
+                'media' => 'done',
+                'public_site' => 'done',
+            ],
         ]);
     }
 }
