@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Communication module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 7 Communication migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,16 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Communication',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Email and SMS config save done. Deferred: notice board, compose mail/SMS, templates, test_mail/test_sms, Chat, FrontCms.',
+            'slices' => [
+                'email_config' => 'done',
+                'sms_config' => 'done',
+                'notice_board' => 'pending',
+                'compose_mailsms' => 'pending',
+                'templates' => 'pending',
+                'test_send' => 'pending',
+            ],
         ]);
     }
 }
