@@ -18,6 +18,7 @@ Route::post('welcome/checkadmissionstatus', [OnlineAdmissionPublicController::cl
 Route::post('welcome/submitadmission', [OnlineAdmissionPublicController::class, 'submitadmission']);
 Route::post('welcome/getSections', [OnlineAdmissionPublicController::class, 'getSections']);
 Route::get('welcome/download/{id}', [OnlineAdmissionPublicController::class, 'download'])->whereNumber('id');
+Route::post('site/refreshCaptcha', [OnlineAdmissionPublicController::class, 'refreshCaptcha']);
 
 Route::middleware(['staff.auth'])->group(function () {
     Route::match(['get', 'post'], 'admin/onlineadmission/admissionsetting', [OnlineAdmissionSettingController::class, 'admissionsetting'])

@@ -5,6 +5,7 @@
     $customFields = $customFields ?? collect();
     $customFieldValues = $customFieldValues ?? [];
     $belongTo = $belongTo ?? 'students';
+    $formErrors = $formErrors ?? [];
     $service = app(\App\Modules\Academics\Services\CustomFieldValueService::class);
 @endphp
 
@@ -70,6 +71,9 @@
                     @error('custom_fields.'.$belongTo.'.'.$field->id)
                         <span class="text-danger">{{ $message }}</span>
                     @enderror
+                    @if(!empty($formErrors['custom_fields.'.$belongTo.'.'.$field->id]))
+                        <span class="text-danger">{{ $formErrors['custom_fields.'.$belongTo.'.'.$field->id] }}</span>
+                    @endif
                 </div>
             </div>
         @endforeach

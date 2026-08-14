@@ -183,4 +183,63 @@ class OnlineAdmissionFormFileService
 
         return basename(str_replace('\\', '/', $stored));
     }
+
+    /**
+     * CI Onlinestudent enroll: copy online_admission_doc into student_documents/{id}/.
+     */
+    public function copyDocumentToStudent(string $storedName, int $studentId): ?string
+    {
+        $name = $this->basenameFromStored($storedName);
+        if ($name === '') {
+            return null;
+        }
+        $src = $this->documentDirectory().DIRECTORY_SEPARATOR.$name;
+        if (! File::isFile($src)) {
+            return null;
+        }
+        $destDir = public_path('uploads/student_documents/'.$studentId);
+        File::ensureDirectoryExists($destDir);
+        $dest = $destDir.DIRECTORY_SEPARATOR.$name;
+        if (! @copy($src, $dest)) {
+            return null;
+        }
+
+        return $name;
+    }
+
+    /**
+     * CI enroll photo copy: uploads/student_images/{studentId}{suffix}.{ext}.
+     */
+    public function copyImageToStudent(string $sourceRelative, int $studentId, string $suffix): ?string
+    {
+        $relative = ltrim(str_replace(['./', '\\'], ['', '/'], $sourceRelative), '/');
+        if ($relative === '') {
+            return null;
+        }
+        $src = public_path($relative);
+        if (! File::isFile($src)) {
+            return null;
+        }
+        $ext = strtolower((string) pathinfo($src, PATHINFO_EXTENSION)) ?: 'jpg';
+        $imgName = $studentId.$suffix.'.'.$ext;
+        $destDir = public_path('uploads/student_images');
+        File::ensureDirectoryExists($destDir);
+        $dest = $destDir.DIRECTORY_SEPARATOR.$imgName;
+        if (! @copy($src, $dest)) {
+            return null;
+        }
+
+        return 'uploads/student_images/'.$imgName;
+    }
+
+    public function storeStudentImage(UploadedFile $file, int $studentId, string $suffix): string
+    {
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg');
+        $imgName = $studentId.$suffix.'.'.$ext;
+        $destDir = public_path('uploads/student_images');
+        File::ensureDirectoryExists($destDir);
+        $file->move($destDir, $imgName);
+
+        return 'uploads/student_images/'.$imgName;
+    }
 }

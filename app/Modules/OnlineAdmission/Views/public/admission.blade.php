@@ -123,6 +123,20 @@
                 @if(!empty($formErrors['document']))<span class="text-danger">{{ $formErrors['document'] }}</span>@endif
             </div>
         @endif
+        @include('academics::partials.custom_fields_form', [
+            'customFields' => $customFields ?? collect(),
+            'customFieldValues' => $customFieldValues ?? [],
+            'belongTo' => 'students',
+            'formErrors' => $formErrors ?? [],
+        ])
+        @if(!empty($showCaptcha))
+            <div class="form-group">
+                <span id="captcha_image">{!! $captchaImage !!}</span>
+                <button type="button" id="refresh-captcha" class="btn btn-default">Refresh Captcha</button>
+                <input class="form-control" name="captcha" id="captcha" autocomplete="off" placeholder="Captcha">
+                @if(!empty($formErrors['captcha']))<span class="text-danger">{{ $formErrors['captcha'] }}</span>@endif
+            </div>
+        @endif
         <button type="submit" class="btn btn-primary">Submit</button>
     </form>
     <hr>
@@ -158,6 +172,21 @@ document.getElementById('class_id').addEventListener('change', function () {
             });
         });
 });
+var refreshCaptcha = document.getElementById('refresh-captcha');
+if (refreshCaptcha) {
+    refreshCaptcha.addEventListener('click', function () {
+        var body = new FormData();
+        body.append('_token', '{{ csrf_token() }}');
+        fetch('{{ url('site/refreshCaptcha') }}', { method: 'POST', body: body, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (res) { return res.text(); })
+            .then(function (html) {
+                var wrap = document.getElementById('captcha_image');
+                if (wrap) {
+                    wrap.innerHTML = html;
+                }
+            });
+    });
+}
 document.getElementById('check-status').addEventListener('click', function () {
     var body = new FormData();
     body.append('refno', document.getElementById('refno').value);

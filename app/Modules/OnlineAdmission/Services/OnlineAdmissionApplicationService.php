@@ -4,24 +4,30 @@ namespace App\Modules\OnlineAdmission\Services;
 
 use App\Modules\Academics\Models\ClassSection;
 use App\Modules\Academics\Models\SchoolClass;
+use App\Modules\Certificates\Services\StudentIdCardScanCodeService;
 use App\Modules\OnlineAdmission\Models\OnlineAdmission;
 use App\Modules\Settings\Models\SchSetting;
 use App\Modules\Shared\Services\SchoolContext;
 use App\Modules\Students\Models\Student;
+use App\Modules\Students\Models\StudentDoc;
 use App\Modules\Students\Services\StudentAdmissionService;
 use Carbon\Carbon;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * CI admin/Onlinestudent persist (fees/transport/barcode/mail/SMS/SaaS deferred).
+ * CI admin/Onlinestudent persist (fees/transport/mail/SMS/SaaS deferred).
  */
 class OnlineAdmissionApplicationService
 {
     public function __construct(
         protected SchoolContext $school,
         protected StudentAdmissionService $admission,
+        protected OnlineAdmissionCustomFieldService $customFields,
+        protected OnlineAdmissionFormFileService $files,
+        protected StudentIdCardScanCodeService $scanCodes,
     ) {
     }
 
@@ -97,14 +103,16 @@ class OnlineAdmissionApplicationService
     public function update(int $id, array $input): void
     {
         OnlineAdmission::query()->where('id', $id)->update($this->payload($input));
+        $this->customFields->saveFor($id, (array) data_get($input, 'custom_fields.students', []));
     }
 
     /**
-     * CI onlinestudent_model::update action=enroll (fees/transport/custom fields/mail deferred).
+     * CI onlinestudent_model::update action=enroll (fees/transport/mail deferred).
      *
      * @param  array<string, mixed>  $input
+     * @param  array<string, UploadedFile|null>  $uploads
      */
-    public function enroll(int $id, array $input): bool
+    public function enroll(int $id, array $input, array $uploads = []): bool
     {
         $existing = OnlineAdmission::query()->find($id);
         if ($existing === null) {
@@ -139,16 +147,21 @@ class OnlineAdmissionApplicationService
             $studentData['created_by'] = (int) $staffId;
         }
 
-        return DB::transaction(function () use ($id, $payload, $studentData, $classSection) {
+        return DB::transaction(function () use ($id, $payload, $studentData, $classSection, $input, $existing, $uploads) {
+            $posted = (array) data_get($input, 'custom_fields.students', []);
             $result = $this->admission->admit(
                 $studentData,
                 (int) $classSection->class_id,
                 (int) $classSection->section_id,
+                0,
+                $this->customFields->studentValueRows($posted),
             );
 
             $payload['is_enroll'] = 1;
             $payload['admission_no'] = (string) (Student::query()->where('id', $result['student_id'])->value('admission_no') ?? $payload['admission_no'] ?? '');
             OnlineAdmission::query()->where('id', $id)->update($payload);
+            $this->copyEnrollMedia($existing, (int) $result['student_id'], $uploads);
+            $this->generateEnrollScanCodes((int) $result['student_id'], (string) $payload['admission_no']);
 
             return true;
         });
@@ -193,6 +206,7 @@ class OnlineAdmissionApplicationService
             }
         }
 
+        $this->customFields->deleteFor((int) $row->id);
         $row->delete();
     }
 
@@ -330,5 +344,53 @@ class OnlineAdmissionApplicationService
         }
 
         return $data;
+    }
+
+    /**
+     * CI Onlinestudent enroll document + photo copy (SaaS deferred).
+     *
+     * @param  array<string, UploadedFile|null>  $uploads
+     */
+    protected function copyEnrollMedia(OnlineAdmission $existing, int $studentId, array $uploads): void
+    {
+        $docName = $this->files->copyDocumentToStudent((string) ($existing->document ?? ''), $studentId);
+        if ($docName !== null) {
+            StudentDoc::query()->create([
+                'student_id' => $studentId,
+                'title' => '',
+                'doc' => $docName,
+            ]);
+        }
+
+        $photos = [
+            ['file', 'image', ''],
+            ['father_pic', 'father_pic', 'father'],
+            ['mother_pic', 'mother_pic', 'mother'],
+            ['guardian_pic', 'guardian_pic', 'guardian'],
+        ];
+        $updates = [];
+        foreach ($photos as [$inputName, $dbField, $suffix]) {
+            $upload = $uploads[$inputName] ?? null;
+            if ($upload instanceof UploadedFile && $upload->isValid()) {
+                $updates[$dbField] = $this->files->storeStudentImage($upload, $studentId, $suffix);
+                continue;
+            }
+            $copied = $this->files->copyImageToStudent((string) ($existing->{$dbField} ?? ''), $studentId, $suffix);
+            if ($copied !== null) {
+                $updates[$dbField] = $copied;
+            }
+        }
+        if ($updates !== []) {
+            Student::query()->where('id', $studentId)->update($updates);
+        }
+    }
+
+    /**
+     * CI Customlib::generatebarcode — writes both barcode and qrcode files; scan_code_type only selects the return path in CI.
+     */
+    protected function generateEnrollScanCodes(int $studentId, string $admissionNo): void
+    {
+        $this->scanCodes->generate($admissionNo, $studentId, 'barcode');
+        $this->scanCodes->generate($admissionNo, $studentId, 'qrcode');
     }
 }

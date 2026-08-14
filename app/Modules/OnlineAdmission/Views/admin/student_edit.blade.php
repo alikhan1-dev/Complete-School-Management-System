@@ -6,7 +6,7 @@
         @if(session('error'))
             <div class="alert alert-danger">{{ session('error') }}</div>
         @endif
-        <form action="{{ url('admin/onlinestudent/edit/'.$student['id']) }}" method="post">
+        <form action="{{ url('admin/onlinestudent/edit/'.$student['id']) }}" method="post" enctype="multipart/form-data">
             @csrf
             <input type="hidden" name="student_id" value="{{ $student['id'] }}">
             <div class="row">
@@ -98,7 +98,37 @@
                         <input class="form-control" name="guardian_name" value="{{ $old['guardian_name'] ?? $student['guardian_name'] }}">
                     </div>
                 </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>Student Photo</label>
+                        <input type="file" class="form-control" name="file">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>Father Photo</label>
+                        <input type="file" class="form-control" name="father_pic">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>Mother Photo</label>
+                        <input type="file" class="form-control" name="mother_pic">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>Guardian Photo</label>
+                        <input type="file" class="form-control" name="guardian_pic">
+                    </div>
+                </div>
             </div>
+            @include('academics::partials.custom_fields_form', [
+                'customFields' => $customFields ?? collect(),
+                'customFieldValues' => $customFieldValues ?? [],
+                'belongTo' => 'students',
+                'formErrors' => $formErrors ?? [],
+            ])
             <button type="submit" name="save" value="save" class="btn btn-primary">Save</button>
             @if(empty($student['is_enroll']))
                 <button type="submit" name="save" value="enroll" class="btn btn-primary">Save and Enroll</button>

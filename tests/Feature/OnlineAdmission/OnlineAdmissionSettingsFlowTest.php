@@ -114,6 +114,30 @@ class OnlineAdmissionSettingsFlowTest extends TestCase
         $this->actingAs(Staff::query()->findOrFail($staffId), 'staff');
     }
 
+    public function test_captcha_settings_require_staff_auth(): void
+    {
+        $this->get('/admin/captcha')->assertRedirect();
+    }
+
+    public function test_superadmin_can_toggle_captcha_status(): void
+    {
+        $this->actingAsSuperAdmin();
+        $original = DB::table('captcha')->where('name', 'admission')->value('status');
+        $this->get('/admin/captcha')->assertOk()->assertSee('Captcha Setting', false);
+
+        $this->postJson('/admin/captcha/changeStatus', [
+            'name' => 'admission',
+            'status' => (int) $original === 1 ? 0 : 1,
+        ])->assertOk()->assertJson(['msg' => 'Record updated successfully.']);
+
+        $this->assertSame(
+            (int) $original === 1 ? 0 : 1,
+            (int) DB::table('captcha')->where('name', 'admission')->value('status')
+        );
+
+        DB::table('captcha')->where('name', 'admission')->update(['status' => $original]);
+    }
+
     public function test_settings_require_staff_auth(): void
     {
         $this->get('/admin/onlineadmission/admissionsetting')->assertRedirect();

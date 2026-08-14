@@ -15,8 +15,8 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Settings',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Captcha setting persist done. Deferred: remaining school/module/theme/currency settings.',
         ]);
     }
 }

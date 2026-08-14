@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Welcome admission / review / status / submit / edit (captcha, custom fields, live mail, SaaS quota deferred).
+ * CI Welcome admission / review / status / submit / edit (live mail, SaaS quota deferred).
  */
 class OnlineAdmissionPublicService
 {
@@ -21,6 +21,7 @@ class OnlineAdmissionPublicService
         protected OnlineAdmissionSettingService $settings,
         protected FrontCmsPublicService $cms,
         protected OnlineAdmissionFormFileService $files,
+        protected OnlineAdmissionCustomFieldService $customFields,
     ) {
     }
 
@@ -82,13 +83,14 @@ class OnlineAdmissionPublicService
     {
         $reference = $this->uniqueReference();
         $payload = $this->applyUploads($this->createPayload($input, $reference), $uploads, true);
-        OnlineAdmission::query()->create($payload);
+        $row = OnlineAdmission::query()->create($payload);
+        $this->customFields->saveFor((int) $row->id, (array) data_get($input, 'custom_fields.students', []));
 
         return $reference;
     }
 
     /**
-     * CI Welcome::editonlineadmission persist (custom fields / SaaS quota deferred).
+     * CI Welcome::editonlineadmission persist (SaaS quota deferred).
      *
      * @param  array<string, mixed>  $input
      * @param  array<string, UploadedFile|null>  $uploads
@@ -118,6 +120,7 @@ class OnlineAdmissionPublicService
         $payload = $this->applyUploads($payload, $uploads, false);
 
         OnlineAdmission::query()->where('id', $row->id)->update($payload);
+        $this->customFields->saveFor((int) $row->id, (array) data_get($input, 'custom_fields.students', []));
 
         return true;
     }

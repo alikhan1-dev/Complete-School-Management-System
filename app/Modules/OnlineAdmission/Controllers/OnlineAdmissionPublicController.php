@@ -5,9 +5,11 @@ namespace App\Modules\OnlineAdmission\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\FrontCms\Services\FrontCmsPublicService;
 use App\Modules\OnlineAdmission\Services\OnlineAdmissionApplicationService;
+use App\Modules\OnlineAdmission\Services\OnlineAdmissionCustomFieldService;
 use App\Modules\OnlineAdmission\Services\OnlineAdmissionFormFileService;
 use App\Modules\OnlineAdmission\Services\OnlineAdmissionPublicService;
 use App\Modules\OnlineAdmission\Services\OnlineAdmissionSettingService;
+use App\Modules\Shared\Services\CaptchaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,7 +18,7 @@ use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
- * CI Welcome admission / review / status / submit / edit (captcha, custom fields, live mail deferred).
+ * CI Welcome admission / review / status / submit / edit (live mail deferred).
  */
 class OnlineAdmissionPublicController extends Controller
 {
@@ -26,6 +28,8 @@ class OnlineAdmissionPublicController extends Controller
         protected OnlineAdmissionSettingService $settings,
         protected OnlineAdmissionFormFileService $files,
         protected FrontCmsPublicService $cms,
+        protected OnlineAdmissionCustomFieldService $customFields,
+        protected CaptchaService $captcha,
     ) {
     }
 
@@ -41,7 +45,12 @@ class OnlineAdmissionPublicController extends Controller
         }
 
         if ($request->isMethod('post')) {
-            $errors = array_merge($this->validateAdmission($request), $this->validateUploads($request));
+            $errors = array_merge(
+                $this->validateAdmission($request),
+                $this->validateUploads($request),
+                $this->customFields->validate((array) $request->input('custom_fields.students', [])),
+                $this->captcha->validatePosted('admission', (string) $request->input('captcha', '')),
+            );
             if ($errors === []) {
                 $reference = $this->public->submit($request->all(), $request->allFiles());
                 session()->put('validlogin', $reference);
@@ -68,7 +77,11 @@ class OnlineAdmissionPublicController extends Controller
         }
 
         if ($request->isMethod('post') && $request->filled('admission_id')) {
-            $errors = array_merge($this->validateAdmission($request, false), $this->validateUploads($request));
+            $errors = array_merge(
+                $this->validateAdmission($request, false),
+                $this->validateUploads($request),
+                $this->customFields->validate((array) $request->input('custom_fields.students', [])),
+            );
             if ($errors === []) {
                 $this->public->updateByReference($referenceNo, $request->all(), $request->allFiles());
                 session()->put('validlogin', $referenceNo);
@@ -192,6 +205,16 @@ class OnlineAdmissionPublicController extends Controller
         return $this->files->download($filename);
     }
 
+    public function refreshCaptcha(): \Illuminate\Http\Response
+    {
+        if ($this->public->publicSiteClosed()) {
+            abort(403);
+        }
+
+        return response($this->captcha->generate()['image'], 200)
+            ->header('Content-Type', 'text/html; charset=UTF-8');
+    }
+
     protected function closedGate(): ?RedirectResponse
     {
         if ($this->public->publicSiteClosed()) {
@@ -234,6 +257,12 @@ class OnlineAdmissionPublicController extends Controller
                 ? url('welcome/editonlineadmission/'.$referenceNo)
                 : url('online_admission'),
             'admissionId' => $admissionId,
+            'customFields' => $this->customFields->visibleFields(),
+            'customFieldValues' => $this->customFieldValuesForForm($old, $admissionId),
+            'showCaptcha' => $admissionId < 1 && $this->captcha->isEnabled('admission'),
+            'captchaImage' => ($admissionId < 1 && $this->captcha->isEnabled('admission'))
+                ? $this->captcha->generate()['image']
+                : '',
         ]));
     }
 
@@ -277,6 +306,23 @@ class OnlineAdmissionPublicController extends Controller
         }
 
         return $errors;
+    }
+
+    /**
+     * @param  array<string, mixed>  $old
+     * @return array<int, string>
+     */
+    protected function customFieldValuesForForm(array $old, int $admissionId): array
+    {
+        $posted = $old['custom_fields']['students'] ?? null;
+        if (is_array($posted)) {
+            return $this->customFields->postedValues($posted);
+        }
+        if ($admissionId > 0) {
+            return $this->customFields->valuesMap($admissionId);
+        }
+
+        return [];
     }
 
     /**

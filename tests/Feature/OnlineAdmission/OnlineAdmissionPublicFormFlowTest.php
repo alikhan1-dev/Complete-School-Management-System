@@ -15,11 +15,19 @@ class OnlineAdmissionPublicFormFlowTest extends TestCase
 
     private mixed $originalPayment = null;
 
+    private mixed $originalAdmissionCaptcha = null;
+
     /** @var list<int> */
     private array $cleanupIds = [];
 
     /** @var list<string> */
     private array $cleanupFiles = [];
+
+    /** @var list<int> */
+    private array $cleanupCustomFieldIds = [];
+
+    /** @var list<string> */
+    private array $cleanupCustomFieldNames = [];
 
     /** @var array<string, mixed>|null */
     private ?array $fieldSnapshot = null;
@@ -31,12 +39,15 @@ class OnlineAdmissionPublicFormFlowTest extends TestCase
         $this->originalCms = DB::table('front_cms_settings')->orderBy('id')->value('is_active_front_cms');
         $this->originalPayment = DB::table('sch_settings')->orderBy('id')->value('online_admission_payment');
         DB::table('sch_settings')->orderBy('id')->limit(1)->update(['online_admission_payment' => 'no']);
+        $this->originalAdmissionCaptcha = DB::table('captcha')->where('name', 'admission')->value('status');
+        DB::table('captcha')->where('name', 'admission')->update(['status' => 0]);
         app(SchoolContext::class)->clearCache();
     }
 
     protected function tearDown(): void
     {
         if ($this->cleanupIds !== []) {
+            DB::table('online_admission_custom_field_value')->whereIn('belong_table_id', $this->cleanupIds)->delete();
             DB::table('online_admissions')->whereIn('id', $this->cleanupIds)->delete();
         }
         $this->cleanupIds = [];
@@ -46,6 +57,15 @@ class OnlineAdmissionPublicFormFlowTest extends TestCase
             }
         }
         $this->cleanupFiles = [];
+        foreach ($this->cleanupCustomFieldIds as $fieldId) {
+            DB::table('online_admission_custom_field_value')->where('custom_field_id', $fieldId)->delete();
+            DB::table('custom_fields')->where('id', $fieldId)->delete();
+        }
+        $this->cleanupCustomFieldIds = [];
+        if ($this->cleanupCustomFieldNames !== []) {
+            DB::table('online_admission_fields')->whereIn('name', $this->cleanupCustomFieldNames)->delete();
+            $this->cleanupCustomFieldNames = [];
+        }
         if ($this->fieldSnapshot !== null) {
             foreach ($this->fieldSnapshot as $name => $status) {
                 DB::table('online_admission_fields')->where('name', $name)->update(['status' => $status]);
@@ -69,6 +89,10 @@ class OnlineAdmissionPublicFormFlowTest extends TestCase
                 'online_admission_payment' => $this->originalPayment,
             ]);
             app(SchoolContext::class)->clearCache();
+        }
+
+        if ($this->originalAdmissionCaptcha !== null) {
+            DB::table('captcha')->where('name', 'admission')->update(['status' => $this->originalAdmissionCaptcha]);
         }
 
         parent::tearDown();
@@ -322,6 +346,152 @@ class OnlineAdmissionPublicFormFlowTest extends TestCase
             || str_contains($response->getContent(), 'Extension Not Allowed')
             || DB::table('online_admissions')->where('email', $token.'@example.test')->doesntExist()
         );
+    }
+
+    public function test_public_form_requires_and_persists_enabled_custom_fields(): void
+    {
+        $this->setAdmission(1);
+        $section = DB::table('class_sections')->orderBy('id')->first();
+        $this->assertNotNull($section);
+        $field = $this->createEnabledRequiredStudentField();
+        $token = uniqid('cf', false);
+        $base = [
+            'class_id' => (string) $section->class_id,
+            'section_id' => (string) $section->id,
+            'firstname' => 'Custom '.$token,
+            'lastname' => 'Applicant',
+            'dob' => '2012-05-01',
+            'gender' => 'Male',
+            'email' => $token.'@example.test',
+            'guardian_is' => 'father',
+            'guardian_name' => 'Father '.$token,
+            'guardian_relation' => 'Father',
+        ];
+
+        $this->get('/online_admission')
+            ->assertOk()
+            ->assertSee('Custom Fields', false)
+            ->assertSee($field->name, false);
+
+        $this->post('/online_admission', $base)
+            ->assertOk()
+            ->assertSee('The '.$field->name.' field is required.', false);
+
+        $create = $this->post('/online_admission', array_merge($base, [
+            'custom_fields' => [
+                'students' => [
+                    $field->id => 'Alpha',
+                ],
+            ],
+        ]));
+        $create->assertRedirect();
+        $reference = basename((string) $create->headers->get('Location'));
+        $row = DB::table('online_admissions')->where('reference_no', $reference)->first();
+        $this->assertNotNull($row);
+        $this->cleanupIds[] = (int) $row->id;
+        $this->assertDatabaseHas('online_admission_custom_field_value', [
+            'belong_table_id' => $row->id,
+            'custom_field_id' => $field->id,
+            'field_value' => 'Alpha',
+        ]);
+
+        $this->get('/welcome/editonlineadmission/'.$reference)
+            ->assertOk()
+            ->assertSee('Alpha', false);
+
+        $this->post('/welcome/editonlineadmission/'.$reference, array_merge($base, [
+            'admission_id' => (string) $row->id,
+            'firstname' => 'Custom Edited '.$token,
+            'custom_fields' => [
+                'students' => [
+                    $field->id => 'Beta',
+                ],
+            ],
+        ]))->assertRedirect('/welcome/online_admission_review/'.$reference);
+
+        $this->assertDatabaseHas('online_admission_custom_field_value', [
+            'belong_table_id' => $row->id,
+            'custom_field_id' => $field->id,
+            'field_value' => 'Beta',
+        ]);
+        $this->assertSame(
+            1,
+            (int) DB::table('online_admission_custom_field_value')
+                ->where('belong_table_id', $row->id)
+                ->where('custom_field_id', $field->id)
+                ->count()
+        );
+    }
+
+    /**
+     * @return object{id:int,name:string}
+     */
+    private function createEnabledRequiredStudentField(): object
+    {
+        $name = 'OA note '.uniqid();
+        $id = DB::table('custom_fields')->insertGetId([
+            'name' => $name,
+            'belong_to' => 'students',
+            'type' => 'input',
+            'bs_column' => 6,
+            'validation' => 1,
+            'field_values' => '',
+            'visible_on_table' => 0,
+            'weight' => 0,
+            'is_active' => 1,
+        ]);
+        $this->cleanupCustomFieldIds[] = $id;
+        $this->cleanupCustomFieldNames[] = $name;
+        DB::table('online_admission_fields')->insert(['name' => $name, 'status' => 1]);
+
+        return (object) ['id' => $id, 'name' => $name];
+    }
+
+    public function test_admission_captcha_required_and_accepts_session_word(): void
+    {
+        $this->setAdmission(1);
+        DB::table('captcha')->where('name', 'admission')->update(['status' => 1]);
+        $section = DB::table('class_sections')->orderBy('id')->first();
+        $this->assertNotNull($section);
+        $token = uniqid('cap', false);
+        $base = [
+            'class_id' => (string) $section->class_id,
+            'section_id' => (string) $section->id,
+            'firstname' => 'Captcha '.$token,
+            'lastname' => 'Applicant',
+            'dob' => '2012-05-01',
+            'gender' => 'Male',
+            'email' => $token.'@example.test',
+            'guardian_is' => 'father',
+            'guardian_name' => 'Father '.$token,
+            'guardian_relation' => 'Father',
+        ];
+
+        $this->withSession(['captchaCode' => 'TEST12'])
+            ->post('/online_admission', $base)
+            ->assertOk()
+            ->assertSee('The Captcha field is required.', false);
+
+        $this->withSession(['captchaCode' => 'TEST12'])
+            ->post('/online_admission', array_merge($base, ['captcha' => 'NOPE']))
+            ->assertOk()
+            ->assertSee('Incorrect Captcha', false);
+
+        $create = $this->withSession(['captchaCode' => 'TEST12'])
+            ->post('/online_admission', array_merge($base, ['captcha' => 'TEST12']));
+        $create->assertRedirect();
+        $reference = basename((string) $create->headers->get('Location'));
+        $row = DB::table('online_admissions')->where('reference_no', $reference)->first();
+        $this->assertNotNull($row);
+        $this->cleanupIds[] = (int) $row->id;
+    }
+
+    public function test_refresh_captcha_sets_session_word(): void
+    {
+        $this->setAdmission(1);
+        $this->post('/site/refreshCaptcha')
+            ->assertOk();
+        $this->assertNotSame('', (string) session('captchaCode'));
     }
 
     private function enableFields(array $names): void

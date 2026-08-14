@@ -4,6 +4,7 @@ namespace App\Modules\OnlineAdmission\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\OnlineAdmission\Services\OnlineAdmissionApplicationService;
+use App\Modules\OnlineAdmission\Services\OnlineAdmissionCustomFieldService;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Settings\Models\SchSetting;
 use Illuminate\Http\JsonResponse;
@@ -20,6 +21,7 @@ class OnlineStudentController extends Controller
     public function __construct(
         protected PermissionService $permissions,
         protected OnlineAdmissionApplicationService $applications,
+        protected OnlineAdmissionCustomFieldService $customFields,
     ) {
     }
 
@@ -45,10 +47,13 @@ class OnlineStudentController extends Controller
         abort_if($student === null, 404);
 
         if ($request->isMethod('post')) {
-            $errors = $this->validateStudent($request);
+            $errors = array_merge(
+                $this->validateStudent($request),
+                $this->customFields->validate((array) $request->input('custom_fields.students', [])),
+            );
             if ($errors === []) {
                 if ((string) $request->input('save') === 'enroll') {
-                    $ok = $this->applications->enroll($id, $request->all());
+                    $ok = $this->applications->enroll($id, $request->all(), $request->allFiles());
                     if (! $ok) {
                         return redirect()->back()->with('error', 'Please check student admission no.');
                     }
@@ -108,6 +113,8 @@ class OnlineStudentController extends Controller
             'formErrors' => $errors,
             'old' => $old,
             'schSetting' => $schSetting,
+            'customFields' => $this->customFields->visibleFields(),
+            'customFieldValues' => $this->customFieldValuesForForm($old, (int) ($student['id'] ?? 0)),
         ]);
     }
 
@@ -145,5 +152,22 @@ class OnlineStudentController extends Controller
         }
 
         return $errors;
+    }
+
+    /**
+     * @param  array<string, mixed>  $old
+     * @return array<int, string>
+     */
+    protected function customFieldValuesForForm(array $old, int $admissionId): array
+    {
+        $posted = $old['custom_fields']['students'] ?? null;
+        if (is_array($posted)) {
+            return $this->customFields->postedValues($posted);
+        }
+        if ($admissionId > 0) {
+            return $this->customFields->valuesMap($admissionId);
+        }
+
+        return [];
     }
 }
