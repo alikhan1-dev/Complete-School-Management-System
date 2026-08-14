@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the LessonPlan module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 6 LessonPlan migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,16 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'LessonPlan',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'LessonPlan admin core done (lesson, topic, status, copy, weekly syllabus, forum). Deferred: student portal comments, class-teacher scope, DataTables AJAX, SaaS quota.',
+            'slices' => [
+                'lesson' => 'done',
+                'topic' => 'done',
+                'syllabus_status' => 'done',
+                'copy_lesson' => 'done',
+                'manage_lesson_plan_weekly' => 'done',
+                'forum' => 'done',
+            ],
         ]);
     }
 }
