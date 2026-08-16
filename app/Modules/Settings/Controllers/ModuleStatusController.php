@@ -16,7 +16,15 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Settings',
             'status' => 'in_progress',
-            'message' => 'Captcha setting persist done. Deferred: remaining school/module/theme/currency settings.',
+            'message' => 'Captcha setting persist + general school setting persist done. Deferred: logos, miscellaneous, modules, theme, currency, mobile app, fees flags, ID auto, attendance type, maintenance, WhatsApp, chat, Drive, SaaS quota.',
+            'slices' => [
+                'captcha' => 'done',
+                'general_setting' => 'done',
+                'logos' => 'deferred',
+                'modules' => 'deferred',
+                'theme' => 'deferred',
+                'currency' => 'deferred',
+            ],
         ]);
     }
 }
