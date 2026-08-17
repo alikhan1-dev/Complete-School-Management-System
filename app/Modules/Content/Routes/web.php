@@ -5,6 +5,7 @@ use App\Modules\Content\Controllers\ModuleStatusController;
 use App\Modules\Content\Controllers\ShareContentController;
 use App\Modules\Content\Controllers\SiteShareController;
 use App\Modules\Content\Controllers\UploadContentController;
+use App\Modules\Content\Controllers\UserContentController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('migration-status/content', [ModuleStatusController::class, 'status'])->name('content.migration_status');
@@ -16,6 +17,23 @@ Route::get('site/download_content/{share_id}/{content_id}', [SiteShareController
     ->whereNumber('share_id')
     ->where('content_id', '.*')
     ->name('content.site.download');
+
+Route::middleware([
+    'student_parent.auth',
+    'student_parent.login_token',
+    'student_parent.selected_class',
+    'student_parent.permission:download_center',
+])->group(function () {
+    Route::get('user/content/list', [UserContentController::class, 'list'])->name('user.content.list');
+    Route::match(['get', 'post'], 'user/content/getsharelist', [UserContentController::class, 'getsharelist'])
+        ->name('user.content.getsharelist');
+    Route::get('user/content/view/{id}', [UserContentController::class, 'view'])
+        ->whereNumber('id')
+        ->name('user.content.view');
+    Route::get('user/content/download_content/{id}', [UserContentController::class, 'download_content'])
+        ->whereNumber('id')
+        ->name('user.content.download');
+});
 
 Route::middleware(['staff.auth'])->group(function () {
     // CI admin/contenttype

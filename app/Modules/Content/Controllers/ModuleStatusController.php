@@ -15,12 +15,12 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Content',
             'status' => 'in_progress',
-            'message' => 'Content type master + upload + share persist done. User portal pending.',
+            'message' => 'Content type master + upload + share + user portal persist done. Deferred: live YouTube oEmbed, SaaS quota, CI pixel-parity JS, legacy contents category pages.',
             'slices' => [
                 'content_type' => 'done',
                 'upload' => 'done',
                 'share' => 'done',
-                'user_portal' => 'pending',
+                'user_portal' => 'done',
             ],
         ]);
     }
