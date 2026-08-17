@@ -2,9 +2,11 @@
 
 use App\Modules\Settings\Controllers\CaptchaSettingController;
 use App\Modules\Settings\Controllers\ModuleStatusController;
+use App\Modules\Settings\Controllers\SchoolAttendanceScheduleController;
 use App\Modules\Settings\Controllers\SchoolAttendanceTypeSettingController;
 use App\Modules\Settings\Controllers\SchoolBackendThemeController;
 use App\Modules\Settings\Controllers\SchoolChatSettingController;
+use App\Modules\Settings\Controllers\SchoolCurrencySettingController;
 use App\Modules\Settings\Controllers\SchoolFeesSettingController;
 use App\Modules\Settings\Controllers\SchoolGeneralSettingController;
 use App\Modules\Settings\Controllers\SchoolGoogleDriveSettingController;
@@ -12,7 +14,9 @@ use App\Modules\Settings\Controllers\SchoolIdAutoGenerationController;
 use App\Modules\Settings\Controllers\SchoolLoginBackgroundController;
 use App\Modules\Settings\Controllers\SchoolLogoController;
 use App\Modules\Settings\Controllers\SchoolMaintenanceSettingController;
+use App\Modules\Settings\Controllers\SchoolMiscellaneousSettingController;
 use App\Modules\Settings\Controllers\SchoolMobileAppSettingController;
+use App\Modules\Settings\Controllers\SchoolModuleSettingController;
 use App\Modules\Settings\Controllers\SchoolStudentGuardianPanelController;
 use App\Modules\Settings\Controllers\SchoolWhatsappSettingController;
 use Illuminate\Support\Facades\Route;
@@ -52,8 +56,11 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('schsettings/idautogeneration', [SchoolIdAutoGenerationController::class, 'index']);
     Route::post('schsettings/saveidautogeneration', [SchoolIdAutoGenerationController::class, 'save']);
 
-    Route::get('schsettings/attendancetype', [SchoolAttendanceTypeSettingController::class, 'index']);
+    Route::match(['get', 'post'], 'schsettings/attendancetype', [SchoolAttendanceTypeSettingController::class, 'index']);
     Route::post('schsettings/saveattendancetype', [SchoolAttendanceTypeSettingController::class, 'save']);
+    Route::post('schsettings/savestaffsetting', [SchoolAttendanceScheduleController::class, 'saveStaff']);
+    Route::post('admin/stuattendence/saveclasstime', [SchoolAttendanceScheduleController::class, 'saveClassTime']);
+    Route::post('admin/stuattendence/savestudentsetting', [SchoolAttendanceScheduleController::class, 'saveStudent']);
 
     Route::get('schsettings/maintenance', [SchoolMaintenanceSettingController::class, 'index']);
     Route::post('schsettings/save_maintenance', [SchoolMaintenanceSettingController::class, 'save']);
@@ -66,4 +73,21 @@ Route::middleware(['staff.auth'])->group(function () {
 
     Route::get('schsettings/googledrivesetting', [SchoolGoogleDriveSettingController::class, 'index']);
     Route::post('schsettings/savegoogledrive', [SchoolGoogleDriveSettingController::class, 'save']);
+
+    Route::get('schsettings/miscellaneous', [SchoolMiscellaneousSettingController::class, 'index']);
+    Route::post('schsettings/savemiscellaneous', [SchoolMiscellaneousSettingController::class, 'save']);
+
+    Route::get('admin/module', [SchoolModuleSettingController::class, 'index']);
+    Route::post('admin/module/changeStatus', [SchoolModuleSettingController::class, 'changeStatus']);
+    Route::post('admin/module/changeStudentStatus', [SchoolModuleSettingController::class, 'changeStudentStatus']);
+    Route::post('admin/module/changeParentStatus', [SchoolModuleSettingController::class, 'changeParentStatus']);
+
+    Route::get('admin/currency', [SchoolCurrencySettingController::class, 'index']);
+    Route::get('admin/currency/index', [SchoolCurrencySettingController::class, 'index']);
+    Route::post('admin/currency/editprice', [SchoolCurrencySettingController::class, 'editprice']);
+    Route::post('admin/currency/editsymbol', [SchoolCurrencySettingController::class, 'editsymbol']);
+    Route::post('admin/currency/changestatus', [SchoolCurrencySettingController::class, 'changestatus']);
+    Route::post('admin/currency/changeactive', [SchoolCurrencySettingController::class, 'changeactive']);
+    Route::post('admin/currency/change_currency', [SchoolCurrencySettingController::class, 'changeCurrency']);
+    Route::post('admin/currency/getAmountFormat', [SchoolCurrencySettingController::class, 'getAmountFormat']);
 });

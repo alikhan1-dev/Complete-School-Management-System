@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI Schsettings::attendancetype + saveattendancetype.
- * Deferred (separate CI forms/endpoints): savestaffsetting, saveclasstime, savestudentsetting.
  */
 class SchoolAttendanceTypeSettingService
 {

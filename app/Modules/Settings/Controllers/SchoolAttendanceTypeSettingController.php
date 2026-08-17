@@ -4,6 +4,7 @@ namespace App\Modules\Settings\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Settings\Services\SchoolAttendanceScheduleService;
 use App\Modules\Settings\Services\SchoolAttendanceTypeSettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -12,30 +13,41 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
 
 /**
- * CI Schsettings::attendancetype + saveattendancetype.
- * Deferred: staff/student auto-attendance schedule UIs and class times.
+ * CI Schsettings::attendancetype + saveattendancetype + schedule forms.
  */
 class SchoolAttendanceTypeSettingController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
         protected SchoolAttendanceTypeSettingService $attendanceType,
+        protected SchoolAttendanceScheduleService $schedules,
     ) {
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('general_setting', 'can_view'), 403);
 
         $setting = $this->attendanceType->current();
         abort_unless($setting !== null, 404);
 
+        $classId = (int) $request->input('class_id', 0);
+
         return view('shared::layouts.admin', [
             'title' => __('system.attendance_type'),
             'contentView' => 'settings::admin.attendance_type.index',
             'pageTitle' => __('system.attendance_type'),
             'result' => $setting,
+            'classid' => $classId,
+            'classlist' => $this->schedules->classes(),
+            'class_list' => $this->schedules->classListWithTimes(),
+            'list_attendance' => $this->schedules->groupedStaffSchedules(),
+            'attendance_type' => $this->schedules->staffScheduleTypes(),
+            'student_list_attendance' => $this->schedules->groupedStudentSchedules($classId > 0 ? $classId : null),
+            'student_attendance_type' => $this->schedules->studentScheduleTypes(),
             'canEdit' => $this->permissions->hasPrivilege('general_setting', 'can_edit'),
+            'canEditStudentSchedules' => $this->permissions->hasPrivilege('multi_class_student', 'can_edit'),
+            'scheduleHelper' => $this->schedules,
         ]);
     }
 
