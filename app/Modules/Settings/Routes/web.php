@@ -18,10 +18,16 @@ use App\Modules\Settings\Controllers\SchoolMiscellaneousSettingController;
 use App\Modules\Settings\Controllers\SchoolMobileAppSettingController;
 use App\Modules\Settings\Controllers\SchoolModuleSettingController;
 use App\Modules\Settings\Controllers\SchoolStudentGuardianPanelController;
+use App\Modules\Settings\Controllers\SchoolThemeCssController;
 use App\Modules\Settings\Controllers\SchoolWhatsappSettingController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('migration-status/settings', [ModuleStatusController::class, 'status'])->name('settings.migration_status');
+
+Route::get('theme.css', [SchoolThemeCssController::class, 'css']);
+Route::get('theme/css', [SchoolThemeCssController::class, 'css']);
+Route::get('fronttheme.css', [SchoolThemeCssController::class, 'frontCss']);
+Route::get('FrontTheme/css', [SchoolThemeCssController::class, 'frontCss']);
 
 Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/captcha', [CaptchaSettingController::class, 'index']);

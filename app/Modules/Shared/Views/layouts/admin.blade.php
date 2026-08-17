@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ asset('backend/bootstrap/css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ asset('backend/dist/css/AdminLTE.css') }}">
     <link rel="stylesheet" href="{{ asset('backend/dist/css/font-awesome.min.css') }}">
+    <link rel="stylesheet" href="{{ url('theme.css') }}">
     @stack('styles')
 </head>
 <body class="hold-transition skin-blue sidebar-mini">

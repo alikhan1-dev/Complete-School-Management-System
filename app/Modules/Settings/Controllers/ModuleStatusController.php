@@ -16,13 +16,14 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Settings',
             'status' => 'in_progress',
-            'message' => 'Captcha + general setting + logo + login page background + backend theme + mobile app URL/colors + student/guardian panel + fees flags + ID auto-generation + attendance type (core) + staff/student auto-attendance schedules + class times + maintenance + WhatsApp + chat delete flags + Google Drive picker + miscellaneous + module toggles + currency persist done. Deferred: Envato andapp register, SaaS quota.',
+            'message' => 'Captcha + general setting + logo + login page background + backend theme + theme.css/fronttheme.css + mobile app URL/colors + student/guardian panel + fees flags + ID auto-generation + attendance type (core) + staff/student auto-attendance schedules + class times + maintenance + WhatsApp + chat delete flags + Google Drive picker + miscellaneous + module toggles + currency persist done. Deferred: Envato andapp register, SaaS quota.',
             'slices' => [
                 'captcha' => 'done',
                 'general_setting' => 'done',
                 'logos' => 'done',
                 'login_page_background' => 'done',
                 'backend_theme' => 'done',
+                'theme_css' => 'done',
                 'mobile_app' => 'done',
                 'student_guardian_panel' => 'done',
                 'fees' => 'done',
