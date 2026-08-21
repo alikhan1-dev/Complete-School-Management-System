@@ -4,6 +4,7 @@ use App\Modules\OnlineExam\Controllers\ModuleStatusController;
 use App\Modules\OnlineExam\Controllers\OnlineExamAssignController;
 use App\Modules\OnlineExam\Controllers\OnlineExamController;
 use App\Modules\OnlineExam\Controllers\OnlineExamQuestionController;
+use App\Modules\OnlineExam\Controllers\OnlineExamRankController;
 use App\Modules\OnlineExam\Controllers\OnlineExamReportController;
 use App\Modules\OnlineExam\Controllers\OnlineExamResultController;
 use App\Modules\OnlineExam\Controllers\QuestionBankController;
@@ -68,7 +69,15 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::post('admin/onlineexam/fillmarks/{examId}', [OnlineExamResultController::class, 'fillMarks'])->name('onlineexam.evaluation.fillmarks');
     Route::get('admin/onlineexam/downloadattachment/{doc}', [OnlineExamResultController::class, 'downloadAttachment'])->name('onlineexam.results.attachment');
 
-    // CI Report online examinations hub + exams + attempt + result + rank (generation deferred)
+    // CI rankgenerate / saverank (form page; modal AJAX deferred)
+    Route::get('admin/onlineexam/rank/{examId}', [OnlineExamRankController::class, 'show'])
+        ->whereNumber('examId')
+        ->name('onlineexam.rank.show');
+    Route::post('admin/onlineexam/saverank/{examId}', [OnlineExamRankController::class, 'save'])
+        ->whereNumber('examId')
+        ->name('onlineexam.rank.save');
+
+    // CI Report online examinations hub + exams + attempt + result + rank
     Route::get('report/online_examinations', [OnlineExamReportController::class, 'hub'])
         ->name('onlineexam.reports.hub');
     Route::match(['get', 'post'], 'report/onlineexams', [OnlineExamReportController::class, 'onlineexams'])

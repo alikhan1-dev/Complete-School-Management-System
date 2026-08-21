@@ -3,6 +3,7 @@
 namespace App\Modules\OnlineExam\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\OnlineExam\Services\OnlineExamRankService;
 use App\Modules\OnlineExam\Services\OnlineExamService;
 use App\Modules\Roles\Services\PermissionService;
 use Illuminate\Http\RedirectResponse;
@@ -11,13 +12,14 @@ use Illuminate\View\View;
 
 /**
  * CI admin/Onlineexam — exam definition CRUD + open/closed lists.
- * Deferred: attach questions, assign students, evaluation, ranking, mail/SMS, student portal.
+ * Deferred: mail/SMS, print, SaaS storage quota.
  */
 class OnlineExamController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
-        protected OnlineExamService $exams
+        protected OnlineExamService $exams,
+        protected OnlineExamRankService $ranks,
     ) {
     }
 
@@ -35,6 +37,7 @@ class OnlineExamController extends Controller
             'examToInput' => '',
             'autoPublishInput' => '',
             'canAdd' => $this->permissions->hasPrivilege('online_examination', 'can_add'),
+            'ranks' => $this->ranks,
         ]);
     }
 
@@ -64,6 +67,7 @@ class OnlineExamController extends Controller
             'examToInput' => $this->exams->toInputDateTime($editing->exam_to),
             'autoPublishInput' => $this->exams->toInputDateTime($editing->auto_publish_date),
             'canAdd' => false,
+            'ranks' => $this->ranks,
         ]);
     }
 

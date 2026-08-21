@@ -34,6 +34,11 @@
                         <a href="{{ route('onlineexam.exam_questions.index', $row->id) }}" class="btn btn-default btn-xs">Questions</a>
                         <a href="{{ route('onlineexam.results.index', $row->id) }}" class="btn btn-default btn-xs">Results</a>
                         <a href="{{ route('onlineexam.evaluation.index', $row->id) }}" class="btn btn-default btn-xs">Evaluation</a>
+                        @if(!empty($ranks) && $ranks->canGenerateRank($row))
+                            <a href="{{ route('onlineexam.rank.show', $row->id) }}" class="btn btn-primary btn-xs" title="{{ __('system.generate_rank') }}">
+                                <i class="fa fa-list-alt"></i>
+                            </a>
+                        @endif
                     @endcan
                     @can('privilege', ['online_assign_view_student', 'can_view'])
                         <a href="{{ route('onlineexam.assign.index', $row->id) }}" class="btn btn-default btn-xs">Assign</a>

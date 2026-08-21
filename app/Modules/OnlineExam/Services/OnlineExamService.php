@@ -54,6 +54,11 @@ class OnlineExamService
         return $exam;
     }
 
+    public function currentSessionId(): int
+    {
+        return $this->currentSession->id();
+    }
+
     /**
      * @return array<string, mixed>
      */
