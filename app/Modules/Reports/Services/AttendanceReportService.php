@@ -9,8 +9,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Attendencereports: hub + daywise + daily + type + monthly student/staff calendars.
- * Deferred: period/subject reports, biometric log, class-teacher class dropdown scope.
+ * CI Attendencereports: hub + daywise + daily + type + monthly + period + biometric.
+ * Deferred: class-teacher class dropdown scope.
  */
 class AttendanceReportService
 {
@@ -957,6 +957,352 @@ class AttendanceReportService
             ->where('students.gender', $gender)
             ->selectRaw('COUNT(DISTINCT students.id) as aggregate')
             ->value('aggregate');
+    }
+
+    /**
+     * CI Attendencetype_model::get() — active types only.
+     *
+     * @return Collection<int, object>
+     */
+    public function studentAttendanceTypesActive(): Collection
+    {
+        return DB::table('attendence_type')->where('is_active', 'yes')->orderBy('id')->get();
+    }
+
+    /**
+     * CI Customlib::getMonthNoDropdown — keys "01"…"12" starting at sch start_month.
+     *
+     * @return array<string, string>
+     */
+    public function monthNoDropdown(?int $startMonth = null): array
+    {
+        $start = $startMonth ?? (int) $this->school->get('start_month', 1);
+        if ($start < 1) {
+            $start = 1;
+        }
+        $months = [];
+        for ($x = $start; $x < $start + 12; $x++) {
+            $month = date('m', mktime(0, 0, 0, $x, 10));
+            $name = date('F', mktime(0, 0, 0, $x, 10));
+            $months[$month] = (string) __('system.'.strtolower($name));
+        }
+
+        return $months;
+    }
+
+    /**
+     * CI sessionMonthDetails().
+     *
+     * @return array{month_start: string, month_end: string, total_days: int}
+     */
+    public function sessionMonthDetails(string $session, int|string $startMonth, int|string $month): array
+    {
+        $parts = explode('-', $session, 2);
+        $currentYear = $parts[0] ?? (string) date('Y');
+        $b = $parts[1] ?? $currentYear;
+        if (strlen($b) === 2) {
+            $nextYear = substr($currentYear, 0, 2).$b;
+        } else {
+            $nextYear = $b;
+        }
+
+        $monthPadded = sprintf('%02d', (int) $month);
+        $sessionStartMonthDate = $nextYear.'-'.$monthPadded.'-01';
+        if ((int) $startMonth <= (int) $month) {
+            $sessionStartMonthDate = $currentYear.'-'.$monthPadded.'-01';
+        }
+
+        return [
+            'month_start' => $sessionStartMonthDate,
+            'month_end' => date('Y-m-t', strtotime($sessionStartMonthDate)),
+            'total_days' => (int) date('t', strtotime($sessionStartMonthDate)),
+        ];
+    }
+
+    public function attendanceTypeKey(Collection $types, mixed $typeId): string
+    {
+        if ($typeId === null || $typeId === '') {
+            return '';
+        }
+        foreach ($types as $type) {
+            if ((int) $type->id === (int) $typeId) {
+                return (string) $type->key_value;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * CI Subjectgroup_model::getAllsubjectByClassSection.
+     *
+     * @return Collection<int, object>
+     */
+    public function subjectsByClassSection(int $classId, int $sectionId): Collection
+    {
+        $sessionId = (int) $this->currentSession->id();
+
+        return DB::table('subject_group_class_sections')
+            ->join('class_sections', 'subject_group_class_sections.class_section_id', '=', 'class_sections.id')
+            ->join('subject_groups', 'subject_groups.id', '=', 'subject_group_class_sections.subject_group_id')
+            ->join('subject_group_subjects', 'subject_group_subjects.subject_group_id', '=', 'subject_groups.id')
+            ->join('subjects', 'subjects.id', '=', 'subject_group_subjects.subject_id')
+            ->where('class_sections.class_id', $classId)
+            ->where('class_sections.section_id', $sectionId)
+            ->where('subject_group_class_sections.session_id', $sessionId)
+            ->select([
+                'subject_group_class_sections.*',
+                'subject_groups.name as subject_group_name',
+                'subject_group_subjects.id as subject_group_subject_id',
+                'subjects.id as subject_id',
+                'subjects.name as subject_name',
+                'subjects.code as subject_code',
+            ])
+            ->get();
+    }
+
+    /**
+     * CI getStudentsMontlyAttendence.
+     *
+     * @return array{class_students: list<object>, students_attendances: array<string, array<string, mixed>>, no_of_days: int}
+     */
+    public function classPeriodMonthlyAttendence(int $classId, int $sectionId, string $month, ?string $subjectId): array
+    {
+        $monthData = $this->sessionMonthDetails(
+            $this->currentSessionName(),
+            (int) $this->school->get('start_month', 1),
+            $month
+        );
+        $classStudents = $this->classSectionStudents($classId, $sectionId);
+        $attendances = [];
+
+        for ($i = strtotime($monthData['month_start']); $i <= strtotime($monthData['month_end']); $i += 86400) {
+            $dateNo = date('d', $i);
+            $date = date('Y-m-d', $i);
+            $day = date('l', $i);
+            $dayPayload = $this->periodAttendanceForDate($classId, $sectionId, $day, $date, $subjectId, null);
+            $attendances[$dateNo] = [
+                'date' => $date,
+                'day' => $day,
+                'subjects' => $dayPayload['subjects'],
+                'students' => $dayPayload['students'],
+            ];
+        }
+
+        return [
+            'class_students' => $classStudents->values()->all(),
+            'students_attendances' => $attendances,
+            'no_of_days' => $monthData['total_days'],
+        ];
+    }
+
+    /**
+     * CI getStudentMontlyAttendence.
+     *
+     * @return array{students_attendances: array<string, array<string, mixed>>, no_of_days: int}
+     */
+    public function studentPeriodMonthlyAttendence(
+        int $classId,
+        int $sectionId,
+        int $studentId,
+        string $month,
+        ?string $subjectId
+    ): array {
+        $monthData = $this->sessionMonthDetails(
+            $this->currentSessionName(),
+            (int) $this->school->get('start_month', 1),
+            $month
+        );
+        $attendances = [];
+
+        for ($i = strtotime($monthData['month_start']); $i <= strtotime($monthData['month_end']); $i += 86400) {
+            $dateNo = date('d', $i);
+            $date = date('Y-m-d', $i);
+            $day = date('l', $i);
+            $dayPayload = $this->periodAttendanceForDate($classId, $sectionId, $day, $date, $subjectId, $studentId);
+            $studentRow = null;
+            if ($dayPayload['students'] !== []) {
+                $studentRow = reset($dayPayload['students']);
+            }
+            $attendances[$dateNo] = [
+                'date' => $this->formatDate($date),
+                'day' => $day,
+                'subjects' => $dayPayload['subjects'],
+                'attendances' => $studentRow,
+            ];
+        }
+
+        return [
+            'students_attendances' => $attendances,
+            'no_of_days' => $monthData['total_days'],
+        ];
+    }
+
+    /**
+     * @return array{rows: list<object>, total: int, per_page: int, offset: int}
+     */
+    public function biometricAttendanceLog(int $offset = 0, int $perPage = 100): array
+    {
+        $total = (int) DB::table('student_attendences')->where('biometric_attendence', 1)->count();
+        $rows = DB::table('student_attendences')
+            ->leftJoin('student_session', 'student_session.id', '=', 'student_attendences.student_session_id')
+            ->leftJoin('students', 'student_session.student_id', '=', 'students.id')
+            ->where('student_attendences.biometric_attendence', 1)
+            ->select([
+                'student_attendences.*',
+                DB::raw('CONCAT_WS(students.firstname, " ", students.lastname) as name'),
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.roll_no',
+            ])
+            ->offset(max(0, $offset))
+            ->limit($perPage)
+            ->get()
+            ->all();
+
+        return [
+            'rows' => $rows,
+            'total' => $total,
+            'per_page' => $perPage,
+            'offset' => max(0, $offset),
+        ];
+    }
+
+    public function admAutoInsert(): bool
+    {
+        return (int) $this->school->get('adm_auto_insert', 0) === 1;
+    }
+
+    /**
+     * @return Collection<int, object>
+     */
+    protected function classSectionStudents(int $classId, int $sectionId): Collection
+    {
+        $sessionId = (int) $this->currentSession->id();
+
+        return DB::table('students')
+            ->join('student_session', 'students.id', '=', 'student_session.student_id')
+            ->where('student_session.class_id', $classId)
+            ->where('student_session.section_id', $sectionId)
+            ->where('student_session.session_id', $sessionId)
+            ->where('students.is_active', 'yes')
+            ->orderBy('students.admission_no')
+            ->select([
+                'students.id',
+                'students.admission_no',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'student_session.id as student_session_id',
+            ])
+            ->get();
+    }
+
+    /**
+     * Equivalent to CI searchByStudentsAttendanceByDate / searchByStudentAttendanceByDate.
+     *
+     * @return array{subjects: list<object>, students: array<int, object>}
+     */
+    protected function periodAttendanceForDate(
+        int $classId,
+        int $sectionId,
+        string $day,
+        string $date,
+        ?string $subjectId,
+        ?int $studentId
+    ): array {
+        $sessionId = (int) $this->currentSession->id();
+        $subjectsQuery = DB::table('subject_timetable')
+            ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'subject_timetable.subject_group_subject_id')
+            ->join('subjects', 'subjects.id', '=', 'subject_group_subjects.subject_id')
+            ->where('subject_timetable.class_id', $classId)
+            ->where('subject_timetable.section_id', $sectionId)
+            ->where('subject_timetable.session_id', $sessionId)
+            ->where('subject_timetable.day', $day)
+            ->select([
+                'subject_timetable.*',
+                'subjects.id as subject_id',
+                'subjects.name',
+                'subjects.code',
+                'subjects.type',
+            ]);
+
+        if ($subjectId !== null && $subjectId !== '') {
+            $subjectsQuery->where('subjects.id', (int) $subjectId);
+        }
+
+        $subjects = $subjectsQuery->get();
+        if ($subjects->isEmpty()) {
+            return ['subjects' => [], 'students' => []];
+        }
+
+        $timetableIds = $subjects->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $studentsQuery = DB::table('students')
+            ->join('student_session', function ($join) use ($classId, $sectionId, $sessionId) {
+                $join->on('students.id', '=', 'student_session.student_id')
+                    ->where('student_session.class_id', '=', $classId)
+                    ->where('student_session.section_id', '=', $sectionId)
+                    ->where('student_session.session_id', '=', $sessionId);
+            })
+            ->select([
+                'students.id',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.admission_no',
+                'student_session.id as student_session_id',
+            ]);
+
+        if ($studentId !== null) {
+            $studentsQuery->where('students.id', $studentId);
+        } else {
+            $studentsQuery->where('students.is_active', 'yes');
+        }
+
+        $students = $studentsQuery->get();
+        if ($students->isEmpty()) {
+            return [
+                'subjects' => $subjects->values()->all(),
+                'students' => [],
+            ];
+        }
+
+        $attendanceRows = DB::table('student_subject_attendances')
+            ->whereIn('subject_timetable_id', $timetableIds)
+            ->where('date', $date)
+            ->whereIn('student_session_id', $students->pluck('student_session_id')->all())
+            ->get()
+            ->groupBy(fn ($row) => (int) $row->student_session_id);
+
+        $indexed = [];
+        foreach ($students as $student) {
+            $ssid = (int) $student->student_session_id;
+            $row = (object) [
+                'id' => (int) $student->id,
+                'firstname' => $student->firstname,
+                'middlename' => $student->middlename ?? '',
+                'lastname' => $student->lastname ?? '',
+                'admission_no' => $student->admission_no ?? '',
+            ];
+            $byTimetable = [];
+            foreach ($attendanceRows->get($ssid, collect()) as $att) {
+                $byTimetable[(int) $att->subject_timetable_id] = $att->attendence_type_id;
+            }
+            $count = 1;
+            foreach ($subjects as $subject) {
+                $tid = (int) $subject->id;
+                $row->{'attendence_type_id_'.$count} = $byTimetable[$tid] ?? null;
+                $count++;
+            }
+            $indexed[(int) $student->id] = $row;
+        }
+
+        return [
+            'subjects' => $subjects->values()->all(),
+            'students' => $indexed,
+        ];
     }
 
     protected function applyStudentModeFilter($query, ?int $mode): void

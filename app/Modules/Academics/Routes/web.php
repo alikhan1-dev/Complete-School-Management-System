@@ -52,6 +52,7 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/subjectgroup/delete/{id}', [SubjectGroupController::class, 'destroy'])->name('academics.subject_groups.destroy');
     Route::post('admin/subjectgroup/getGroupByClassandSection', [SubjectGroupController::class, 'getGroupByClassAndSection'])->name('academics.subject_groups.getByClassSection');
     Route::post('admin/subjectgroup/getGroupsubjects', [SubjectGroupController::class, 'getGroupSubjects'])->name('academics.subject_groups.getGroupSubjects');
+    Route::post('admin/subjectgroup/getAllSubjectByClassandSection', [SubjectGroupController::class, 'getAllSubjectByClassandSection'])->name('academics.subject_groups.getAllByClassSection');
 
     // School houses
     Route::get('admin/schoolhouse', [SchoolHouseController::class, 'index'])->name('academics.school_houses.index');

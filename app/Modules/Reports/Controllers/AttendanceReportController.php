@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI Attendencereports: hub + daywise + daily + type + monthly calendars.
+ * CI Attendencereports: hub + daywise + daily + type + monthly + period + biometric.
  */
 class AttendanceReportController extends Controller
 {
@@ -308,6 +308,130 @@ class AttendanceReportController extends Controller
             'attendence_array' => $attendenceArray,
             'monthAttendance' => $monthAttendance,
             'searched' => $searched,
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function reportbymonth(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('student_period_attendance_report', 'can_view'), 403);
+
+        $filters = [
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+            'month' => $request->input('month', ''),
+            'subject_id' => $request->input('subject_id', ''),
+        ];
+        $resultlist = null;
+        $noOfDays = 0;
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'class_id' => ['required'],
+                'section_id' => ['required'],
+                'month' => ['required'],
+            ], [
+                'class_id.required' => 'The Class field is required.',
+                'section_id.required' => 'The Section field is required.',
+                'month.required' => 'The Month field is required.',
+            ]);
+            $searched = true;
+            $subjectId = $request->filled('subject_id') ? (string) $request->input('subject_id') : null;
+            $resultlist = $this->reports->classPeriodMonthlyAttendence(
+                (int) $request->input('class_id'),
+                (int) $request->input('section_id'),
+                (string) $request->input('month'),
+                $subjectId
+            );
+            $noOfDays = (int) ($resultlist['no_of_days'] ?? 0);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.period_attendance_report'),
+            'contentView' => 'reports::admin.attendance.report_by_month',
+            'classes' => $this->reports->classes(),
+            'monthlist' => $this->reports->monthNoDropdown(),
+            'attendencetypeslist' => $this->reports->studentAttendanceTypesActive(),
+            'filters' => $filters,
+            'resultlist' => $resultlist,
+            'no_of_days' => $noOfDays,
+            'searched' => $searched,
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function reportbymonthstudent(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('student_period_attendance_report', 'can_view'), 403);
+
+        $filters = [
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+            'student_id' => $request->input('student_id', ''),
+            'month' => $request->input('month', ''),
+            'subject_id' => $request->input('subject_id', ''),
+        ];
+        $resultlist = null;
+        $noOfDays = 0;
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'class_id' => ['required'],
+                'section_id' => ['required'],
+                'student_id' => ['required'],
+                'month' => ['required'],
+            ], [
+                'class_id.required' => 'The Class field is required.',
+                'section_id.required' => 'The Section field is required.',
+                'student_id.required' => 'The Student field is required.',
+                'month.required' => 'The Month field is required.',
+            ]);
+            $searched = true;
+            $subjectId = $request->filled('subject_id') ? (string) $request->input('subject_id') : null;
+            $resultlist = $this->reports->studentPeriodMonthlyAttendence(
+                (int) $request->input('class_id'),
+                (int) $request->input('section_id'),
+                (int) $request->input('student_id'),
+                (string) $request->input('month'),
+                $subjectId
+            );
+            $noOfDays = (int) ($resultlist['no_of_days'] ?? 0);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.student_period_attendance'),
+            'contentView' => 'reports::admin.attendance.report_by_month_student',
+            'classes' => $this->reports->classes(),
+            'monthlist' => $this->reports->monthNoDropdown(),
+            'attendencetypeslist' => $this->reports->studentAttendanceTypesActive(),
+            'filters' => $filters,
+            'resultlist' => $resultlist,
+            'no_of_days' => $noOfDays,
+            'searched' => $searched,
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function biometric_attlog(Request $request, int $offset = 0): View
+    {
+        abort_unless(
+            $this->reports->isBiometricEnabled()
+            && $this->permissions->hasPrivilege('biometric_attendance_log', 'can_view'),
+            403
+        );
+
+        $payload = $this->reports->biometricAttendanceLog($offset, 100);
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.biometric_attendance_log'),
+            'contentView' => 'reports::admin.attendance.biometric_attlog',
+            'resultlist' => $payload['rows'],
+            'total' => $payload['total'],
+            'per_page' => $payload['per_page'],
+            'offset' => $payload['offset'],
+            'adm_auto_insert' => $this->reports->admAutoInsert(),
             'reports' => $this->reports,
         ], $this->navFlags()));
     }

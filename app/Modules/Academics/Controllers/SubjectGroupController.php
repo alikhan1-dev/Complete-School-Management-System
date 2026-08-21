@@ -214,4 +214,34 @@ class SubjectGroupController extends Controller
 
         return response()->json($rows);
     }
+
+    /**
+     * CI admin/Subjectgroup::getAllSubjectByClassandSection.
+     */
+    public function getAllSubjectByClassandSection(Request $request): JsonResponse
+    {
+        $classId = (int) $request->input('class_id');
+        $sectionId = (int) $request->input('section_id');
+        $sessionId = (int) ($request->input('session_id') ?: $this->currentSession->id());
+
+        $rows = DB::table('subject_group_class_sections')
+            ->join('class_sections', 'subject_group_class_sections.class_section_id', '=', 'class_sections.id')
+            ->join('subject_groups', 'subject_groups.id', '=', 'subject_group_class_sections.subject_group_id')
+            ->join('subject_group_subjects', 'subject_group_subjects.subject_group_id', '=', 'subject_groups.id')
+            ->join('subjects', 'subjects.id', '=', 'subject_group_subjects.subject_id')
+            ->where('class_sections.class_id', $classId)
+            ->where('class_sections.section_id', $sectionId)
+            ->where('subject_group_class_sections.session_id', $sessionId)
+            ->select([
+                'subject_group_class_sections.*',
+                'subject_groups.name as subject_group_name',
+                'subject_group_subjects.id as subject_group_subject_id',
+                'subjects.id as subject_id',
+                'subjects.name as subject_name',
+                'subjects.code as subject_code',
+            ])
+            ->get();
+
+        return response()->json($rows);
+    }
 }

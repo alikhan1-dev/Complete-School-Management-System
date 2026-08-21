@@ -77,4 +77,11 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.attendance.student_monthly');
     Route::match(['get', 'post'], 'attendencereports/staffattendancereport', [AttendanceReportController::class, 'staffattendancereport'])
         ->name('reports.attendance.staff_monthly');
+    Route::match(['get', 'post'], 'attendencereports/reportbymonth', [AttendanceReportController::class, 'reportbymonth'])
+        ->name('reports.attendance.period_month');
+    Route::match(['get', 'post'], 'attendencereports/reportbymonthstudent', [AttendanceReportController::class, 'reportbymonthstudent'])
+        ->name('reports.attendance.period_month_student');
+    Route::get('attendencereports/biometric_attlog/{offset?}', [AttendanceReportController::class, 'biometric_attlog'])
+        ->whereNumber('offset')
+        ->name('reports.attendance.biometric_log');
 });

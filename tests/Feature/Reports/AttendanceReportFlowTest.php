@@ -226,6 +226,9 @@ class AttendanceReportFlowTest extends TestCase
         $this->get('/attendencereports/attendancereport')->assertRedirect();
         $this->get('/attendencereports/classattendencereport')->assertRedirect();
         $this->get('/attendencereports/staffattendancereport')->assertRedirect();
+        $this->get('/attendencereports/reportbymonth')->assertRedirect();
+        $this->get('/attendencereports/reportbymonthstudent')->assertRedirect();
+        $this->get('/attendencereports/biometric_attlog')->assertRedirect();
     }
 
     public function test_attendance_report_slice_one_flows(): void
@@ -313,5 +316,58 @@ class AttendanceReportFlowTest extends TestCase
         ])->assertOk()
             ->assertSee('ARPT-', false)
             ->assertSee('AttReport', false);
+    }
+
+    public function test_attendance_report_period_and_biometric(): void
+    {
+        $ctx = $this->seedContext();
+        $month = now()->format('m');
+
+        DB::table('sch_settings')->limit(1)->update([
+            'attendence_type' => 1,
+            'biometric' => 1,
+        ]);
+        // Keep session name usable for sessionMonthDetails via sessions table.
+        DB::table('sessions')->where('id', $ctx['sessionId'])->update(['session' => '2025-26']);
+        app(SchoolContext::class)->clearCache();
+
+        $studentSessionId = (int) DB::table('student_session')->where('student_id', $ctx['student']->id)->value('id');
+        DB::table('student_attendences')->where('student_session_id', $studentSessionId)->update([
+            'biometric_attendence' => 1,
+            'biometric_device_data' => json_encode([
+                'user_id' => 'BIO-1',
+                'serial_number' => 'SN-99',
+                'ip' => '127.0.0.1',
+            ]),
+        ]);
+
+        $this->get('/attendencereports/reportbymonth')
+            ->assertOk()
+            ->assertSee('Period Attendance', false);
+
+        $this->post('/attendencereports/reportbymonth', [])
+            ->assertSessionHasErrors(['class_id', 'section_id', 'month']);
+
+        $this->post('/attendencereports/reportbymonth', [
+            'class_id' => $ctx['class']->id,
+            'section_id' => $ctx['section']->id,
+            'month' => $month,
+        ])->assertOk()
+            ->assertSee($ctx['student']->admission_no, false);
+
+        $this->post('/attendencereports/reportbymonthstudent', [])
+            ->assertSessionHasErrors(['class_id', 'section_id', 'student_id', 'month']);
+
+        $this->post('/attendencereports/reportbymonthstudent', [
+            'class_id' => $ctx['class']->id,
+            'section_id' => $ctx['section']->id,
+            'student_id' => $ctx['student']->id,
+            'month' => $month,
+        ])->assertOk();
+
+        $this->get('/attendencereports/biometric_attlog')
+            ->assertOk()
+            ->assertSee('SN-99', false)
+            ->assertSee('127.0.0.1', false);
     }
 }
