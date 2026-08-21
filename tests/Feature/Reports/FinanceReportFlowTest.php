@@ -240,9 +240,9 @@ class FinanceReportFlowTest extends TestCase
             'session_id' => $session->id,
             'amount' => 1000,
             'due_date' => now()->subDay()->toDateString(),
-            'fine_type' => 'none',
+            'fine_type' => 'fix',
             'fine_percentage' => 0,
-            'fine_amount' => 0,
+            'fine_amount' => 50,
             'fine_per_day' => 0,
             'is_active' => 'no',
         ]);
@@ -322,6 +322,7 @@ class FinanceReportFlowTest extends TestCase
         $this->get('/financereports/expense')->assertRedirect();
         $this->get('/financereports/incomegroup')->assertRedirect();
         $this->get('/financereports/expensegroup')->assertRedirect();
+        $this->get('/balancefees/index')->assertRedirect();
     }
 
     public function test_finance_report_slice_one_flows(): void
@@ -698,5 +699,28 @@ class FinanceReportFlowTest extends TestCase
             ->assertSee('Expense2 '.$suffix, false)
             ->assertSee(__('system.sub_total'), false)
             ->assertSee('300.00', false);
+    }
+
+    public function test_balancefees_due_fees_report_flow(): void
+    {
+        $ctx = $this->seedFeeContext();
+
+        $this->get('/balancefees/index')->assertOk();
+
+        $this->post('/balancefees/index', [])
+            ->assertSessionHasErrors(['search_type']);
+
+        $report = $this->post('/balancefees/index', [
+            'search_type' => 'all',
+            'class_id' => $ctx['class']->id,
+            'section_id' => $ctx['section']->id,
+        ])->assertOk();
+
+        // Balance 600 + accrued fix fine 50 = total due 650 (paid fine 10 does not reduce grand fine).
+        $report->assertSee($ctx['student']->admission_no, false)
+            ->assertSee('Fin Pupil', false)
+            ->assertSee('600.00', false)
+            ->assertSee('50.00', false)
+            ->assertSee('650.00', false);
     }
 }

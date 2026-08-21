@@ -1,7 +1,9 @@
 <?php
 
 use App\Modules\Reports\Controllers\AttendanceReportController;
+use App\Modules\Reports\Controllers\BalanceFeesController;
 use App\Modules\Reports\Controllers\FinanceReportController;
+use App\Modules\Reports\Controllers\HumanResourceReportController;
 use App\Modules\Reports\Controllers\ModuleStatusController;
 use App\Modules\Reports\Controllers\StudentInformationReportController;
 use Illuminate\Support\Facades\Route;
@@ -122,4 +124,12 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.finance.income_group');
     Route::match(['get', 'post'], 'financereports/expensegroup', [FinanceReportController::class, 'expensegroup'])
         ->name('reports.finance.expense_group');
+    Route::match(['get', 'post'], 'balancefees/index', [BalanceFeesController::class, 'index'])
+        ->name('reports.balance_fees.index');
+    Route::match(['get', 'post'], 'balancefees', [BalanceFeesController::class, 'index']);
+
+    Route::get('report/human_resource', [HumanResourceReportController::class, 'human_resource'])
+        ->name('reports.human_resource');
+    Route::match(['get', 'post'], 'report/staff_report', [HumanResourceReportController::class, 'staff_report'])
+        ->name('reports.staff_report');
 });

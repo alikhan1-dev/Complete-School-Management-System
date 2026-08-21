@@ -149,6 +149,185 @@ class FinanceReportService
     }
 
     /**
+     * CI Balancefees::index / due_fees_report (transport + class-teacher deferred).
+     * Accrues overdue grand fine separately from paid fine; row visibility is view-side
+     * (balance + grand_fine > 0) but we still return search_type-filtered students.
+     *
+     * @return list<object>
+     */
+    public function dueFeesReport(?int $classId, ?int $sectionId, string $searchType = 'all'): array
+    {
+        $students = $this->sessionStudents($classId, $sectionId);
+        $today = now()->toDateString();
+        $rows = [];
+
+        foreach ($students as $student) {
+            $lines = $this->dueFeesFeeLines((int) $student->student_session_id);
+            $totalfee = 0;
+            $deposit = 0;
+            $discount = 0;
+            $fine = 0;
+            $grandFine = 0.0;
+            $dueDate = 0;
+            $totalAmount = 0.0;
+
+            foreach ($lines as $line) {
+                $amount = (float) $line->amount;
+                $totalfee += $amount;
+
+                foreach ($this->decodeAmountDetail($line->amount_detail) as $entry) {
+                    // CI Balancefees casts paid amounts to int while summing.
+                    $deposit = (int) $deposit + (int) ($entry['amount'] ?? 0);
+                    $fine = (int) $fine + (int) ($entry['amount_fine'] ?? 0);
+                    $discount = (int) $discount + (int) ($entry['amount_discount'] ?? 0);
+                }
+
+                if (! empty($line->due_date) && $line->due_date !== '0000-00-00') {
+                    $dueDate = $line->due_date;
+                    $totalAmount += $amount;
+                    if (strtotime((string) $line->due_date) < strtotime($today)) {
+                        $fineType = (string) ($line->fine_type ?? '');
+                        if ($fineType === 'cumulative') {
+                            $dueDays = (int) (new \DateTime((string) $line->due_date))
+                                ->diff(new \DateTime($today))
+                                ->format('%a');
+                            $grandFine += $this->getCumulativeFineAmount((int) $line->fee_groups_feetype_id, $dueDays);
+                        } elseif ($fineType === 'fix' || $fineType === 'percentage') {
+                            // CI uses stored fine_amount (no runtime % recalculation).
+                            $grandFine += (float) ($line->fine_amount ?? 0);
+                        }
+                    }
+                }
+            }
+
+            $balance = $totalfee - ($deposit + $discount);
+            $obj = (object) [
+                'id' => (int) $student->id,
+                'name' => $this->fullName($student),
+                'class' => $student->class,
+                'section' => $student->section,
+                'admission_no' => $student->admission_no,
+                'roll_no' => $student->roll_no ?? '',
+                'father_name' => $student->father_name ?? '',
+                'mobileno' => $student->mobileno ?? '',
+                'due_date' => $dueDate,
+                'grand_fine_amount' => $grandFine,
+                'total_amount' => $totalAmount,
+                'totalfee' => $totalfee,
+                'payment_mode' => $lines === [] ? 0 : 'N/A',
+                'deposit' => $deposit,
+                'fine' => $fine,
+                'discount' => $discount,
+                'balance' => $balance,
+            ];
+
+            if ($searchType === 'all') {
+                $rows[] = $obj;
+            } elseif ($searchType === 'balance' && $obj->balance > 0) {
+                $rows[] = $obj;
+            } elseif ($searchType === 'paid' && $obj->balance <= 0) {
+                $rows[] = $obj;
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * CI Customlib::get_cumulative_fine_amount.
+     */
+    public function getCumulativeFineAmount(int $feeGroupsFeetypeId, int $dueDays): float
+    {
+        $tiers = DB::table('cumulative_fine')
+            ->leftJoin('fee_groups_feetype', 'fee_groups_feetype.id', '=', 'cumulative_fine.fee_groups_feetype_id')
+            ->where('cumulative_fine.fee_groups_feetype_id', $feeGroupsFeetypeId)
+            ->select([
+                'cumulative_fine.overdue_day',
+                'cumulative_fine.fine_amount',
+                'fee_groups_feetype.fine_per_day',
+            ])
+            ->get()
+            ->all();
+
+        if ($tiers === []) {
+            return 0.0;
+        }
+
+        $dueFineAmount = 0.0;
+        foreach ($tiers as $key => $value) {
+            $overdueDay = (int) $value->overdue_day;
+            $tierFine = (float) $value->fine_amount;
+            if ((int) ($value->fine_per_day ?? 0) === 1) {
+                if ($dueDays > $overdueDay) {
+                    $next = $tiers[$key + 1] ?? null;
+                    if ($next !== null && isset($next->overdue_day)) {
+                        if ((int) $next->overdue_day < $dueDays) {
+                            $day = (int) $next->overdue_day - $overdueDay;
+                            $dueFineAmount += $tierFine * $day;
+                        } else {
+                            $dueFineAmount += $tierFine * ($dueDays - $overdueDay);
+                        }
+                    } else {
+                        $dueFineAmount += $tierFine * ($dueDays - $overdueDay);
+                    }
+                }
+            } elseif ($dueDays > $overdueDay) {
+                // Non per-day: later matching tiers overwrite (CI assign, not add).
+                $dueFineAmount = $tierFine;
+            }
+        }
+
+        return (float) $dueFineAmount;
+    }
+
+    /**
+     * Academic fee lines for Balancefees (transport deferred).
+     *
+     * @return list<object>
+     */
+    protected function dueFeesFeeLines(int $studentSessionId): array
+    {
+        return DB::table('student_fees_master')
+            ->join('fee_session_groups', 'fee_session_groups.id', '=', 'student_fees_master.fee_session_group_id')
+            ->join('fee_groups', 'fee_groups.id', '=', 'fee_session_groups.fee_groups_id')
+            ->join('fee_groups_feetype', 'fee_groups_feetype.fee_session_group_id', '=', 'fee_session_groups.id')
+            ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
+            ->leftJoin('student_fees_deposite', function ($join) {
+                $join->on('student_fees_deposite.student_fees_master_id', '=', 'student_fees_master.id')
+                    ->on('student_fees_deposite.fee_groups_feetype_id', '=', 'fee_groups_feetype.id');
+            })
+            ->where('student_fees_master.student_session_id', $studentSessionId)
+            ->orderBy('student_fees_master.id')
+            ->orderByDesc('fee_groups_feetype.due_date')
+            ->select([
+                'student_fees_master.is_system',
+                'student_fees_master.amount as master_amount',
+                'fee_groups_feetype.id as fee_groups_feetype_id',
+                'fee_groups_feetype.amount as feetype_amount',
+                'fee_groups_feetype.due_date',
+                'fee_groups_feetype.fine_type',
+                'fee_groups_feetype.fine_amount',
+                DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
+            ])
+            ->get()
+            ->map(function ($row) {
+                $amount = ((int) $row->is_system !== 0)
+                    ? (float) $row->master_amount
+                    : (float) $row->feetype_amount;
+
+                return (object) [
+                    'fee_groups_feetype_id' => (int) $row->fee_groups_feetype_id,
+                    'amount' => $amount,
+                    'due_date' => $row->due_date,
+                    'fine_type' => $row->fine_type,
+                    'fine_amount' => $row->fine_amount,
+                    'amount_detail' => $row->amount_detail,
+                ];
+            })
+            ->all();
+    }
+
+    /**
      * CI reportbyname / getStudentFeesByClassSectionStudent (single student typical).
      *
      * @return list<array<string, mixed>>
