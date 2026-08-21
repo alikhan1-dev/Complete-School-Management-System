@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Reports',
             'status' => 'in_progress',
-            'message' => 'Student information hub through online admission report persist done (class subject, date-range admission, sibling, profile, online admission included). Deferred: Attendencereports/Financereports/Balancefees screens, class-teacher scope, view-students modal, CI pixel-parity JS, student_profile custom-field columns.',
+            'message' => 'Student information reports + Attendencereports slice 1 (hub, student/staff daywise, daily, attendance type) persist done. Deferred: monthly calendars, period/subject reports, biometric log, Financereports/Balancefees, class-teacher scope, view-students modal, CI pixel-parity JS, student_profile custom-field columns.',
             'slices' => [
                 'student_information_hub' => 'done',
                 'student_report' => 'done',
@@ -30,7 +30,8 @@ class ModuleStatusController extends Controller
                 'sibling_report' => 'done',
                 'student_profile' => 'done',
                 'online_admission_report' => 'done',
-                'attendance_reports' => 'pending',
+                'attendance_reports_hub_daywise_daily_type' => 'done',
+                'attendance_reports_monthly_period_biometric' => 'pending',
                 'finance_reports' => 'pending',
                 'balance_fees' => 'pending',
             ],

@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Reports\Controllers\AttendanceReportController;
 use App\Modules\Reports\Controllers\ModuleStatusController;
 use App\Modules\Reports\Controllers\StudentInformationReportController;
 use Illuminate\Support\Facades\Route;
@@ -61,4 +62,15 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.online_admission.validation');
     Route::match(['get', 'post'], 'report/dtonlineadmissionreportlist', [StudentInformationReportController::class, 'dtonlineadmissionreportlist'])
         ->name('reports.online_admission.datatable');
+
+    Route::match(['get', 'post'], 'attendencereports/attendance', [AttendanceReportController::class, 'attendance'])
+        ->name('reports.attendance.hub');
+    Route::match(['get', 'post'], 'attendencereports/daywiseattendancereport', [AttendanceReportController::class, 'daywiseattendancereport'])
+        ->name('reports.attendance.student_daywise');
+    Route::match(['get', 'post'], 'attendencereports/staffdaywiseattendancereport', [AttendanceReportController::class, 'staffdaywiseattendancereport'])
+        ->name('reports.attendance.staff_daywise');
+    Route::match(['get', 'post'], 'attendencereports/daily_attendance_report', [AttendanceReportController::class, 'daily_attendance_report'])
+        ->name('reports.attendance.daily');
+    Route::match(['get', 'post'], 'attendencereports/attendancereport', [AttendanceReportController::class, 'attendancereport'])
+        ->name('reports.attendance.type');
 });
