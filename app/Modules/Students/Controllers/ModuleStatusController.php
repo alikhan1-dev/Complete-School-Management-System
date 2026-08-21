@@ -12,7 +12,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Students',
             'status' => 'in_progress',
-            'message' => 'Admission/profile/docs/timeline/disable + disable reason + alumni list/details + alumni events done. Deferred: alumni mail/SMS + calendar JS.',
+            'message' => 'Admission/profile/docs/timeline/disable + disable reason + disabled students list + alumni list/details + alumni events done. Deferred: alumni mail/SMS + calendar JS; disabled list class-teacher scope + details cards.',
         ]);
     }
 }

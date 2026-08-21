@@ -3,6 +3,7 @@
 use App\Modules\Students\Controllers\AlumniController;
 use App\Modules\Students\Controllers\AlumniEventController;
 use App\Modules\Students\Controllers\DisableReasonController;
+use App\Modules\Students\Controllers\DisabledStudentController;
 use App\Modules\Students\Controllers\ModuleStatusController;
 use App\Modules\Students\Controllers\StdTransferController;
 use App\Modules\Students\Controllers\StudentController;
@@ -43,6 +44,10 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/alumni/delete_event/{id}', [AlumniEventController::class, 'destroy'])
         ->whereNumber('id')
         ->name('students.alumni.event.delete');
+
+    // CI student/disablestudentslist
+    Route::match(['get', 'post'], 'student/disablestudentslist', [DisabledStudentController::class, 'index'])
+        ->name('students.disabled.list');
 
     Route::get('student/search', [StudentController::class, 'search'])->name('students.search');
     Route::post('student/searchvalidation', [StudentController::class, 'searchValidation'])->name('students.search_validation');
