@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI Attendencereports slice 1: hub + daywise + daily + attendance type.
+ * CI Attendencereports: hub + daywise + daily + type + monthly calendars.
  */
 class AttendanceReportController extends Controller
 {
@@ -190,6 +190,124 @@ class AttendanceReportController extends Controller
             'rows' => $rows,
             'searched' => $searched,
             'filter_label' => $filterLabel,
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function classattendencereport(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('attendance_report', 'can_view'), 403);
+
+        $filters = [
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+            'month' => $request->input('month', ''),
+            'year' => $request->input('year', ''),
+        ];
+        $resultlist = null;
+        $studentArray = [];
+        $attendenceArray = [];
+        $monthAttendance = [];
+        $yearSelected = $filters['year'];
+        $searched = $request->isMethod('post');
+
+        if ($searched) {
+            $request->validate([
+                'class_id' => ['required'],
+                'section_id' => ['required'],
+                'month' => ['required'],
+            ], [
+                'class_id.required' => 'The Class field is required.',
+                'section_id.required' => 'The Section field is required.',
+                'month.required' => 'The Month field is required.',
+            ]);
+
+            $payload = $this->reports->studentMonthlyMatrix(
+                (int) $request->input('class_id'),
+                (int) $request->input('section_id'),
+                (string) $request->input('month'),
+                $request->filled('year') ? (string) $request->input('year') : null,
+            );
+            $resultlist = $payload['resultlist'];
+            $studentArray = $payload['student_array'];
+            $attendenceArray = $payload['attendence_array'];
+            $monthAttendance = $payload['monthAttendance'];
+            $yearSelected = (string) $payload['year'];
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.student_attendance_report'),
+            'contentView' => 'reports::admin.attendance.class_attendance',
+            'classes' => $this->reports->classes(),
+            'monthlist' => $this->reports->monthDropdown(),
+            'yearlist' => $this->reports->studentAttendanceYears(),
+            'attendencetypeslist' => $this->reports->studentAttendanceTypes(),
+            'filters' => $filters,
+            'year_selected' => $yearSelected,
+            'resultlist' => $resultlist,
+            'student_array' => $studentArray,
+            'attendence_array' => $attendenceArray,
+            'monthAttendance' => $monthAttendance,
+            'low_attendance_limit' => $this->reports->lowAttendanceLimit(),
+            'searched' => $searched,
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function staffattendancereport(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('staff_attendance_report', 'can_view'), 403);
+
+        $filters = [
+            'role' => $request->input('role', ''),
+            'month' => $request->input('month', ''),
+            'year' => $request->input('year', ''),
+        ];
+        $resultlist = null;
+        $studentArray = [];
+        $attendenceArray = [];
+        $monthAttendance = [];
+        $searched = $request->isMethod('post');
+
+        if ($searched) {
+            $request->validate([
+                'month' => ['required'],
+                'year' => ['required'],
+            ], [
+                'month.required' => 'The Month field is required.',
+                'year.required' => 'The Year field is required.',
+            ]);
+
+            $role = (string) $request->input('role', 'select');
+            if ($role === '') {
+                $role = 'select';
+            }
+
+            $payload = $this->reports->staffMonthlyMatrix(
+                $role,
+                (string) $request->input('month'),
+                (int) $request->input('year'),
+            );
+            $resultlist = $payload['resultlist'];
+            $studentArray = $payload['student_array'];
+            $attendenceArray = $payload['attendence_array'];
+            $monthAttendance = $payload['monthAttendance'];
+            $filters['role'] = $role;
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.staff_attendance_report'),
+            'contentView' => 'reports::admin.attendance.staff_attendance',
+            'roles' => $this->reports->staffRoles(),
+            'monthlist' => $this->reports->monthDropdown(),
+            'yearlist' => $this->reports->staffAttendanceYears(),
+            'attendencetypeslist' => $this->reports->staffAttendanceTypesActive(),
+            'filters' => $filters,
+            'resultlist' => $resultlist,
+            'student_array' => $studentArray,
+            'attendence_array' => $attendenceArray,
+            'monthAttendance' => $monthAttendance,
+            'searched' => $searched,
             'reports' => $this->reports,
         ], $this->navFlags()));
     }

@@ -224,6 +224,8 @@ class AttendanceReportFlowTest extends TestCase
         $this->get('/attendencereports/staffdaywiseattendancereport')->assertRedirect();
         $this->get('/attendencereports/daily_attendance_report')->assertRedirect();
         $this->get('/attendencereports/attendancereport')->assertRedirect();
+        $this->get('/attendencereports/classattendencereport')->assertRedirect();
+        $this->get('/attendencereports/staffattendancereport')->assertRedirect();
     }
 
     public function test_attendance_report_slice_one_flows(): void
@@ -274,5 +276,42 @@ class AttendanceReportFlowTest extends TestCase
             ->assertSee('Att Pupil', false);
 
         $this->assertNotSame('', $roleName);
+    }
+
+    public function test_attendance_report_monthly_calendars(): void
+    {
+        $ctx = $this->seedContext();
+        $today = now();
+        $monthName = $today->format('F');
+        $year = (int) $today->format('Y');
+        $roleName = (string) DB::table('roles')->where('is_superadmin', 1)->value('name');
+
+        $this->get('/attendencereports/classattendencereport')
+            ->assertOk()
+            ->assertSee('Student Attendance Report', false);
+
+        $this->post('/attendencereports/classattendencereport', [])
+            ->assertSessionHasErrors(['class_id', 'section_id', 'month']);
+
+        $studentMonthly = $this->post('/attendencereports/classattendencereport', [
+            'class_id' => $ctx['class']->id,
+            'section_id' => $ctx['section']->id,
+            'month' => $monthName,
+            'year' => $year,
+        ])->assertOk();
+        $studentMonthly->assertSee($ctx['student']->admission_no, false)
+            ->assertSee('Att Pupil', false);
+        $this->assertMatchesRegularExpression('/\bP\b|\b100\b/', $studentMonthly->getContent());
+
+        $this->post('/attendencereports/staffattendancereport', [])
+            ->assertSessionHasErrors(['month', 'year']);
+
+        $this->post('/attendencereports/staffattendancereport', [
+            'role' => 'select',
+            'month' => $monthName,
+            'year' => $year,
+        ])->assertOk()
+            ->assertSee('ARPT-', false)
+            ->assertSee('AttReport', false);
     }
 }

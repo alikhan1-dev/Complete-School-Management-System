@@ -73,4 +73,8 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.attendance.daily');
     Route::match(['get', 'post'], 'attendencereports/attendancereport', [AttendanceReportController::class, 'attendancereport'])
         ->name('reports.attendance.type');
+    Route::match(['get', 'post'], 'attendencereports/classattendencereport', [AttendanceReportController::class, 'classattendencereport'])
+        ->name('reports.attendance.student_monthly');
+    Route::match(['get', 'post'], 'attendencereports/staffattendancereport', [AttendanceReportController::class, 'staffattendancereport'])
+        ->name('reports.attendance.staff_monthly');
 });

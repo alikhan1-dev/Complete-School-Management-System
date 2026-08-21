@@ -9,11 +9,32 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Attendencereports slice 1: hub helpers + daywise student/staff + daily + attendance type.
- * Deferred: monthly matrices, period/subject reports, biometric log, class-teacher scope.
+ * CI Attendencereports: hub + daywise + daily + type + monthly student/staff calendars.
+ * Deferred: period/subject reports, biometric log, class-teacher class dropdown scope.
  */
 class AttendanceReportService
 {
+    /** @var array<string, int> CI mailsms.php $config['attendence'] */
+    public const STUDENT_ATTENDANCE_TYPE_MAP = [
+        'present' => 1,
+        'late_with_excuse' => 2,
+        'late' => 3,
+        'absent' => 4,
+        'holiday' => 5,
+        'half_day' => 6,
+        'half_day_second_shift' => 8,
+    ];
+
+    /** @var array<string, int> CI payroll.php $config['staffattendance'] */
+    public const STAFF_ATTENDANCE_TYPE_MAP = [
+        'present' => 1,
+        'half_day' => 4,
+        'late' => 2,
+        'absent' => 3,
+        'holiday' => 5,
+        'half_day_second_shift' => 6,
+    ];
+
     public function __construct(
         protected CurrentSessionResolver $currentSession,
         protected SchoolContext $school,
@@ -187,11 +208,482 @@ class AttendanceReportService
     }
 
     /**
+     * CI Staffattendancemodel::getStaffAttendanceType — active only.
+     *
+     * @return Collection<int, object>
+     */
+    public function staffAttendanceTypesActive(): Collection
+    {
+        return DB::table('staff_attendance_type')->where('is_active', 'yes')->orderBy('id')->get();
+    }
+
+    /**
      * @return Collection<int, object>
      */
     public function staffRoles(): Collection
     {
         return DB::table('roles')->where('is_active', 'yes')->orderBy('id')->get(['id', 'name']);
+    }
+
+    /**
+     * CI Customlib::getMonthDropdown(null) — Jan–Dec, English month name keys.
+     *
+     * @return array<string, string>
+     */
+    public function monthDropdown(): array
+    {
+        $months = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $name = date('F', mktime(0, 0, 0, $i, 1));
+            $months[$name] = (string) __('system.'.strtolower($name));
+        }
+
+        return $months;
+    }
+
+    public function lowAttendanceLimit(): int
+    {
+        return (int) $this->school->get('low_attendance_limit', 0);
+    }
+
+    /**
+     * CI Stuattendence_model::attendanceYearCount.
+     *
+     * @return list<object{year: int|string}>
+     */
+    public function studentAttendanceYears(): array
+    {
+        return DB::table('student_attendences')
+            ->selectRaw('DISTINCT YEAR(date) as year')
+            ->orderBy('year')
+            ->get()
+            ->all();
+    }
+
+    /**
+     * CI Staffattendancemodel::attendanceYearCount.
+     *
+     * @return list<object{year: int|string}>
+     */
+    public function staffAttendanceYears(): array
+    {
+        return DB::table('staff_attendance')
+            ->selectRaw('DISTINCT YEAR(date) as year')
+            ->orderBy('year')
+            ->get()
+            ->all();
+    }
+
+    public function currentSessionName(): string
+    {
+        $sessionId = (int) $this->currentSession->id();
+        if ($sessionId <= 0) {
+            return '';
+        }
+
+        return (string) (DB::table('sessions')->where('id', $sessionId)->value('session') ?? '');
+    }
+
+    /**
+     * CI Attendencereports::classattendencereport year resolution.
+     */
+    public function resolveStudentCalendarYear(string $monthName, ?string $postedYear): int
+    {
+        if ($postedYear !== null && trim($postedYear) !== '') {
+            return (int) $postedYear;
+        }
+
+        $sessionCurrent = $this->currentSessionName();
+        $startMonth = (int) $this->school->get('start_month', 1);
+        $centenary = substr($sessionCurrent, 0, 2);
+        $yearFirst = substr($sessionCurrent, 2, 2);
+        $yearSecond = substr($sessionCurrent, 5, 2);
+        $monthNumber = (int) date('m', strtotime($monthName));
+
+        if ($monthNumber >= $startMonth && $monthNumber <= 12) {
+            return (int) ($centenary.$yearFirst);
+        }
+
+        return (int) ($centenary.$yearSecond);
+    }
+
+    /**
+     * @return array{d: string, dow_key: string, is_sunday: bool}
+     */
+    public function dayHeader(string $ymd): array
+    {
+        $ts = strtotime($ymd);
+
+        return [
+            'd' => date('d', $ts),
+            'dow_key' => strtolower(date('D', $ts)),
+            'is_sunday' => date('D', $ts) === 'Sun',
+        ];
+    }
+
+    /**
+     * @param  array<string, int|string>  $counts
+     * @return array{print: string, class: string, percentage: float|int}
+     */
+    public function studentPresentPercentage(array $counts, int $lowLimit): array
+    {
+        $totalPresent = (int) ($counts['present'] ?? 0)
+            + (int) ($counts['late_with_excuse'] ?? 0)
+            + (int) ($counts['half_day'] ?? 0)
+            + (int) ($counts['late'] ?? 0);
+        $totalSchoolDays = $totalPresent + (int) ($counts['absent'] ?? 0);
+
+        if ($totalSchoolDays === 0) {
+            return ['print' => '-', 'class' => 'label label-success', 'percentage' => -1];
+        }
+
+        $percentage = ($totalPresent / $totalSchoolDays) * 100;
+        $print = (string) round($percentage, 0);
+        if ($percentage < $lowLimit && $percentage >= 0) {
+            $class = 'label label-danger';
+        } else {
+            $class = 'label label-success';
+        }
+
+        return ['print' => $print, 'class' => $class, 'percentage' => $percentage];
+    }
+
+    /**
+     * Staff monthly uses hardcoded 75 (CI view), not sch_settings.low_attendance_limit.
+     *
+     * @param  array<string, int|string>  $counts
+     * @return array{print: string, class: string, percentage: float|int}
+     */
+    public function staffPresentPercentage(array $counts): array
+    {
+        $totalPresent = (int) ($counts['present'] ?? 0)
+            + (int) ($counts['late'] ?? 0)
+            + (int) ($counts['half_day'] ?? 0);
+        $totalDays = $totalPresent + (int) ($counts['absent'] ?? 0);
+
+        if ($totalDays === 0) {
+            return ['print' => '-', 'class' => 'label label-default', 'percentage' => -1];
+        }
+
+        $percentage = ($totalPresent / $totalDays) * 100;
+        $print = (string) round($percentage, 0);
+        if ($percentage < 75 && $percentage >= 0) {
+            $class = 'label label-danger';
+        } elseif ($percentage > 75) {
+            $class = 'label label-success';
+        } else {
+            $class = 'label label-default';
+        }
+
+        return ['print' => $print, 'class' => $class, 'percentage' => $percentage];
+    }
+
+    /**
+     * CI classattendencereport search success payload.
+     *
+     * @return array{
+     *   year: int,
+     *   no_of_days: int,
+     *   attendence_array: list<string>,
+     *   resultlist: array<string, array<int, object>>,
+     *   student_array: list<object>,
+     *   monthAttendance: list<array<int, array<string, int>>>
+     * }
+     */
+    public function studentMonthlyMatrix(int $classId, int $sectionId, string $monthName, ?string $postedYear): array
+    {
+        $year = $this->resolveStudentCalendarYear($monthName, $postedYear);
+        $monthNumber = (int) date('m', strtotime($monthName));
+        $numOfDays = (int) cal_days_in_month(CAL_GREGORIAN, $monthNumber, $year);
+        $attendenceArray = [];
+        for ($i = 1; $i <= $numOfDays; $i++) {
+            $attendenceArray[] = sprintf('%04d-%02d-%02d', $year, $monthNumber, $i);
+        }
+
+        $students = $this->studentDaywiseRows($classId, $sectionId, $attendenceArray[0] ?? sprintf('%04d-%02d-01', $year, $monthNumber), null);
+        $sessionIds = $students->pluck('student_session_id')->map(fn ($id) => (int) $id)->all();
+        $byDate = $this->loadStudentAttendanceByDates($sessionIds, $attendenceArray);
+        $countsBySession = $this->countStudentAttendanceTypes($sessionIds, $monthNumber, $year);
+
+        $resultlist = [];
+        foreach ($attendenceArray as $attDate) {
+            $indexed = [];
+            foreach ($students as $student) {
+                $ssid = (int) $student->student_session_id;
+                $row = clone $student;
+                $hit = $byDate[$attDate][$ssid] ?? null;
+                if ($hit !== null) {
+                    $row->attendence_id = $hit->attendence_id;
+                    $row->attendence_type_id = $hit->attendence_type_id;
+                    $row->remark = $hit->remark;
+                    $row->att_type = $hit->att_type;
+                    $row->key = $hit->att_key ?? null;
+                    $row->date = $hit->date;
+                } else {
+                    $row->attendence_id = 0;
+                    $row->attendence_type_id = null;
+                    $row->remark = null;
+                    $row->att_type = null;
+                    $row->key = null;
+                    $row->date = 'xxx';
+                }
+                $indexed[$ssid] = $row;
+            }
+            $resultlist[$attDate] = $indexed;
+        }
+
+        $monthAttendance = [];
+        foreach ($students as $student) {
+            $ssid = (int) $student->student_session_id;
+            $monthAttendance[] = [$ssid => $countsBySession[$ssid] ?? $this->emptyStudentCounts()];
+        }
+
+        return [
+            'year' => $year,
+            'no_of_days' => $numOfDays,
+            'attendence_array' => $attendenceArray,
+            'resultlist' => $resultlist,
+            'student_array' => $students->values()->all(),
+            'monthAttendance' => $monthAttendance,
+        ];
+    }
+
+    /**
+     * CI staffattendancereport search success payload. Day columns use POST year only.
+     *
+     * @return array{
+     *   year: int,
+     *   no_of_days: int,
+     *   attendence_array: list<string>,
+     *   resultlist: array<string, array<int, object>>,
+     *   student_array: list<object>,
+     *   monthAttendance: list<array<int, array<string, int>>>
+     * }
+     */
+    public function staffMonthlyMatrix(string $roleName, string $monthName, int $searchYear): array
+    {
+        $monthNumber = (int) date('m', strtotime($monthName));
+        $numOfDays = (int) cal_days_in_month(CAL_GREGORIAN, $monthNumber, $searchYear);
+        $attendenceArray = [];
+        for ($i = 1; $i <= $numOfDays; $i++) {
+            $attendenceArray[] = sprintf('%04d-%02d-%02d', $searchYear, $monthNumber, $i);
+        }
+
+        $staffRows = $this->staffDaywiseRows($roleName === '' ? 'select' : $roleName, $attendenceArray[0] ?? sprintf('%04d-%02d-01', $searchYear, $monthNumber), null);
+        $staffRows = $staffRows->map(function ($staff) {
+            $staff->id = (int) ($staff->staff_id ?? $staff->id);
+
+            return $staff;
+        })->unique('id')->values();
+        $staffIds = $staffRows->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $byDate = $this->loadStaffAttendanceByDates($staffIds, $attendenceArray);
+        $countsByStaff = $this->countStaffAttendanceTypes($staffIds, $monthNumber, $searchYear);
+
+        $resultlist = [];
+        foreach ($attendenceArray as $attDate) {
+            $indexed = [];
+            foreach ($staffRows as $staff) {
+                $id = (int) $staff->id;
+                $row = clone $staff;
+                $hit = $byDate[$attDate][$id] ?? null;
+                if ($hit !== null) {
+                    $row->attendence_id = $hit->attendence_id;
+                    $row->staff_attendance_type_id = $hit->staff_attendance_type_id;
+                    $row->remark = $hit->remark;
+                    $row->att_type = $hit->att_type;
+                    $row->key = $hit->att_key ?? null;
+                    $row->date = $hit->date;
+                } else {
+                    $row->attendence_id = 0;
+                    $row->staff_attendance_type_id = null;
+                    $row->remark = null;
+                    $row->att_type = null;
+                    $row->key = null;
+                    $row->date = 'xxx';
+                }
+                $indexed[$id] = $row;
+            }
+            $resultlist[$attDate] = $indexed;
+        }
+
+        $monthAttendance = [];
+        foreach ($staffRows as $staff) {
+            $id = (int) $staff->id;
+            $monthAttendance[] = [$id => $countsByStaff[$id] ?? $this->emptyStaffCounts()];
+        }
+
+        return [
+            'year' => $searchYear,
+            'no_of_days' => $numOfDays,
+            'attendence_array' => $attendenceArray,
+            'resultlist' => $resultlist,
+            'student_array' => $staffRows->values()->all(),
+            'monthAttendance' => $monthAttendance,
+        ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    protected function emptyStudentCounts(): array
+    {
+        $empty = [];
+        foreach (array_keys(self::STUDENT_ATTENDANCE_TYPE_MAP) as $key) {
+            $empty[$key] = 0;
+        }
+
+        return $empty;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    protected function emptyStaffCounts(): array
+    {
+        $empty = [];
+        foreach (array_keys(self::STAFF_ATTENDANCE_TYPE_MAP) as $key) {
+            $empty[$key] = 0;
+        }
+
+        return $empty;
+    }
+
+    /**
+     * @param  list<int>  $sessionIds
+     * @param  list<string>  $dates
+     * @return array<string, array<int, object>>
+     */
+    protected function loadStudentAttendanceByDates(array $sessionIds, array $dates): array
+    {
+        if ($sessionIds === [] || $dates === []) {
+            return [];
+        }
+
+        $rows = DB::table('student_attendences')
+            ->leftJoin('attendence_type', 'attendence_type.id', '=', 'student_attendences.attendence_type_id')
+            ->whereIn('student_attendences.student_session_id', $sessionIds)
+            ->whereIn('student_attendences.date', $dates)
+            ->select([
+                'student_attendences.student_session_id',
+                'student_attendences.date',
+                'student_attendences.remark',
+                'student_attendences.attendence_type_id',
+                DB::raw('IFNULL(student_attendences.id, 0) as attendence_id'),
+                'attendence_type.type as att_type',
+                'attendence_type.key_value as att_key',
+            ])
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(string) $row->date][(int) $row->student_session_id] = $row;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<int>  $staffIds
+     * @param  list<string>  $dates
+     * @return array<string, array<int, object>>
+     */
+    protected function loadStaffAttendanceByDates(array $staffIds, array $dates): array
+    {
+        if ($staffIds === [] || $dates === []) {
+            return [];
+        }
+
+        $rows = DB::table('staff_attendance')
+            ->leftJoin('staff_attendance_type', 'staff_attendance_type.id', '=', 'staff_attendance.staff_attendance_type_id')
+            ->whereIn('staff_attendance.staff_id', $staffIds)
+            ->whereIn('staff_attendance.date', $dates)
+            ->select([
+                'staff_attendance.staff_id',
+                'staff_attendance.date',
+                'staff_attendance.remark',
+                'staff_attendance.staff_attendance_type_id',
+                DB::raw('IFNULL(staff_attendance.id, 0) as attendence_id'),
+                'staff_attendance_type.type as att_type',
+                'staff_attendance_type.key_value as att_key',
+            ])
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(string) $row->date][(int) $row->staff_id] = $row;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<int>  $sessionIds
+     * @return array<int, array<string, int>>
+     */
+    protected function countStudentAttendanceTypes(array $sessionIds, int $month, int $year): array
+    {
+        $result = [];
+        foreach ($sessionIds as $ssid) {
+            $result[$ssid] = $this->emptyStudentCounts();
+        }
+        if ($sessionIds === []) {
+            return $result;
+        }
+
+        $rows = DB::table('student_attendences')
+            ->whereIn('student_session_id', $sessionIds)
+            ->whereRaw('MONTH(date) = ?', [$month])
+            ->whereRaw('YEAR(date) = ?', [$year])
+            ->selectRaw('student_session_id, attendence_type_id, COUNT(*) as attendence')
+            ->groupBy('student_session_id', 'attendence_type_id')
+            ->get();
+
+        $typeToKey = array_flip(self::STUDENT_ATTENDANCE_TYPE_MAP);
+        foreach ($rows as $row) {
+            $ssid = (int) $row->student_session_id;
+            $typeId = (int) $row->attendence_type_id;
+            if (! isset($typeToKey[$typeId])) {
+                continue;
+            }
+            $result[$ssid][$typeToKey[$typeId]] = (int) $row->attendence;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  list<int>  $staffIds
+     * @return array<int, array<string, int>>
+     */
+    protected function countStaffAttendanceTypes(array $staffIds, int $month, int $year): array
+    {
+        $result = [];
+        foreach ($staffIds as $id) {
+            $result[$id] = $this->emptyStaffCounts();
+        }
+        if ($staffIds === []) {
+            return $result;
+        }
+
+        $rows = DB::table('staff_attendance')
+            ->whereIn('staff_id', $staffIds)
+            ->whereRaw('MONTH(date) = ?', [$month])
+            ->whereRaw('YEAR(date) = ?', [$year])
+            ->selectRaw('staff_id, staff_attendance_type_id, COUNT(*) as attendence')
+            ->groupBy('staff_id', 'staff_attendance_type_id')
+            ->get();
+
+        $typeToKey = array_flip(self::STAFF_ATTENDANCE_TYPE_MAP);
+        foreach ($rows as $row) {
+            $id = (int) $row->staff_id;
+            $typeId = (int) $row->staff_attendance_type_id;
+            if (! isset($typeToKey[$typeId])) {
+                continue;
+            }
+            $result[$id][$typeToKey[$typeId]] = (int) $row->attendence;
+        }
+
+        return $result;
     }
 
     /**
