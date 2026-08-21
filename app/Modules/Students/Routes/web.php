@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\Students\Controllers\AlumniController;
+use App\Modules\Students\Controllers\AlumniEventController;
 use App\Modules\Students\Controllers\DisableReasonController;
 use App\Modules\Students\Controllers\ModuleStatusController;
 use App\Modules\Students\Controllers\StdTransferController;
@@ -19,6 +21,28 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/disable_reason/delete/{id}', [DisableReasonController::class, 'destroy'])
         ->whereNumber('id')
         ->name('students.disable_reasons.destroy');
+
+    // CI admin/alumni alumnilist + add/delete (events deferred)
+    Route::match(['get', 'post'], 'admin/alumni/alumnilist', [AlumniController::class, 'alumnilist'])
+        ->name('students.alumni.list');
+    Route::match(['get', 'post'], 'admin/alumni/add/{studentId}', [AlumniController::class, 'form'])
+        ->whereNumber('studentId')
+        ->name('students.alumni.form');
+    Route::get('admin/alumni/deletestudent/{id}', [AlumniController::class, 'deletestudent'])
+        ->whereNumber('id')
+        ->name('students.alumni.delete');
+
+    // CI admin/alumni events (mail/SMS + calendar deferred)
+    Route::get('admin/alumni/events', [AlumniEventController::class, 'index'])
+        ->name('students.alumni.events');
+    Route::match(['get', 'post'], 'admin/alumni/event/create', [AlumniEventController::class, 'create'])
+        ->name('students.alumni.event.create');
+    Route::match(['get', 'post'], 'admin/alumni/event/edit/{id}', [AlumniEventController::class, 'edit'])
+        ->whereNumber('id')
+        ->name('students.alumni.event.edit');
+    Route::get('admin/alumni/delete_event/{id}', [AlumniEventController::class, 'destroy'])
+        ->whereNumber('id')
+        ->name('students.alumni.event.delete');
 
     Route::get('student/search', [StudentController::class, 'search'])->name('students.search');
     Route::post('student/searchvalidation', [StudentController::class, 'searchValidation'])->name('students.search_validation');
