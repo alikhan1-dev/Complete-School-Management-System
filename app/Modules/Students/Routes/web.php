@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Students\Controllers\DisableReasonController;
 use App\Modules\Students\Controllers\ModuleStatusController;
 use App\Modules\Students\Controllers\StdTransferController;
 use App\Modules\Students\Controllers\StudentController;
@@ -9,6 +10,16 @@ use Illuminate\Support\Facades\Route;
 Route::get('migration-status/students', [ModuleStatusController::class, 'status'])->name('students.migration_status');
 
 Route::middleware(['staff.auth'])->group(function () {
+    // CI admin/disable_reason
+    Route::match(['get', 'post'], 'admin/disable_reason', [DisableReasonController::class, 'index'])
+        ->name('students.disable_reasons.index');
+    Route::match(['get', 'post'], 'admin/disable_reason/edit/{id}', [DisableReasonController::class, 'edit'])
+        ->whereNumber('id')
+        ->name('students.disable_reasons.edit');
+    Route::get('admin/disable_reason/delete/{id}', [DisableReasonController::class, 'destroy'])
+        ->whereNumber('id')
+        ->name('students.disable_reasons.destroy');
+
     Route::get('student/search', [StudentController::class, 'search'])->name('students.search');
     Route::post('student/searchvalidation', [StudentController::class, 'searchValidation'])->name('students.search_validation');
     Route::post('student/dtstudentlist', [StudentController::class, 'datatable'])->name('students.datatable');
