@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Reports\Controllers\AttendanceReportController;
+use App\Modules\Reports\Controllers\FinanceReportController;
 use App\Modules\Reports\Controllers\ModuleStatusController;
 use App\Modules\Reports\Controllers\StudentInformationReportController;
 use Illuminate\Support\Facades\Route;
@@ -84,4 +85,19 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('attendencereports/biometric_attlog/{offset?}', [AttendanceReportController::class, 'biometric_attlog'])
         ->whereNumber('offset')
         ->name('reports.attendance.biometric_log');
+
+    Route::match(['get', 'post'], 'financereports/finance', [FinanceReportController::class, 'finance'])
+        ->name('reports.finance.hub');
+    Route::match(['get', 'post'], 'financereports/studentacademicreport', [FinanceReportController::class, 'studentacademicreport'])
+        ->name('reports.finance.balance_fees');
+    Route::match(['get', 'post'], 'financereports/reportbyname', [FinanceReportController::class, 'reportbyname'])
+        ->name('reports.finance.fees_statement');
+    Route::match(['get', 'post'], 'financereports/reportduefees', [FinanceReportController::class, 'reportduefees'])
+        ->name('reports.finance.due_fees');
+    Route::post('financereports/printreportduefees', [FinanceReportController::class, 'printreportduefees'])
+        ->name('reports.finance.due_fees.print');
+    Route::match(['get', 'post'], 'financereports/reportdailycollection', [FinanceReportController::class, 'reportdailycollection'])
+        ->name('reports.finance.daily_collection');
+    Route::post('financereports/feeCollectionStudentDeposit', [FinanceReportController::class, 'feeCollectionStudentDeposit'])
+        ->name('reports.finance.daily_collection.deposit');
 });
