@@ -7,6 +7,7 @@ use App\Modules\Academics\Models\ClassSection;
 use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Academics\Models\Section;
 use App\Modules\OnlineExam\Models\OnlineExam;
+use App\Modules\OnlineExam\Models\Question;
 use App\Modules\Shared\Services\SchoolContext;
 use App\Modules\Staff\Models\Staff;
 use App\Modules\Students\Models\Student;
@@ -34,9 +35,20 @@ class OnlineExamReportFlowTest extends TestCase
     /** @var list<int> */
     private array $cleanupQuestionIds = [];
 
+    /** @var list<int> */
+    private array $cleanupSubjectIds = [];
+
     protected function tearDown(): void
     {
         if ($this->cleanupExamIds !== []) {
+            $assignIds = DB::table('onlineexam_students')
+                ->whereIn('onlineexam_id', $this->cleanupExamIds)
+                ->pluck('id')
+                ->all();
+            if ($assignIds !== []) {
+                DB::table('onlineexam_student_results')->whereIn('onlineexam_student_id', $assignIds)->delete();
+                DB::table('onlineexam_attempts')->whereIn('onlineexam_student_id', $assignIds)->delete();
+            }
             DB::table('onlineexam_questions')->whereIn('onlineexam_id', $this->cleanupExamIds)->delete();
             DB::table('onlineexam_students')->whereIn('onlineexam_id', $this->cleanupExamIds)->delete();
             DB::table('onlineexam')->whereIn('id', $this->cleanupExamIds)->delete();
@@ -45,6 +57,10 @@ class OnlineExamReportFlowTest extends TestCase
         if ($this->cleanupQuestionIds !== []) {
             DB::table('questions')->whereIn('id', $this->cleanupQuestionIds)->delete();
             $this->cleanupQuestionIds = [];
+        }
+        if ($this->cleanupSubjectIds !== []) {
+            DB::table('subjects')->whereIn('id', $this->cleanupSubjectIds)->delete();
+            $this->cleanupSubjectIds = [];
         }
         foreach ($this->cleanupStudentIds as $studentId) {
             DB::table('student_session')->where('student_id', $studentId)->delete();
@@ -136,6 +152,7 @@ class OnlineExamReportFlowTest extends TestCase
         $this->get('/report/onlineexams')->assertRedirect();
         $this->get('/report/onlineexamattend')->assertRedirect();
         $this->get('/admin/onlineexam/report')->assertRedirect();
+        $this->get('/report/onlineexamrank')->assertRedirect();
     }
 
     public function test_hub_and_exams_report_lists_assigned_exams(): void
@@ -441,5 +458,144 @@ class OnlineExamReportFlowTest extends TestCase
         $content = $page->getContent();
         // remaining = attempt(3) - attempts(1) = 2
         $this->assertMatchesRegularExpression('/>3<\/td>\s*<td>2<\/td>/', $content);
+    }
+
+    public function test_rank_report_lists_attempted_students_with_scores(): void
+    {
+        $this->actingAsSuperAdmin();
+        $suffix = uniqid();
+
+        $session = AcademicSession::query()->first() ?: AcademicSession::query()->create(['session' => '2099-oerk']);
+        DB::table('sch_settings')->limit(1)->update(['session_id' => $session->id]);
+        app(SchoolContext::class)->clearCache();
+
+        $section = Section::query()->create(['section' => 'OERK-'.$suffix, 'is_active' => 'yes']);
+        $class = SchoolClass::query()->create(['class' => 'OERK-'.$suffix, 'is_active' => 'yes']);
+        $this->cleanupSectionIds[] = $section->id;
+        $this->cleanupClassIds[] = $class->id;
+        ClassSection::query()->create([
+            'class_id' => $class->id,
+            'section_id' => $section->id,
+            'is_active' => 'yes',
+        ]);
+
+        $admissionNo = 'OERK'.$suffix;
+        $this->post('/student/create', [
+            'admission_no' => $admissionNo,
+            'firstname' => 'Ranked',
+            'lastname' => 'Student',
+            'gender' => 'Male',
+            'dob' => '2012-01-01',
+            'class_id' => $class->id,
+            'section_id' => $section->id,
+            'guardian_is' => 'father',
+            'guardian_name' => 'Dad',
+            'guardian_phone' => '03000000003',
+        ])->assertRedirect();
+
+        $student = Student::query()->where('admission_no', $admissionNo)->firstOrFail();
+        $this->cleanupStudentIds[] = $student->id;
+        $studentSession = StudentSession::query()
+            ->where('student_id', $student->id)
+            ->where('session_id', $session->id)
+            ->firstOrFail();
+
+        $subjectId = (int) DB::table('subjects')->insertGetId([
+            'name' => 'OE Rank Subject '.$suffix,
+            'code' => 'ORK'.$suffix,
+            'type' => 'theory',
+            'is_active' => 'yes',
+        ]);
+        $this->cleanupSubjectIds[] = $subjectId;
+
+        $exam = OnlineExam::query()->create([
+            'session_id' => $session->id,
+            'exam' => 'OE Rank Exam '.$suffix,
+            'attempt' => 1,
+            'exam_from' => now()->subDay()->format('Y-m-d H:i:s'),
+            'exam_to' => now()->addDay()->format('Y-m-d H:i:s'),
+            'is_quiz' => 0,
+            'auto_publish_date' => null,
+            'duration' => '00:15:00',
+            'passing_percentage' => 40,
+            'description' => 'Rank report exam',
+            'publish_result' => 1,
+            'answer_word_count' => 0,
+            'is_active' => 1,
+            'is_marks_display' => 1,
+            'is_neg_marking' => 0,
+            'is_random_question' => 0,
+            'is_rank_generated' => 1,
+            'publish_exam_notification' => 0,
+            'publish_result_notification' => 0,
+        ]);
+        $this->cleanupExamIds[] = $exam->id;
+
+        $question = Question::query()->create([
+            'staff_id' => $this->createdStaffIds[0],
+            'subject_id' => $subjectId,
+            'question_type' => 'singlechoice',
+            'level' => 'low',
+            'class_id' => $class->id,
+            'section_id' => null,
+            'question' => 'Rank Q '.$suffix,
+            'opt_a' => 'A',
+            'opt_b' => 'B',
+            'opt_c' => '',
+            'opt_d' => '',
+            'opt_e' => '',
+            'correct' => 'opt_a',
+            'descriptive_word_limit' => 0,
+        ]);
+        $this->cleanupQuestionIds[] = $question->id;
+
+        $oqId = (int) DB::table('onlineexam_questions')->insertGetId([
+            'question_id' => $question->id,
+            'onlineexam_id' => $exam->id,
+            'session_id' => $session->id,
+            'marks' => 10,
+            'neg_marks' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $attemptedId = DB::table('onlineexam_students')->insertGetId([
+            'onlineexam_id' => $exam->id,
+            'student_session_id' => $studentSession->id,
+            'is_attempted' => 1,
+            'rank' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('onlineexam_student_results')->insert([
+            'onlineexam_student_id' => $attemptedId,
+            'onlineexam_question_id' => $oqId,
+            'select_option' => 'opt_a',
+            'marks' => 0,
+            'remark' => '',
+            'attachment_name' => null,
+            'attachment_upload_name' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->post('/report/onlineexamrank', [
+            'exam_id' => '',
+        ])->assertOk()->assertSee('field is required', false);
+
+        $page = $this->post('/report/onlineexamrank', [
+            'exam_id' => $exam->id,
+            'class_id' => $class->id,
+            'section_id' => $section->id,
+        ]);
+        $page->assertOk()
+            ->assertSee($admissionNo, false)
+            ->assertSee('OE Rank Exam '.$suffix, false)
+            ->assertDontSee(__('system.exam_rank_not_generated'), false);
+
+        $content = $page->getContent();
+        $this->assertMatchesRegularExpression('/>1<\/td>\s*<td>'.preg_quote($admissionNo, '/').'/', $content);
+        $this->assertStringContainsString('100.00', $content);
     }
 }

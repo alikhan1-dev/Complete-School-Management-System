@@ -10,8 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI Report online examinations hub + onlineexams + onlineexamattend + exam-wise result.
- * Deferred: rank report, DataTables AJAX / modal print, class-teacher scope.
+ * CI Report online examinations hub + onlineexams + onlineexamattend + result + rank.
+ * Deferred: ranking generation UI, DataTables AJAX / modal print, class-teacher scope.
  */
 class OnlineExamReportController extends Controller
 {
@@ -147,6 +147,55 @@ class OnlineExamReportController extends Controller
             'title' => __('system.result_report'),
             'contentView' => 'onlineexam::admin.reports.result',
             'filters' => $filters,
+            'rows' => $rows,
+            'searched' => $searched,
+            'errors' => $errors,
+            'examList' => $this->reports->examsForCurrentSession(),
+            'classlist' => SchoolClass::query()->orderBy('class')->get(),
+            'sectionOptions' => $this->reports->sectionsForClass((int) ($filters['class_id'] ?: 0)),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    /**
+     * CI report/onlineexamrank (online_exams_rank_report).
+     * exam_id required; class/section optional. Ranking generation deferred.
+     */
+    public function onlineexamrank(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('online_exams_rank_report', 'can_view'), 403);
+
+        $filters = [
+            'exam_id' => $request->input('exam_id', ''),
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+        ];
+        $exam = null;
+        $rows = [];
+        $searched = false;
+        $errors = [];
+
+        if ($request->isMethod('post')) {
+            $searched = true;
+            if ($filters['exam_id'] === '' || $filters['exam_id'] === null) {
+                $errors['exam_id'] = 'The '.__('system.exam').' field is required.';
+            }
+            if ($errors === []) {
+                $result = $this->reports->rankReport(
+                    (int) $filters['exam_id'],
+                    $filters['class_id'] !== '' ? (int) $filters['class_id'] : null,
+                    $filters['section_id'] !== '' ? (int) $filters['section_id'] : null
+                );
+                $exam = $result['exam'];
+                $rows = $result['rows'];
+            }
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.exam_rank_report'),
+            'contentView' => 'onlineexam::admin.reports.rank',
+            'filters' => $filters,
+            'exam' => $exam,
             'rows' => $rows,
             'searched' => $searched,
             'errors' => $errors,

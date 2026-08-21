@@ -3,19 +3,21 @@
 namespace App\Modules\OnlineExam\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
+use App\Modules\OnlineExam\Models\OnlineExam;
 use App\Modules\Shared\Services\SchoolContext;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Report online examinations hub + exams + attempt + exam-wise result reports.
- * Deferred: rank report, class-teacher scope, DataTables AJAX / modal print.
+ * CI Report online examinations hub + exams + attempt + result + rank reports.
+ * Deferred: ranking generation UI, class-teacher scope, DataTables AJAX / modal print.
  */
 class OnlineExamReportService
 {
     public function __construct(
         protected SchoolContext $school,
         protected CurrentSessionResolver $currentSession,
+        protected OnlineExamResultService $results,
     ) {
     }
 
@@ -360,6 +362,78 @@ class OnlineExamReportService
             ])
             ->get()
             ->all();
+    }
+
+    /**
+     * CI Report::onlineexamrank — attempted assignees only; scores via OnlineExamResultService.
+     * Stored onlineexam_students.rank displayed as exam_rank (generation UI deferred).
+     *
+     * @return array{exam:?object,rows:list<array{student:object,summary:array}>}
+     */
+    public function rankReport(int $examId, ?int $classId = null, ?int $sectionId = null): array
+    {
+        $sessionId = $this->currentSession->id();
+        if ($sessionId <= 0 || $examId <= 0) {
+            return ['exam' => null, 'rows' => []];
+        }
+
+        $exam = DB::table('onlineexam')
+            ->where('id', $examId)
+            ->where('session_id', $sessionId)
+            ->first();
+        if ($exam === null) {
+            return ['exam' => null, 'rows' => []];
+        }
+
+        $examModel = OnlineExam::query()->find($examId);
+        if ($examModel === null) {
+            return ['exam' => $exam, 'rows' => []];
+        }
+
+        $query = DB::table('students')
+            ->join('student_session', 'student_session.student_id', '=', 'students.id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('onlineexam_students', function ($join) use ($examId) {
+                $join->on('onlineexam_students.student_session_id', '=', 'student_session.id')
+                    ->where('onlineexam_students.onlineexam_id', '=', $examId);
+            })
+            ->where('student_session.session_id', $sessionId)
+            ->where('students.is_active', 'yes')
+            ->where('onlineexam_students.is_attempted', 1)
+            ->orderBy('onlineexam_students.rank')
+            ->orderByDesc('onlineexam_students.is_attempted')
+            ->select([
+                'students.id as student_id',
+                'students.admission_no',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.father_name',
+                'classes.class',
+                'sections.section',
+                'onlineexam_students.id as onlineexam_student_id',
+                'onlineexam_students.is_attempted',
+                DB::raw('IFNULL(onlineexam_students.rank, 0) as exam_rank'),
+            ]);
+
+        if ($classId !== null && $classId > 0) {
+            $query->where('student_session.class_id', $classId);
+        }
+        if ($sectionId !== null && $sectionId > 0) {
+            $query->where('student_session.section_id', $sectionId);
+        }
+
+        $rows = [];
+        foreach ($query->get() as $student) {
+            $questionRows = $this->results->resultRows((int) $student->onlineexam_student_id, $examId);
+            $rows[] = [
+                'student' => $student,
+                'summary' => $this->results->scoreSummary($examModel, $questionRows),
+            ];
+        }
+
+        return ['exam' => $exam, 'rows' => $rows];
     }
 
     /**
