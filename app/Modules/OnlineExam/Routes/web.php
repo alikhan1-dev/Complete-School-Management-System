@@ -4,6 +4,7 @@ use App\Modules\OnlineExam\Controllers\ModuleStatusController;
 use App\Modules\OnlineExam\Controllers\OnlineExamAssignController;
 use App\Modules\OnlineExam\Controllers\OnlineExamController;
 use App\Modules\OnlineExam\Controllers\OnlineExamQuestionController;
+use App\Modules\OnlineExam\Controllers\OnlineExamReportController;
 use App\Modules\OnlineExam\Controllers\OnlineExamResultController;
 use App\Modules\OnlineExam\Controllers\QuestionBankController;
 use App\Modules\OnlineExam\Controllers\StudentOnlineExamController;
@@ -66,4 +67,10 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::match(['get', 'post'], 'admin/onlineexam/evalution/{examId}', [OnlineExamResultController::class, 'evaluation'])->name('onlineexam.evaluation.index');
     Route::post('admin/onlineexam/fillmarks/{examId}', [OnlineExamResultController::class, 'fillMarks'])->name('onlineexam.evaluation.fillmarks');
     Route::get('admin/onlineexam/downloadattachment/{doc}', [OnlineExamResultController::class, 'downloadAttachment'])->name('onlineexam.results.attachment');
+
+    // CI Report online examinations hub + exams report (attempt/rank/result deferred)
+    Route::get('report/online_examinations', [OnlineExamReportController::class, 'hub'])
+        ->name('onlineexam.reports.hub');
+    Route::match(['get', 'post'], 'report/onlineexams', [OnlineExamReportController::class, 'onlineexams'])
+        ->name('onlineexam.reports.exams');
 });

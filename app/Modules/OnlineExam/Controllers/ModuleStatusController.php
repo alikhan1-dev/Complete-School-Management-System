@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'OnlineExam',
             'status' => 'in_progress',
-            'message' => 'Admin OnlineExam core done. Student portal take-exam (objective + descriptive/upload) done. Deferred: ranking, reports, mail/SMS, print, SaaS storage quota.',
+            'message' => 'Admin OnlineExam core done. Student portal take-exam (objective + descriptive/upload) done. Online examinations hub + exams report persist done. Deferred: attempt/rank/result reports, ranking generation, mail/SMS, print, SaaS storage quota.',
             'slices' => [
                 'question_bank' => 'done',
                 'question_csv_import' => 'deferred',
@@ -27,8 +27,9 @@ class ModuleStatusController extends Controller
                 'student_portal_list_view' => 'done',
                 'student_portal_take_exam_objective' => 'done',
                 'student_portal_descriptive_upload' => 'done',
+                'online_exams_report_hub' => 'done',
                 'ranking' => 'deferred',
-                'reports' => 'deferred',
+                'reports' => 'in_progress',
                 'publish_mail_sms' => 'deferred',
             ],
         ]);
