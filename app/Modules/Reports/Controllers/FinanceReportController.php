@@ -10,8 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI Financereports slice 1: hub + balance fees report + fees statement
- * + due fees statement/print + daily collection/deposit drill-down.
+ * CI Financereports: hub + balance/statement/daily + collection + online fees.
  */
 class FinanceReportController extends Controller
 {
@@ -202,6 +201,105 @@ class FinanceReportController extends Controller
         ])->render();
 
         return response()->json(['status' => 1, 'page' => $page]);
+    }
+
+    public function collection_report(Request $request): View
+    {
+        // Hub privilege (CI method checks collect_fees — menu uses fees_collection_report).
+        abort_unless($this->permissions->hasPrivilege('fees_collection_report', 'can_view'), 403);
+
+        $filters = [
+            'search_type' => $request->input('search_type', ''),
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+            'feetype_id' => $request->input('feetype_id', ''),
+            'collect_by' => $request->input('collect_by', ''),
+            'group' => $request->input('group', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+        $results = [];
+        $subtotal = false;
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'search_type' => ['required'],
+            ], [
+                'search_type.required' => 'The Search Duration field is required.',
+            ]);
+            $searched = true;
+            $range = $this->reports->dateRange(
+                (string) $filters['search_type'],
+                $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+                $filters['date_to'] !== '' ? (string) $filters['date_to'] : null
+            );
+            $group = (string) $filters['group'];
+            $subtotal = $group !== '';
+            $rows = $this->reports->feeCollectionReport(
+                $range['from'],
+                $range['to'],
+                $filters['feetype_id'] !== '' ? (int) $filters['feetype_id'] : null,
+                $filters['collect_by'] !== '' ? (int) $filters['collect_by'] : null,
+                $filters['class_id'] !== '' ? (int) $filters['class_id'] : null,
+                $filters['section_id'] !== '' ? (int) $filters['section_id'] : null
+            );
+            $results = $this->reports->groupCollectionRows($rows, $group);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.fees_collection_report'),
+            'contentView' => 'reports::admin.finance.collection_report',
+            'filters' => $filters,
+            'results' => $results,
+            'subtotal' => $subtotal,
+            'searched' => $searched,
+            'searchlist' => $this->reports->searchDurationTypes(),
+            'group_by' => $this->reports->collectionGroupBy(),
+            'collect_by_list' => $this->reports->feesCollectors(),
+            'feetypeList' => $this->reports->feeTypes(),
+            'classlist' => $this->reports->classes(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function onlinefees_report(Request $request): View
+    {
+        // Hub privilege (CI onlinefees_report has no rbac check).
+        abort_unless($this->permissions->hasPrivilege('online_fees_collection_report', 'can_view'), 403);
+
+        $filters = [
+            'search_type' => $request->input('search_type', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+        $collectlist = [];
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'search_type' => ['required'],
+            ], [
+                'search_type.required' => 'The Search Type field is required.',
+            ]);
+            $searched = true;
+            $range = $this->reports->dateRange(
+                (string) $filters['search_type'],
+                $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+                $filters['date_to'] !== '' ? (string) $filters['date_to'] : null
+            );
+            $collectlist = $this->reports->onlineFeeCollectionReport($range['from'], $range['to']);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.online_fees_report'),
+            'contentView' => 'reports::admin.finance.online_fees_report',
+            'filters' => $filters,
+            'collectlist' => $collectlist,
+            'searched' => $searched,
+            'searchlist' => $this->reports->searchDurationTypes(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
     }
 
     protected function canOpenHub(): bool

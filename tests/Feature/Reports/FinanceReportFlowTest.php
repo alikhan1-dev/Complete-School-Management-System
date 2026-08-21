@@ -266,6 +266,8 @@ class FinanceReportFlowTest extends TestCase
         $this->get('/financereports/reportbyname')->assertRedirect();
         $this->get('/financereports/reportduefees')->assertRedirect();
         $this->get('/financereports/reportdailycollection')->assertRedirect();
+        $this->get('/financereports/collection_report')->assertRedirect();
+        $this->get('/financereports/onlinefees_report')->assertRedirect();
     }
 
     public function test_finance_report_slice_one_flows(): void
@@ -318,5 +320,76 @@ class FinanceReportFlowTest extends TestCase
             'date_to' => $today,
         ])->assertOk();
         $this->assertStringContainsString('410.00', $daily->getContent());
+    }
+
+    public function test_finance_report_collection_and_online_flows(): void
+    {
+        $ctx = $this->seedFeeContext();
+        $staffId = (int) end($this->createdStaffIds);
+        $today = now()->toDateString();
+
+        $deposit = StudentFeesDeposite::query()
+            ->whereIn('student_fees_master_id', StudentFeesMaster::query()
+                ->where('student_session_id', $ctx['studentSession']->id)
+                ->pluck('id'))
+            ->firstOrFail();
+
+        $deposit->amount_detail = json_encode([
+            '1' => [
+                'date' => $today,
+                'amount' => 400,
+                'amount_discount' => 0,
+                'amount_fine' => 10,
+                'payment_mode' => 'Cash',
+                'description' => 'partial',
+                'collected_by' => 'test',
+                'received_by' => $staffId,
+                'inv_no' => 1,
+            ],
+            '2' => [
+                'date' => $today,
+                'amount' => 50,
+                'amount_discount' => 0,
+                'amount_fine' => 0,
+                'payment_mode' => 'Card',
+                'description' => 'online pay',
+                'collected_by' => 'gateway',
+                'received_by' => $staffId,
+                'inv_no' => 2,
+            ],
+        ]);
+        $deposit->save();
+
+        $this->get('/financereports/collection_report')->assertOk();
+        $this->get('/financereports/onlinefees_report')->assertOk();
+
+        $this->post('/financereports/collection_report', [])
+            ->assertSessionHasErrors(['search_type']);
+
+        $collection = $this->post('/financereports/collection_report', [
+            'search_type' => 'today',
+            'class_id' => $ctx['class']->id,
+            'section_id' => $ctx['section']->id,
+            'collect_by' => $staffId,
+            'group' => 'mode',
+        ])->assertOk();
+        $collection->assertSee($ctx['student']->admission_no, false)
+            ->assertSee('400.00', false)
+            ->assertSee('50.00', false)
+            ->assertSee('Cash', false)
+            ->assertSee('Card', false)
+            ->assertSee(__('system.sub_total'), false);
+
+        $this->post('/financereports/onlinefees_report', [])
+            ->assertSessionHasErrors(['search_type']);
+
+        $online = $this->post('/financereports/onlinefees_report', [
+            'search_type' => 'today',
+        ])->assertOk();
+        $online->assertSee($ctx['student']->admission_no, false)
+            ->assertSee('50.00', false)
+            ->assertSee('Card', false)
+            ->assertSee('online pay', false)
+            ->assertDontSee('Cash');
     }
 }

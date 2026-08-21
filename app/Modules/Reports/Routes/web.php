@@ -100,4 +100,8 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.finance.daily_collection');
     Route::post('financereports/feeCollectionStudentDeposit', [FinanceReportController::class, 'feeCollectionStudentDeposit'])
         ->name('reports.finance.daily_collection.deposit');
+    Route::match(['get', 'post'], 'financereports/collection_report', [FinanceReportController::class, 'collection_report'])
+        ->name('reports.finance.collection_report');
+    Route::match(['get', 'post'], 'financereports/onlinefees_report', [FinanceReportController::class, 'onlinefees_report'])
+        ->name('reports.finance.onlinefees_report');
 });

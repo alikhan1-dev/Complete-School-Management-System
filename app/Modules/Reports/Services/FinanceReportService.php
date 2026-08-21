@@ -10,9 +10,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Financereports slice 1: hub helpers + balance fees report + fees statement
- * + balance fees statement (+ print) + daily collection (+ day drill-down).
- * Transport fee lines deferred (Fees module). Class-teacher scope deferred.
+ * CI Financereports: hub + balance/statement/daily + collection + online fees.
+ * Transport fee lines deferred. Class-teacher scope deferred.
  */
 class FinanceReportService
 {
@@ -523,6 +522,407 @@ class FinanceReportService
         }
 
         return $sum;
+    }
+
+    /**
+     * CI Customlib::get_searchtype (includes empty Select).
+     *
+     * @return array<string, string>
+     */
+    public function searchDurationTypes(): array
+    {
+        return [
+            '' => (string) __('system.select'),
+            'today' => (string) __('system.today'),
+            'this_week' => (string) __('system.this_week'),
+            'last_week' => (string) __('system.last_week'),
+            'this_month' => (string) __('system.this_month'),
+            'last_month' => (string) __('system.last_month'),
+            'last_3_month' => (string) __('system.last_3_month'),
+            'last_6_month' => (string) __('system.last_6_month'),
+            'last_12_month' => (string) __('system.last_12_month'),
+            'this_year' => (string) __('system.this_year'),
+            'last_year' => (string) __('system.last_year'),
+            'period' => (string) __('system.period'),
+        ];
+    }
+
+    /**
+     * CI Customlib::get_groupby.
+     *
+     * @return array<string, string>
+     */
+    public function collectionGroupBy(): array
+    {
+        return [
+            '' => (string) __('system.select'),
+            'class' => (string) __('system.class'),
+            'collection' => (string) __('system.collect'),
+            'mode' => (string) __('system.mode'),
+        ];
+    }
+
+    /**
+     * @return array{from: string, to: string}
+     */
+    public function dateRange(string $searchType, ?string $dateFrom = null, ?string $dateTo = null): array
+    {
+        $now = now();
+
+        return match ($searchType) {
+            'today' => ['from' => $now->toDateString(), 'to' => $now->toDateString()],
+            'this_week' => [
+                'from' => $now->copy()->startOfWeek()->toDateString(),
+                'to' => $now->copy()->endOfWeek()->toDateString(),
+            ],
+            'last_week' => [
+                'from' => $now->copy()->startOfWeek()->subWeek()->toDateString(),
+                'to' => $now->copy()->startOfWeek()->subWeek()->endOfWeek()->toDateString(),
+            ],
+            'this_month' => [
+                'from' => $now->copy()->startOfMonth()->toDateString(),
+                'to' => $now->copy()->endOfMonth()->toDateString(),
+            ],
+            'last_month' => [
+                'from' => $now->copy()->subMonthNoOverflow()->startOfMonth()->toDateString(),
+                'to' => $now->copy()->subMonthNoOverflow()->endOfMonth()->toDateString(),
+            ],
+            'last_3_month' => [
+                'from' => $now->copy()->subMonthsNoOverflow(2)->startOfMonth()->toDateString(),
+                'to' => $now->copy()->endOfMonth()->toDateString(),
+            ],
+            'last_6_month' => [
+                'from' => $now->copy()->subMonthsNoOverflow(5)->startOfMonth()->toDateString(),
+                'to' => $now->copy()->endOfMonth()->toDateString(),
+            ],
+            'last_12_month' => [
+                'from' => $now->copy()->subMonthsNoOverflow(11)->startOfMonth()->toDateString(),
+                'to' => $now->copy()->endOfMonth()->toDateString(),
+            ],
+            'this_year' => [
+                'from' => $now->copy()->startOfYear()->toDateString(),
+                'to' => $now->copy()->endOfYear()->toDateString(),
+            ],
+            'last_year' => [
+                'from' => $now->copy()->subYear()->startOfYear()->toDateString(),
+                'to' => $now->copy()->subYear()->endOfYear()->toDateString(),
+            ],
+            'period' => [
+                'from' => $this->parseDate($dateFrom) ?: $now->toDateString(),
+                'to' => $this->parseDate($dateTo) ?: $now->toDateString(),
+            ],
+            default => [
+                'from' => $now->copy()->startOfYear()->toDateString(),
+                'to' => $now->copy()->endOfYear()->toDateString(),
+            ],
+        };
+    }
+
+    /**
+     * CI Studentfeemaster_model::get_feesreceived_by (superadmin hide deferred).
+     *
+     * @return array<int, string>
+     */
+    public function feesCollectors(): array
+    {
+        $rows = DB::table('staff')
+            ->join('staff_roles', 'staff.id', '=', 'staff_roles.staff_id')
+            ->where('staff.is_active', 1)
+            ->select([
+                'staff.id',
+                'staff.name',
+                'staff.surname',
+                'staff.employee_id',
+            ])
+            ->orderBy('staff.name')
+            ->get();
+
+        $data = [];
+        foreach ($rows as $row) {
+            $data[(int) $row->id] = trim($row->name.' '.($row->surname ?? '')).' ('.$row->employee_id.')';
+        }
+
+        return $data;
+    }
+
+    /**
+     * @return Collection<int, object>
+     */
+    public function feeTypes(): Collection
+    {
+        return DB::table('feetype')->orderBy('type')->get(['id', 'type', 'code']);
+    }
+
+    /**
+     * CI getFeeCollectionReport (transport deferred).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function feeCollectionReport(
+        string $startDate,
+        string $endDate,
+        ?int $feetypeId = null,
+        ?int $receivedBy = null,
+        ?int $classId = null,
+        ?int $sectionId = null
+    ): array {
+        $sessionId = (int) $this->currentSession->id();
+        $query = DB::table('student_fees_deposite')
+            ->join('fee_groups_feetype', 'fee_groups_feetype.id', '=', 'student_fees_deposite.fee_groups_feetype_id')
+            ->join('fee_groups', 'fee_groups.id', '=', 'fee_groups_feetype.fee_groups_id')
+            ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
+            ->join('student_fees_master', 'student_fees_master.id', '=', 'student_fees_deposite.student_fees_master_id')
+            ->leftJoin('student_session', 'student_session.id', '=', 'student_fees_master.student_session_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->where('fee_groups_feetype.session_id', $sessionId)
+            ->where('student_session.session_id', $sessionId)
+            ->select([
+                'student_fees_deposite.id',
+                'student_fees_deposite.student_fees_master_id',
+                'student_fees_deposite.fee_groups_feetype_id',
+                'student_fees_deposite.amount_detail',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.admission_no',
+                'student_session.class_id',
+                'classes.class',
+                'sections.section',
+                'student_session.section_id',
+                'student_session.student_id',
+                'fee_groups.name',
+                'feetype.type',
+                'feetype.code',
+                'feetype.is_system',
+                'student_fees_master.student_session_id',
+            ]);
+
+        if ($feetypeId) {
+            $query->where('fee_groups_feetype.feetype_id', $feetypeId);
+        }
+        if ($classId) {
+            $query->where('student_session.class_id', $classId);
+        }
+        if ($sectionId) {
+            $query->where('student_session.section_id', $sectionId);
+        }
+
+        $deposits = $query->get();
+        $staffMap = $this->staffNameMap();
+
+        return $this->expandDepositPayments(
+            $deposits,
+            $startDate,
+            $endDate,
+            $receivedBy,
+            onlineOnly: false,
+            staffMap: $staffMap
+        );
+    }
+
+    /**
+     * CI getOnlineFeeCollectionReport (transport deferred).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function onlineFeeCollectionReport(string $startDate, string $endDate): array
+    {
+        $sessionId = (int) $this->currentSession->id();
+        $deposits = DB::table('student_fees_deposite')
+            ->join('fee_groups_feetype', 'fee_groups_feetype.id', '=', 'student_fees_deposite.fee_groups_feetype_id')
+            ->join('fee_groups', 'fee_groups.id', '=', 'fee_groups_feetype.fee_groups_id')
+            ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
+            ->join('student_fees_master', 'student_fees_master.id', '=', 'student_fees_deposite.student_fees_master_id')
+            ->join('student_session', 'student_session.id', '=', 'student_fees_master.student_session_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->where('student_session.session_id', $sessionId)
+            ->orderBy('student_fees_deposite.id')
+            ->select([
+                'student_fees_deposite.id',
+                'student_fees_deposite.student_fees_master_id',
+                'student_fees_deposite.fee_groups_feetype_id',
+                'student_fees_deposite.amount_detail',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.admission_no',
+                'student_session.class_id',
+                'classes.class',
+                'sections.section',
+                'student_session.section_id',
+                'student_session.student_id',
+                'fee_groups.name',
+                'feetype.type',
+                'feetype.code',
+                'feetype.is_system',
+                'student_fees_master.student_session_id',
+            ])
+            ->get();
+
+        return $this->expandDepositPayments(
+            $deposits,
+            $startDate,
+            $endDate,
+            null,
+            onlineOnly: true,
+            staffMap: $this->staffNameMap()
+        );
+    }
+
+    /**
+     * CI controller grouping for collection_report results.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<list<array<string, mixed>>>
+     */
+    public function groupCollectionRows(array $rows, string $group): array
+    {
+        if ($group === '') {
+            $out = [];
+            foreach ($rows as $row) {
+                $out[] = [$row];
+            }
+
+            return $out;
+        }
+
+        $groupBy = match ($group) {
+            'class' => 'class_id',
+            'collection' => 'received_by',
+            'mode' => 'payment_mode',
+            default => null,
+        };
+        if ($groupBy === null) {
+            return array_map(fn ($row) => [$row], $rows);
+        }
+
+        $collection = [];
+        foreach ($rows as $row) {
+            $key = (string) ($row[$groupBy] ?? '');
+            $collection[$key][] = $row;
+        }
+
+        return array_values($collection);
+    }
+
+    /**
+     * @param  Collection<int, object>  $deposits
+     * @param  array<int, array{name: string, employee_id: string, id: int}>  $staffMap
+     * @return list<array<string, mixed>>
+     */
+    protected function expandDepositPayments(
+        Collection $deposits,
+        string $startDate,
+        string $endDate,
+        ?int $receivedBy,
+        bool $onlineOnly,
+        array $staffMap
+    ): array {
+        $st = strtotime($startDate);
+        $ed = strtotime($endDate);
+        $offlineModes = ['Cheque', 'Cash', 'DD'];
+        $return = [];
+
+        foreach ($deposits as $value) {
+            $payments = $this->paymentsInDateRange($value->amount_detail, $st, $ed, $receivedBy, $onlineOnly, $offlineModes);
+            foreach ($payments as $pay) {
+                $rid = isset($pay['received_by']) ? (int) $pay['received_by'] : 0;
+                $return[] = [
+                    'id' => (int) $value->id,
+                    'student_fees_master_id' => (int) $value->student_fees_master_id,
+                    'fee_groups_feetype_id' => (int) $value->fee_groups_feetype_id,
+                    'admission_no' => $value->admission_no,
+                    'firstname' => $value->firstname,
+                    'middlename' => $value->middlename,
+                    'lastname' => $value->lastname,
+                    'class_id' => (int) $value->class_id,
+                    'class' => $value->class,
+                    'section' => $value->section,
+                    'section_id' => (int) $value->section_id,
+                    'student_id' => (int) $value->student_id,
+                    'name' => $value->name,
+                    'type' => $value->type,
+                    'code' => $value->code,
+                    'student_session_id' => (int) $value->student_session_id,
+                    'is_system' => (int) ($value->is_system ?? 0),
+                    'amount' => (float) ($pay['amount'] ?? 0),
+                    'date' => (string) ($pay['date'] ?? ''),
+                    'amount_discount' => (float) ($pay['amount_discount'] ?? 0),
+                    'amount_fine' => (float) ($pay['amount_fine'] ?? 0),
+                    'description' => (string) ($pay['description'] ?? ''),
+                    'payment_mode' => (string) ($pay['payment_mode'] ?? ''),
+                    'inv_no' => (string) ($pay['inv_no'] ?? ''),
+                    'received_by' => $rid,
+                    'received_byname' => $staffMap[$rid] ?? ['name' => '', 'employee_id' => '', 'id' => 0],
+                ];
+            }
+        }
+
+        return $return;
+    }
+
+    /**
+     * @param  list<string>  $offlineModes
+     * @return list<array<string, mixed>>
+     */
+    protected function paymentsInDateRange(
+        mixed $raw,
+        int $st,
+        int $ed,
+        ?int $receivedBy,
+        bool $onlineOnly,
+        array $offlineModes
+    ): array {
+        $detail = [];
+        if (is_string($raw) && $raw !== '' && $raw !== '0') {
+            $decoded = json_decode($raw, true);
+            $detail = is_array($decoded) ? $decoded : [];
+        }
+
+        $matched = [];
+        for ($i = $st; $i <= $ed; $i += 86400) {
+            $find = date('Y-m-d', $i);
+            foreach ($detail as $entry) {
+                if (! is_array($entry)) {
+                    continue;
+                }
+                if (($entry['date'] ?? '') !== $find) {
+                    continue;
+                }
+                if ($receivedBy !== null) {
+                    if (! isset($entry['received_by']) || (int) $entry['received_by'] !== $receivedBy) {
+                        continue;
+                    }
+                }
+                if ($onlineOnly && in_array((string) ($entry['payment_mode'] ?? ''), $offlineModes, true)) {
+                    continue;
+                }
+                $matched[] = $entry;
+            }
+        }
+
+        return $matched;
+    }
+
+    /**
+     * @return array<int, array{name: string, employee_id: string, id: int}>
+     */
+    protected function staffNameMap(): array
+    {
+        $map = [];
+        foreach (DB::table('staff')->select(['id', 'name', 'surname', 'employee_id'])->get() as $row) {
+            $map[(int) $row->id] = [
+                'id' => (int) $row->id,
+                'name' => trim($row->name.' '.($row->surname ?? '')),
+                'employee_id' => (string) $row->employee_id,
+            ];
+        }
+
+        return $map;
     }
 
     /**
