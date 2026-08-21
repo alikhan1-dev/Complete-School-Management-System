@@ -10,8 +10,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Financereports: hub + fee reports + remark/payroll/admission + income/expense (+ balance).
- * Transport fee lines deferred. Class-teacher scope deferred. Income/expense group DT deferred.
+ * CI Financereports: hub + fee reports + remark/payroll/admission + income/expense list/group/balance.
+ * Transport fee lines deferred. Class-teacher scope deferred.
  */
 class FinanceReportService
 {
@@ -1115,6 +1115,151 @@ class FinanceReportService
             ])
             ->get()
             ->all();
+    }
+
+    /**
+     * @return Collection<int, object>
+     */
+    public function incomeHeads(): Collection
+    {
+        return DB::table('income_head')->orderBy('income_category')->get(['id', 'income_category']);
+    }
+
+    /**
+     * @return Collection<int, object>
+     */
+    public function expenseHeads(): Collection
+    {
+        return DB::table('expense_head')->orderBy('exp_category')->get(['id', 'exp_category']);
+    }
+
+    /**
+     * CI Income_model::searchincomegroup (+ DT blank category / subtotals built in PHP).
+     *
+     * @return list<array{type: string, category?: string, id?: int, name?: string, date?: string, invoice_no?: string, amount?: float}>
+     */
+    public function incomeGroupReport(string $startDate, string $endDate, ?int $headId = null): array
+    {
+        $query = DB::table('income')
+            ->join('income_head', 'income.income_head_id', '=', 'income_head.id')
+            ->where('income.date', '>=', $startDate)
+            ->where('income.date', '<=', $endDate)
+            ->orderByDesc('income.income_head_id')
+            ->orderBy('income.date')
+            ->orderBy('income.id')
+            ->select([
+                'income.id',
+                'income.name',
+                'income.invoice_no',
+                'income.date',
+                'income.amount',
+                'income_head.income_category as category',
+                'income_head.id as head_id',
+            ]);
+
+        if ($headId) {
+            $query->where('income.income_head_id', $headId);
+        }
+
+        return $this->buildGroupedFinanceRows($query->get()->all());
+    }
+
+    /**
+     * CI Expensehead_model::searchexpensegroup (+ blank category / subtotals).
+     *
+     * @return list<array{type: string, category?: string, id?: int, name?: string, date?: string, invoice_no?: string, amount?: float}>
+     */
+    public function expenseGroupReport(string $startDate, string $endDate, ?int $headId = null): array
+    {
+        $query = DB::table('expenses')
+            ->join('expense_head', 'expenses.exp_head_id', '=', 'expense_head.id')
+            ->where('expenses.date', '>=', $startDate)
+            ->where('expenses.date', '<=', $endDate)
+            ->orderByDesc('expenses.exp_head_id')
+            ->orderBy('expenses.date')
+            ->orderBy('expenses.id')
+            ->select([
+                'expenses.id',
+                'expenses.name',
+                'expenses.invoice_no',
+                'expenses.date',
+                'expenses.amount',
+                'expense_head.exp_category as category',
+                'expenses.exp_head_id as head_id',
+            ]);
+
+        if ($headId) {
+            $query->where('expenses.exp_head_id', $headId);
+        }
+
+        return $this->buildGroupedFinanceRows($query->get()->all());
+    }
+
+    /**
+     * Port CI dtincomegroupreport / dtexpensegroupreport row builder.
+     *
+     * @param  list<object>  $rows
+     * @return list<array{type: string, category?: string, id?: int, name?: string, date?: string, invoice_no?: string, amount?: float}>
+     */
+    protected function buildGroupedFinanceRows(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        $byHead = [];
+        foreach ($rows as $row) {
+            $byHead[(int) $row->head_id][] = $row;
+        }
+
+        $out = [];
+        $prevHeadId = 0;
+        $count = 0;
+        $grand = 0.0;
+
+        foreach ($rows as $value) {
+            $headId = (int) $value->head_id;
+            $amount = (float) $value->amount;
+            $grand += $amount;
+
+            if ($prevHeadId === $headId) {
+                $category = '';
+                $count++;
+            } else {
+                $category = (string) $value->category;
+                $count = 0;
+            }
+
+            $out[] = [
+                'type' => 'row',
+                'category' => $category,
+                'id' => (int) $value->id,
+                'name' => (string) $value->name,
+                'date' => (string) $value->date,
+                'invoice_no' => (string) $value->invoice_no,
+                'amount' => $amount,
+            ];
+
+            $prevHeadId = $headId;
+
+            if ($count === (count($byHead[$headId]) - 1)) {
+                $sub = 0.0;
+                foreach ($byHead[$headId] as $headRow) {
+                    $sub += (float) $headRow->amount;
+                }
+                $out[] = [
+                    'type' => 'subtotal',
+                    'amount' => $sub,
+                ];
+            }
+        }
+
+        $out[] = [
+            'type' => 'total',
+            'amount' => $grand,
+        ];
+
+        return $out;
     }
 
     /**

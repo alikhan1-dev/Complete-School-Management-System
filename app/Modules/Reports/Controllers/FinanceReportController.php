@@ -540,6 +540,94 @@ class FinanceReportController extends Controller
         ], $this->navFlags()));
     }
 
+    public function incomegroup(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('income_group_report', 'can_view'), 403);
+
+        $filters = [
+            'search_type' => $request->input('search_type', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+            'head' => $request->input('head', ''),
+        ];
+        $rows = [];
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'search_type' => ['required'],
+            ], [
+                'search_type.required' => 'The Search Type field is required.',
+            ]);
+            $searched = true;
+            $range = $this->reports->dateRange(
+                (string) $filters['search_type'],
+                $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+                $filters['date_to'] !== '' ? (string) $filters['date_to'] : null
+            );
+            $rows = $this->reports->incomeGroupReport(
+                $range['from'],
+                $range['to'],
+                $filters['head'] !== '' ? (int) $filters['head'] : null
+            );
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.income_group_report'),
+            'contentView' => 'reports::admin.finance.income_group',
+            'filters' => $filters,
+            'rows' => $rows,
+            'searched' => $searched,
+            'searchlist' => $this->reports->searchDurationTypes(),
+            'headlist' => $this->reports->incomeHeads(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function expensegroup(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('expense_group_report', 'can_view'), 403);
+
+        $filters = [
+            'search_type' => $request->input('search_type', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+            'head' => $request->input('head', ''),
+        ];
+        $rows = [];
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'search_type' => ['required'],
+            ], [
+                'search_type.required' => 'The Search Type field is required.',
+            ]);
+            $searched = true;
+            $range = $this->reports->dateRange(
+                (string) $filters['search_type'],
+                $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+                $filters['date_to'] !== '' ? (string) $filters['date_to'] : null
+            );
+            $rows = $this->reports->expenseGroupReport(
+                $range['from'],
+                $range['to'],
+                $filters['head'] !== '' ? (int) $filters['head'] : null
+            );
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.expense_group_report'),
+            'contentView' => 'reports::admin.finance.expense_group',
+            'filters' => $filters,
+            'rows' => $rows,
+            'searched' => $searched,
+            'searchlist' => $this->reports->searchDurationTypes(),
+            'headlist' => $this->reports->expenseHeads(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
     protected function canOpenHub(): bool
     {
         return $this->permissions->hasPrivilege('balance_fees_statement', 'can_view')

@@ -320,6 +320,8 @@ class FinanceReportFlowTest extends TestCase
         $this->get('/financereports/incomeexpensebalancereport')->assertRedirect();
         $this->get('/financereports/income')->assertRedirect();
         $this->get('/financereports/expense')->assertRedirect();
+        $this->get('/financereports/incomegroup')->assertRedirect();
+        $this->get('/financereports/expensegroup')->assertRedirect();
     }
 
     public function test_finance_report_slice_one_flows(): void
@@ -646,5 +648,55 @@ class FinanceReportFlowTest extends TestCase
             ->assertSee('EX-'.$suffix, false)
             ->assertSee('IEB-EX-'.$suffix, false)
             ->assertSee('250.00', false);
+
+        $this->cleanupIncomeIds[] = (int) DB::table('income')->insertGetId([
+            'income_head_id' => $incomeHeadId,
+            'name' => 'Income2 '.$suffix,
+            'invoice_no' => 'IN2-'.$suffix,
+            'date' => $today,
+            'amount' => 100,
+            'note' => '',
+            'is_active' => 'yes',
+            'documents' => '',
+            'is_deleted' => 'no',
+        ]);
+
+        $this->post('/financereports/incomegroup', [])
+            ->assertSessionHasErrors(['search_type']);
+
+        $incomeGroup = $this->post('/financereports/incomegroup', [
+            'search_type' => 'today',
+            'head' => $incomeHeadId,
+        ])->assertOk();
+        $incomeGroup->assertSee('IEB-IN-'.$suffix, false)
+            ->assertSee('Income '.$suffix, false)
+            ->assertSee('Income2 '.$suffix, false)
+            ->assertSee(__('system.sub_total'), false)
+            ->assertSee('1100.00', false);
+
+        $this->cleanupExpenseIds[] = (int) DB::table('expenses')->insertGetId([
+            'exp_head_id' => $expenseHeadId,
+            'name' => 'Expense2 '.$suffix,
+            'invoice_no' => 'EX2-'.$suffix,
+            'date' => $today,
+            'amount' => 50,
+            'documents' => '',
+            'note' => '',
+            'is_active' => 'yes',
+            'is_deleted' => 'no',
+        ]);
+
+        $this->post('/financereports/expensegroup', [])
+            ->assertSessionHasErrors(['search_type']);
+
+        $expenseGroup = $this->post('/financereports/expensegroup', [
+            'search_type' => 'today',
+            'head' => $expenseHeadId,
+        ])->assertOk();
+        $expenseGroup->assertSee('IEB-EX-'.$suffix, false)
+            ->assertSee('Expense '.$suffix, false)
+            ->assertSee('Expense2 '.$suffix, false)
+            ->assertSee(__('system.sub_total'), false)
+            ->assertSee('300.00', false);
     }
 }

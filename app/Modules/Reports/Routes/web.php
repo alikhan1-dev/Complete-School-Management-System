@@ -118,4 +118,8 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.finance.income');
     Route::match(['get', 'post'], 'financereports/expense', [FinanceReportController::class, 'expense'])
         ->name('reports.finance.expense');
+    Route::match(['get', 'post'], 'financereports/incomegroup', [FinanceReportController::class, 'incomegroup'])
+        ->name('reports.finance.income_group');
+    Route::match(['get', 'post'], 'financereports/expensegroup', [FinanceReportController::class, 'expensegroup'])
+        ->name('reports.finance.expense_group');
 });
