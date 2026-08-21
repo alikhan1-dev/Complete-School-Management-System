@@ -193,6 +193,11 @@ class StudentInformationReportFlowTest extends TestCase
         $this->get('/report/admissionreport')->assertRedirect();
         $this->get('/report/logindetailreport')->assertRedirect();
         $this->get('/report/parentlogindetailreport')->assertRedirect();
+        $this->get('/report/class_subject')->assertRedirect();
+        $this->get('/report/admission_report')->assertRedirect();
+        $this->get('/report/sibling_report')->assertRedirect();
+        $this->get('/report/student_profile')->assertRedirect();
+        $this->get('/report/online_admission_report')->assertRedirect();
     }
 
     public function test_superadmin_can_open_hub_and_student_report(): void
@@ -369,5 +374,163 @@ class StudentInformationReportFlowTest extends TestCase
         $this->assertNotNull($parentRow);
         $this->assertSame($parentUsername, $parentRow[2]);
         $this->assertNotSame('', (string) $parentRow[3]);
+    }
+
+    public function test_class_subject_admission_sibling_profile_and_online_admission_reports(): void
+    {
+        $ctx = $this->seedStudent();
+        $student = $ctx['student'];
+        $classId = $ctx['class']->id;
+        $sectionId = $ctx['section']->id;
+        $admissionNo = $student->admission_no;
+        $today = now()->toDateString();
+        DB::table('students')->where('id', $student->id)->update(['admission_date' => $today]);
+
+        $this->get('/report/class_subject')
+            ->assertOk()
+            ->assertSee('Class Subject Report', false);
+        $this->post('/report/class_subject', [])
+            ->assertSessionHasErrors(['class_id', 'section_id']);
+        $this->post('/report/class_subject', [
+            'class_id' => $classId,
+            'section_id' => $sectionId,
+        ])->assertOk();
+
+        $this->get('/report/admission_report')
+            ->assertOk()
+            ->assertSee('Admission Report', false);
+        $this->post('/report/searchreportvalidation', [])
+            ->assertOk()
+            ->assertJsonPath('status', 0)
+            ->assertSee('The Search Type field is required.', false);
+        $okAdmission = $this->post('/report/searchreportvalidation', [
+            'search_type' => 'this_year',
+        ])->assertOk();
+        $this->assertSame(1, (int) $okAdmission->json('status'));
+
+        $admissionJson = $this->post('/report/dtadmissionreport', [
+            'draw' => 1,
+            'search_type' => 'this_year',
+        ])->assertOk()->json();
+        $this->assertGreaterThan(0, (int) $admissionJson['recordsTotal']);
+        $admissionRow = collect($admissionJson['data'])->first(
+            fn ($row) => is_array($row) && str_contains((string) ($row[0] ?? ''), $admissionNo)
+        );
+        $this->assertNotNull($admissionRow);
+        $this->assertStringContainsString('student/view/'.$student->id, (string) $admissionRow[1]);
+
+        $siblingAdmission = 'SIB'.uniqid();
+        $this->post('/student/create', [
+            'admission_no' => $siblingAdmission,
+            'firstname' => 'Sibling',
+            'lastname' => 'Pupil',
+            'gender' => 'Female',
+            'dob' => '2013-02-02',
+            'class_id' => $classId,
+            'section_id' => $sectionId,
+            'guardian_is' => 'father',
+            'guardian_name' => 'Dad',
+            'guardian_phone' => '03001112233',
+            'sibling_id' => $student->id,
+        ])->assertRedirect();
+        $sibling = Student::query()->where('admission_no', $siblingAdmission)->firstOrFail();
+        $this->cleanupStudentIds[] = $sibling->id;
+        $parentId = (int) DB::table('students')->where('id', $student->id)->value('parent_id');
+        $this->assertGreaterThan(0, $parentId);
+        DB::table('students')->where('id', $sibling->id)->update(['parent_id' => $parentId]);
+
+        $this->get('/report/sibling_report')
+            ->assertOk()
+            ->assertSee('Sibling Report', false);
+        $this->post('/report/sibling_report', [
+            'class_id' => $classId,
+            'section_id' => $sectionId,
+        ])->assertOk()
+            ->assertSee($admissionNo, false)
+            ->assertSee($siblingAdmission, false);
+
+        $this->get('/report/student_profile')
+            ->assertOk()
+            ->assertSee('Student Profile', false);
+        $this->post('/report/student_profile', [
+            'class_id' => $classId,
+            'section_id' => $sectionId,
+        ])->assertOk()
+            ->assertSee($admissionNo, false)
+            ->assertSee('Ratio', false);
+
+        $reference = 'OAR'.uniqid();
+        DB::table('online_admissions')->insert([
+            'reference_no' => $reference,
+            'admission_no' => $admissionNo,
+            'firstname' => 'Online',
+            'middlename' => '',
+            'lastname' => 'Applicant',
+            'mobileno' => '03001110000',
+            'email' => '',
+            'dob' => '2012-01-01',
+            'gender' => 'Male',
+            'religion' => '',
+            'cast' => '',
+            'blood_group' => '',
+            'height' => '',
+            'weight' => '',
+            'current_address' => '',
+            'permanent_address' => '',
+            'bank_account_no' => '',
+            'bank_name' => '',
+            'ifsc_code' => '',
+            'adhar_no' => '',
+            'samagra_id' => '',
+            'rte' => 'No',
+            'guardian_is' => '',
+            'guardian_name' => '',
+            'guardian_relation' => '',
+            'guardian_phone' => '',
+            'guardian_occupation' => '',
+            'guardian_email' => '',
+            'guardian_address' => '',
+            'father_name' => '',
+            'father_phone' => '',
+            'father_occupation' => '',
+            'mother_name' => '',
+            'mother_phone' => '',
+            'mother_occupation' => '',
+            'previous_school' => '',
+            'note' => '',
+            'father_pic' => '',
+            'mother_pic' => '',
+            'guardian_pic' => '',
+            'image' => '',
+            'document' => '',
+            'form_status' => 1,
+            'paid_status' => 0,
+            'is_enroll' => 1,
+            'class_section_id' => $ctx['classSectionId'],
+            'route_id' => 0,
+            'vehroute_id' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $onlineId = (int) DB::table('online_admissions')->where('reference_no', $reference)->value('id');
+
+        $this->get('/report/online_admission_report')
+            ->assertOk()
+            ->assertSee('Online Admission Report', false);
+        $check = $this->post('/report/checkvalidation', [
+            'class_id' => '',
+            'section_id' => '',
+            'status' => '',
+        ])->assertOk();
+        $this->assertSame(1, (int) $check->json('status'));
+
+        $onlineJson = $this->post('/report/dtonlineadmissionreportlist', [
+            'draw' => 1,
+        ])->assertOk()->json();
+        $onlineRow = collect($onlineJson['data'])->first(fn ($row) => ($row[0] ?? null) === $reference);
+        $this->assertNotNull($onlineRow);
+        $this->assertStringContainsString('label-success', (string) $onlineRow[7]);
+
+        DB::table('online_admissions')->where('id', $onlineId)->delete();
     }
 }

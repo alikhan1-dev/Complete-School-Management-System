@@ -41,4 +41,24 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.student_login.datatable');
     Route::match(['get', 'post'], 'report/dtparentcredentialreportlist', [StudentInformationReportController::class, 'dtparentcredentialreportlist'])
         ->name('reports.parent_login.datatable');
+
+    Route::match(['get', 'post'], 'report/class_subject', [StudentInformationReportController::class, 'class_subject'])
+        ->name('reports.class_subject');
+    Route::get('report/admission_report', [StudentInformationReportController::class, 'admission_report'])
+        ->name('reports.admission_report');
+    Route::post('report/admission_report', [StudentInformationReportController::class, 'admission_reportSearch']);
+    Route::post('report/searchreportvalidation', [StudentInformationReportController::class, 'searchreportvalidation'])
+        ->name('reports.admission_report.validation');
+    Route::match(['get', 'post'], 'report/dtadmissionreport', [StudentInformationReportController::class, 'dtadmissionreport'])
+        ->name('reports.admission_report.datatable');
+    Route::match(['get', 'post'], 'report/sibling_report', [StudentInformationReportController::class, 'sibling_report'])
+        ->name('reports.sibling');
+    Route::match(['get', 'post'], 'report/student_profile', [StudentInformationReportController::class, 'student_profile'])
+        ->name('reports.student_profile');
+    Route::match(['get', 'post'], 'report/online_admission_report', [StudentInformationReportController::class, 'online_admission_report'])
+        ->name('reports.online_admission');
+    Route::post('report/checkvalidation', [StudentInformationReportController::class, 'checkvalidation'])
+        ->name('reports.online_admission.validation');
+    Route::match(['get', 'post'], 'report/dtonlineadmissionreportlist', [StudentInformationReportController::class, 'dtonlineadmissionreportlist'])
+        ->name('reports.online_admission.datatable');
 });

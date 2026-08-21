@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI Report student information hub + student / class-section / ratio / guardian / history / login reports.
+ * CI Report student information hub + student / class-section / ratio / guardian / history / login / class-subject / admission / sibling / profile / online admission reports.
  */
 class StudentInformationReportController extends Controller
 {
@@ -324,6 +324,261 @@ class StudentInformationReportController extends Controller
     {
         abort_unless($this->permissions->hasPrivilege('student_login_credential_report', 'can_view'), 403);
         $payload = $this->reports->parentCredentialDataTable($request);
+
+        return DataTableResponse::make(
+            $payload['draw'],
+            $payload['recordsTotal'],
+            $payload['recordsFiltered'],
+            $payload['data'],
+        );
+    }
+
+    public function class_subject(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('class_subject_report', 'can_view'), 403);
+
+        $filters = [
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+        ];
+        $subjects = [];
+        $searched = $request->isMethod('post');
+        if ($searched) {
+            $request->validate([
+                'class_id' => ['required'],
+                'section_id' => ['required'],
+            ], [
+                'class_id.required' => 'The Class field is required.',
+                'section_id.required' => 'The Section field is required.',
+            ]);
+            $subjects = $this->reports->classSubjectGroups((int) $filters['class_id'], (int) $filters['section_id']);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.class_subject_report'),
+            'contentView' => 'reports::admin.student_information.class_subject',
+            'classes' => $this->reports->classes(),
+            'filters' => $filters,
+            'subjects' => $subjects,
+            'searched' => $searched,
+        ], $this->navFlags()));
+    }
+
+    public function admission_report(): View
+    {
+        abort_unless($this->permissions->hasPrivilege('admission_report', 'can_view'), 403);
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.admission_report'),
+            'contentView' => 'reports::admin.student_information.admission_report',
+            'searchTypes' => $this->reports->searchTypes(),
+            'filters' => ['search_type' => '', 'date_from' => '', 'date_to' => ''],
+            'rows' => [],
+            'searched' => false,
+            'filter_label' => '',
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function admission_reportSearch(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('admission_report', 'can_view'), 403);
+        $request->validate([
+            'search_type' => ['required'],
+        ], [
+            'search_type.required' => 'The Search Type field is required.',
+        ]);
+        $payload = $this->reports->admissionReportDataTable($request);
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.admission_report'),
+            'contentView' => 'reports::admin.student_information.admission_report',
+            'searchTypes' => $this->reports->searchTypes(),
+            'filters' => [
+                'search_type' => $request->input('search_type', ''),
+                'date_from' => $request->input('date_from', ''),
+                'date_to' => $request->input('date_to', ''),
+            ],
+            'rows' => $payload['data'],
+            'searched' => true,
+            'filter_label' => $payload['filter_label'],
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function searchreportvalidation(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('admission_report', 'can_view'), 403);
+        $searchType = $request->input('search_type');
+        if ($searchType === null || $searchType === '') {
+            return response()->json([
+                'status' => 0,
+                'error' => [
+                    'search_type' => '<p>The Search Type field is required.</p>',
+                ],
+            ]);
+        }
+
+        $dateFrom = '';
+        $dateTo = '';
+        if ($searchType === 'period') {
+            $dateFrom = (string) $request->input('date_from', '');
+            $dateTo = (string) $request->input('date_to', '');
+        }
+
+        return response()->json([
+            'status' => 1,
+            'error' => '',
+            'params' => [
+                'search_type' => $searchType,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+            ],
+        ]);
+    }
+
+    public function dtadmissionreport(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('admission_report', 'can_view'), 403);
+        $payload = $this->reports->admissionReportDataTable($request);
+
+        return DataTableResponse::make(
+            $payload['draw'],
+            $payload['recordsTotal'],
+            $payload['recordsFiltered'],
+            $payload['data'],
+        );
+    }
+
+    public function sibling_report(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('sibling_report', 'can_view'), 403);
+
+        $filters = [
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+        ];
+        $groups = [];
+        $searched = $request->isMethod('post');
+        if ($searched) {
+            $request->validate([
+                'class_id' => ['required'],
+                'section_id' => ['required'],
+            ], [
+                'class_id.required' => 'The Class field is required.',
+                'section_id.required' => 'The Section field is required.',
+            ]);
+            $groups = $this->reports->siblingGroups((int) $filters['class_id'], (int) $filters['section_id']);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.sibling_report'),
+            'contentView' => 'reports::admin.student_information.sibling',
+            'classes' => $this->reports->classes(),
+            'filters' => $filters,
+            'groups' => $groups,
+            'searched' => $searched,
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function student_profile(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('student_profile', 'can_view'), 403);
+
+        $filters = [
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+            'search_type' => $request->input('search_type', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+        $rows = collect();
+        $filterLabel = '';
+        $searched = $request->isMethod('post');
+        if ($searched) {
+            $request->validate([
+                'class_id' => ['required'],
+                'section_id' => ['required'],
+            ], [
+                'class_id.required' => 'The Class field is required.',
+                'section_id.required' => 'The Section field is required.',
+            ]);
+            $from = null;
+            $to = null;
+            if ($filters['search_type'] !== '') {
+                $range = $this->reports->dateRange(
+                    (string) $filters['search_type'],
+                    $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+                    $filters['date_to'] !== '' ? (string) $filters['date_to'] : null,
+                );
+                $from = $range['from'];
+                $to = $range['to'];
+                $filterLabel = $this->reports->filterLabel($from, $to);
+            }
+            $rows = $this->reports->studentProfileRows((int) $filters['class_id'], (int) $filters['section_id'], $from, $to);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.student_profile'),
+            'contentView' => 'reports::admin.student_information.student_profile',
+            'classes' => $this->reports->classes(),
+            'searchTypes' => $this->reports->searchTypes(),
+            'filters' => $filters,
+            'rows' => $rows,
+            'searched' => $searched,
+            'filter_label' => $filterLabel,
+            'reports' => $this->reports,
+            'adm_auto_insert' => $this->reports->admAutoInsert(),
+        ], $this->navFlags()));
+    }
+
+    public function online_admission_report(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('online_admission_report', 'can_view'), 403);
+
+        $filters = [
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+            'status' => $request->input('status', ''),
+        ];
+        $rows = [];
+        $searched = $request->isMethod('post') || $request->filled('search');
+        if ($searched) {
+            $payload = $this->reports->onlineAdmissionDataTable($request);
+            $rows = $payload['data'];
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.online_admission_report'),
+            'contentView' => 'reports::admin.student_information.online_admission',
+            'classes' => $this->reports->classes(),
+            'filters' => $filters,
+            'rows' => $rows,
+            'searched' => $searched,
+            'paymentOn' => $this->reports->onlineAdmissionPaymentEnabled(),
+        ], $this->navFlags()));
+    }
+
+    public function checkvalidation(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('online_admission_report', 'can_view'), 403);
+
+        return response()->json([
+            'status' => 1,
+            'error' => '',
+            'params' => [
+                'class_id' => $request->input('class_id'),
+                'section_id' => $request->input('section_id'),
+                'status' => $request->input('status'),
+            ],
+        ]);
+    }
+
+    public function dtonlineadmissionreportlist(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('online_admission_report', 'can_view'), 403);
+        $payload = $this->reports->onlineAdmissionDataTable($request);
 
         return DataTableResponse::make(
             $payload['draw'],
