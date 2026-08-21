@@ -10,8 +10,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Financereports: hub + balance/statement/daily + collection + online fees.
- * Transport fee lines deferred. Class-teacher scope deferred.
+ * CI Financereports: hub + fee/collection/online + remark/payroll/onlineadmission + income/expense balance.
+ * Transport fee lines deferred. Class-teacher scope deferred. Income/expense DT reports deferred.
  */
 class FinanceReportService
 {
@@ -807,6 +807,301 @@ class FinanceReportService
         }
 
         return array_values($collection);
+    }
+
+    /**
+     * CI Financereports::duefeesremark / printduefeesremark (transport deferred).
+     * Uses due_date < asOfDate (CI strict less-than, not <= used by dueFeesStatement).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function dueFeesWithRemark(int $classId, int $sectionId, ?string $asOfDate = null): array
+    {
+        $date = $asOfDate ?: now()->toDateString();
+        $sessionId = (int) $this->currentSession->id();
+
+        $dues = DB::table('student_fees_master')
+            ->join('fee_session_groups', 'fee_session_groups.id', '=', 'student_fees_master.fee_session_group_id')
+            ->join('fee_groups', 'fee_groups.id', '=', 'fee_session_groups.fee_groups_id')
+            ->join('fee_groups_feetype', 'fee_groups_feetype.fee_session_group_id', '=', 'student_fees_master.fee_session_group_id')
+            ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
+            ->leftJoin('student_fees_deposite', function ($join) {
+                $join->on('student_fees_deposite.student_fees_master_id', '=', 'student_fees_master.id')
+                    ->on('student_fees_deposite.fee_groups_feetype_id', '=', 'fee_groups_feetype.id');
+            })
+            ->join('student_session', 'student_session.id', '=', 'student_fees_master.student_session_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->leftJoin('categories', 'students.category_id', '=', 'categories.id')
+            ->where('students.is_active', 'yes')
+            ->where('student_session.session_id', $sessionId)
+            ->where('student_session.class_id', $classId)
+            ->where('student_session.section_id', $sectionId)
+            ->where('fee_groups_feetype.due_date', '<', $date)
+            ->orderBy('student_fees_master.id')
+            ->select([
+                'student_fees_master.amount as previous_balance_amount',
+                'student_fees_deposite.amount_detail',
+                'fee_groups_feetype.amount',
+                'fee_groups.is_system',
+                'fee_groups.name as fee_group',
+                'feetype.type as fee_type',
+                'feetype.code as fee_code',
+                'student_session.id as student_session_id',
+                'students.id',
+                'classes.class',
+                'sections.id as section_id',
+                'sections.section',
+                'students.admission_no',
+                'students.roll_no',
+                'students.admission_date',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.image',
+                'students.mobileno',
+                'students.email',
+                'students.state',
+                'students.city',
+                'students.pincode',
+                'students.religion',
+                'students.dob',
+                'students.current_address',
+                'students.permanent_address',
+                DB::raw('IFNULL(students.category_id, 0) as category_id'),
+                DB::raw('IFNULL(categories.category, "") as category'),
+                'students.adhar_no',
+                'students.samagra_id',
+                'students.bank_account_no',
+                'students.bank_name',
+                'students.ifsc_code',
+                'students.guardian_name',
+                'students.guardian_relation',
+                'students.guardian_phone',
+                'students.guardian_address',
+                'students.is_active',
+                'students.father_name',
+                'students.rte',
+                'students.gender',
+            ])
+            ->get();
+
+        $students = [];
+        foreach ($dues as $row) {
+            $isSystem = (int) $row->is_system === 1;
+            $amtDue = $isSystem
+                ? (float) $row->previous_balance_amount
+                : (float) $row->amount;
+            $paid = $this->depositBreakdown($row->amount_detail);
+
+            if ($amtDue <= ($paid['amount'] + $paid['discount'])) {
+                continue;
+            }
+
+            $ssid = (int) $row->student_session_id;
+            if (! isset($students[$ssid])) {
+                $students[$ssid] = [
+                    'id' => (int) $row->id,
+                    'student_session_id' => $ssid,
+                    'class' => $row->class,
+                    'section_id' => (int) $row->section_id,
+                    'section' => $row->section,
+                    'admission_no' => $row->admission_no,
+                    'roll_no' => $row->roll_no,
+                    'admission_date' => $row->admission_date,
+                    'firstname' => $row->firstname,
+                    'middlename' => $row->middlename,
+                    'lastname' => $row->lastname,
+                    'image' => $row->image,
+                    'mobileno' => $row->mobileno,
+                    'email' => $row->email,
+                    'state' => $row->state,
+                    'city' => $row->city,
+                    'pincode' => $row->pincode,
+                    'religion' => $row->religion,
+                    'dob' => $row->dob,
+                    'current_address' => $row->current_address,
+                    'permanent_address' => $row->permanent_address,
+                    'category_id' => (int) $row->category_id,
+                    'category' => $row->category,
+                    'adhar_no' => $row->adhar_no,
+                    'samagra_id' => $row->samagra_id,
+                    'bank_account_no' => $row->bank_account_no,
+                    'bank_name' => $row->bank_name,
+                    'ifsc_code' => $row->ifsc_code,
+                    'guardian_name' => $row->guardian_name,
+                    'guardian_relation' => $row->guardian_relation,
+                    'guardian_phone' => $row->guardian_phone,
+                    'guardian_address' => $row->guardian_address,
+                    'is_active' => $row->is_active,
+                    'father_name' => $row->father_name,
+                    'rte' => $row->rte,
+                    'gender' => $row->gender,
+                    'fees' => [],
+                ];
+            }
+
+            $students[$ssid]['fees'][] = [
+                'is_system' => $isSystem ? 1 : 0,
+                'amount' => $amtDue,
+                'amount_deposite' => $paid['amount'],
+                'amount_discount' => $paid['discount'],
+                'amount_fine' => $paid['fine'],
+                'fee_group' => $row->fee_group,
+                'fee_type' => $row->fee_type,
+                'fee_code' => $row->fee_code,
+            ];
+        }
+
+        return $students;
+    }
+
+    /**
+     * CI Payroll_model::getbetweenpayrollReport (superadmin hide deferred).
+     *
+     * @return list<object>
+     */
+    public function betweenPayrollReport(string $startDate, string $endDate): array
+    {
+        return DB::table('staff')
+            ->join('staff_payslip', 'staff_payslip.staff_id', '=', 'staff.id')
+            ->leftJoin('staff_designation', 'staff.designation', '=', 'staff_designation.id')
+            ->leftJoin('department', 'staff.department', '=', 'department.id')
+            ->leftJoin('staff_roles', 'staff_roles.staff_id', '=', 'staff.id')
+            ->leftJoin('roles', 'staff_roles.role_id', '=', 'roles.id')
+            ->whereRaw("DATE_FORMAT(staff_payslip.payment_date,'%Y-%m-%d') BETWEEN ? AND ?", [$startDate, $endDate])
+            ->select([
+                'staff.id',
+                'staff.employee_id',
+                'staff.name',
+                'roles.name as user_type',
+                'staff.surname',
+                'staff_designation.designation',
+                'department.department_name as department',
+                'staff_payslip.*',
+            ])
+            ->get()
+            ->all();
+    }
+
+    /**
+     * CI Onlinestudent_model::getOnlineAdmissionFeeCollectionReport.
+     *
+     * @return list<object>
+     */
+    public function onlineAdmissionFeeCollectionReport(string $startDate, string $endDate): array
+    {
+        return DB::table('online_admissions')
+            ->join('online_admission_payment', 'online_admissions.id', '=', 'online_admission_payment.online_admission_id')
+            ->leftJoin('class_sections', 'class_sections.id', '=', 'online_admissions.class_section_id')
+            ->leftJoin('classes', 'class_sections.class_id', '=', 'classes.id')
+            ->leftJoin('sections', 'sections.id', '=', 'class_sections.section_id')
+            ->whereRaw("DATE_FORMAT(online_admission_payment.date, '%Y-%m-%d') >= ?", [$startDate])
+            ->whereRaw("DATE_FORMAT(online_admission_payment.date, '%Y-%m-%d') <= ?", [$endDate])
+            ->select([
+                'online_admissions.id',
+                'online_admissions.reference_no',
+                'online_admissions.firstname',
+                'online_admissions.middlename',
+                'online_admissions.lastname',
+                'online_admissions.admission_no',
+                'online_admissions.email',
+                'online_admissions.mobileno',
+                'classes.class',
+                'sections.section',
+                'online_admission_payment.payment_mode',
+                'online_admission_payment.transaction_id',
+                'online_admission_payment.date',
+                'online_admission_payment.paid_amount',
+            ])
+            ->get()
+            ->all();
+    }
+
+    /**
+     * CI Income_model::incomeexpensebalancereport (UNION ordered by date ASC).
+     *
+     * @return list<array{date: string, name: string, category: string, note: string, amount: float, source: string}>
+     */
+    public function incomeExpenseBalanceReport(string $startDate, string $endDate): array
+    {
+        $expenses = DB::table('expenses')
+            ->join('expense_head', 'expense_head.id', '=', 'expenses.exp_head_id')
+            ->whereRaw("DATE_FORMAT(expenses.date, '%Y-%m-%d') >= ?", [$startDate])
+            ->whereRaw("DATE_FORMAT(expenses.date, '%Y-%m-%d') <= ?", [$endDate])
+            ->select([
+                'expenses.date',
+                'expenses.name',
+                'expenses.note',
+                'expenses.amount',
+                DB::raw("'expenses' AS source"),
+                'expense_head.exp_category AS category',
+            ]);
+
+        $income = DB::table('income')
+            ->join('income_head', 'income_head.id', '=', 'income.income_head_id')
+            ->whereRaw("DATE_FORMAT(income.date, '%Y-%m-%d') >= ?", [$startDate])
+            ->whereRaw("DATE_FORMAT(income.date, '%Y-%m-%d') <= ?", [$endDate])
+            ->select([
+                'income.date',
+                'income.name',
+                'income.note',
+                'income.amount',
+                DB::raw("'income' AS source"),
+                'income_head.income_category AS category',
+            ]);
+
+        return $expenses
+            ->union($income)
+            ->orderBy('date')
+            ->get()
+            ->map(fn ($row) => [
+                'date' => (string) $row->date,
+                'name' => (string) $row->name,
+                'category' => (string) $row->category,
+                'note' => (string) ($row->note ?? ''),
+                'amount' => (float) $row->amount,
+                'source' => (string) $row->source,
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array{name: string, class: string}|null
+     */
+    public function classLabel(int $classId): ?array
+    {
+        $row = DB::table('classes')->where('id', $classId)->first();
+
+        return $row ? ['name' => (string) $row->class, 'class' => (string) $row->class] : null;
+    }
+
+    /**
+     * @return array{section: string}|null
+     */
+    public function sectionLabel(int $sectionId): ?array
+    {
+        $row = DB::table('sections')->where('id', $sectionId)->first();
+
+        return $row ? ['section' => (string) $row->section] : null;
+    }
+
+    /**
+     * @return array{amount: float, discount: float, fine: float}
+     */
+    protected function depositBreakdown(mixed $raw): array
+    {
+        $amount = 0.0;
+        $discount = 0.0;
+        $fine = 0.0;
+        foreach ($this->decodeAmountDetail($raw) as $entry) {
+            $amount += (float) ($entry['amount'] ?? 0);
+            $discount += (float) ($entry['amount_discount'] ?? 0);
+            $fine += (float) ($entry['amount_fine'] ?? 0);
+        }
+
+        return ['amount' => $amount, 'discount' => $discount, 'fine' => $fine];
     }
 
     /**

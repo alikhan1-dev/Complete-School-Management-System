@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI Financereports: hub + balance/statement/daily + collection + online fees.
+ * CI Financereports: hub + fee reports + collection/online + remark/payroll/onlineadmission.
  */
 class FinanceReportController extends Controller
 {
@@ -296,6 +296,168 @@ class FinanceReportController extends Controller
             'contentView' => 'reports::admin.finance.online_fees_report',
             'filters' => $filters,
             'collectlist' => $collectlist,
+            'searched' => $searched,
+            'searchlist' => $this->reports->searchDurationTypes(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function duefeesremark(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('balance_fees_report_with_remark', 'can_view'), 403);
+
+        $filters = [
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+        ];
+        $studentRemainFees = null;
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'class_id' => ['required'],
+                'section_id' => ['required'],
+            ], [
+                'class_id.required' => 'The Class field is required.',
+                'section_id.required' => 'The Section field is required.',
+            ]);
+            $searched = true;
+            $studentRemainFees = $this->reports->dueFeesWithRemark(
+                (int) $filters['class_id'],
+                (int) $filters['section_id']
+            );
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.balance_fees_report_with_remark'),
+            'contentView' => 'reports::admin.finance.due_fees_remark',
+            'filters' => $filters,
+            'student_remain_fees' => $studentRemainFees,
+            'searched' => $searched,
+            'classlist' => $this->reports->classes(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function printduefeesremark(Request $request): JsonResponse
+    {
+        // CI quirk: print checks fees_statement, not balance_fees_report_with_remark.
+        abort_unless($this->permissions->hasPrivilege('fees_statement', 'can_view'), 403);
+
+        $classId = (int) $request->input('class_id');
+        $sectionId = (int) $request->input('section_id');
+        $students = $this->reports->dueFeesWithRemark($classId, $sectionId);
+        $page = view('reports::admin.finance._print_due_fees_remark', [
+            'student_remain_fees' => $students,
+            'class' => $this->reports->classLabel($classId),
+            'section' => $this->reports->sectionLabel($sectionId),
+            'reports' => $this->reports,
+        ])->render();
+
+        return response()->json(['status' => 1, 'page' => $page]);
+    }
+
+    public function payroll(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('payroll_report', 'can_view'), 403);
+
+        $filters = [
+            'search_type' => $request->input('search_type', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+        // CI: empty search_type still loads this_year range (even on GET).
+        $searchType = $filters['search_type'] !== '' ? (string) $filters['search_type'] : 'this_year';
+        $range = $this->reports->dateRange(
+            $searchType,
+            $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+            $filters['date_to'] !== '' ? (string) $filters['date_to'] : null
+        );
+        $payrollList = $this->reports->betweenPayrollReport($range['from'], $range['to']);
+        $label = $this->reports->formatDate($range['from']).' '.__('system.to').' '.$this->reports->formatDate($range['to']);
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.payroll_report'),
+            'contentView' => 'reports::admin.finance.payroll',
+            'filters' => $filters,
+            'payrollList' => $payrollList,
+            'label' => $label,
+            'searchlist' => $this->reports->searchDurationTypes(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function onlineadmission(Request $request): View
+    {
+        // Hub privilege (CI controller checks online_admission).
+        abort_unless($this->permissions->hasPrivilege('online_admission_fees_collection_report', 'can_view'), 403);
+
+        $filters = [
+            'search_type' => $request->input('search_type', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+        $collectlist = [];
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'search_type' => ['required'],
+            ], [
+                'search_type.required' => 'The Search Type field is required.',
+            ]);
+            $searched = true;
+            $range = $this->reports->dateRange(
+                (string) $filters['search_type'],
+                $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+                $filters['date_to'] !== '' ? (string) $filters['date_to'] : null
+            );
+            $collectlist = $this->reports->onlineAdmissionFeeCollectionReport($range['from'], $range['to']);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.online_admission_fees_collection_report'),
+            'contentView' => 'reports::admin.finance.online_admission',
+            'filters' => $filters,
+            'collectlist' => $collectlist,
+            'searched' => $searched,
+            'searchlist' => $this->reports->searchDurationTypes(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function incomeexpensebalancereport(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('income_expense_balance_report', 'can_view'), 403);
+
+        $filters = [
+            'search_type' => $request->input('search_type', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+        $rows = [];
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'search_type' => ['required'],
+            ], [
+                'search_type.required' => 'The Search Type field is required.',
+            ]);
+            $searched = true;
+            $range = $this->reports->dateRange(
+                (string) $filters['search_type'],
+                $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+                $filters['date_to'] !== '' ? (string) $filters['date_to'] : null
+            );
+            $rows = $this->reports->incomeExpenseBalanceReport($range['from'], $range['to']);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.income_expense_balance_report'),
+            'contentView' => 'reports::admin.finance.income_expense_balance',
+            'filters' => $filters,
+            'incomeexpensebalancereport' => $rows,
             'searched' => $searched,
             'searchlist' => $this->reports->searchDurationTypes(),
             'reports' => $this->reports,

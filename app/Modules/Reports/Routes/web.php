@@ -104,4 +104,14 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.finance.collection_report');
     Route::match(['get', 'post'], 'financereports/onlinefees_report', [FinanceReportController::class, 'onlinefees_report'])
         ->name('reports.finance.onlinefees_report');
+    Route::match(['get', 'post'], 'financereports/duefeesremark', [FinanceReportController::class, 'duefeesremark'])
+        ->name('reports.finance.duefeesremark');
+    Route::post('financereports/printduefeesremark', [FinanceReportController::class, 'printduefeesremark'])
+        ->name('reports.finance.duefeesremark.print');
+    Route::match(['get', 'post'], 'financereports/payroll', [FinanceReportController::class, 'payroll'])
+        ->name('reports.finance.payroll');
+    Route::match(['get', 'post'], 'financereports/onlineadmission', [FinanceReportController::class, 'onlineadmission'])
+        ->name('reports.finance.onlineadmission');
+    Route::match(['get', 'post'], 'financereports/incomeexpensebalancereport', [FinanceReportController::class, 'incomeexpensebalancereport'])
+        ->name('reports.finance.income_expense_balance');
 });

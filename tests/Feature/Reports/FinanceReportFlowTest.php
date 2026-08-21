@@ -25,6 +25,12 @@ class FinanceReportFlowTest extends TestCase
     private array $createdStaffIds = [];
 
     /** @var list<int> */
+    private array $cleanupPayslipIds = [];
+
+    /** @var list<int> */
+    private array $cleanupAdmissionIds = [];
+
+    /** @var list<int> */
     private array $cleanupStudentIds = [];
 
     /** @var list<int> */
@@ -39,8 +45,48 @@ class FinanceReportFlowTest extends TestCase
     /** @var list<int> */
     private array $cleanupFeeGroupIds = [];
 
+    /** @var list<int> */
+    private array $cleanupIncomeIds = [];
+
+    /** @var list<int> */
+    private array $cleanupExpenseIds = [];
+
+    /** @var list<int> */
+    private array $cleanupIncomeHeadIds = [];
+
+    /** @var list<int> */
+    private array $cleanupExpenseHeadIds = [];
+
     protected function tearDown(): void
     {
+        if ($this->cleanupIncomeIds !== []) {
+            DB::table('income')->whereIn('id', $this->cleanupIncomeIds)->delete();
+            $this->cleanupIncomeIds = [];
+        }
+        if ($this->cleanupExpenseIds !== []) {
+            DB::table('expenses')->whereIn('id', $this->cleanupExpenseIds)->delete();
+            $this->cleanupExpenseIds = [];
+        }
+        if ($this->cleanupIncomeHeadIds !== []) {
+            DB::table('income_head')->whereIn('id', $this->cleanupIncomeHeadIds)->delete();
+            $this->cleanupIncomeHeadIds = [];
+        }
+        if ($this->cleanupExpenseHeadIds !== []) {
+            DB::table('expense_head')->whereIn('id', $this->cleanupExpenseHeadIds)->delete();
+            $this->cleanupExpenseHeadIds = [];
+        }
+
+        if ($this->cleanupPayslipIds !== []) {
+            DB::table('staff_payslip')->whereIn('id', $this->cleanupPayslipIds)->delete();
+            $this->cleanupPayslipIds = [];
+        }
+
+        if ($this->cleanupAdmissionIds !== []) {
+            DB::table('online_admission_payment')->whereIn('online_admission_id', $this->cleanupAdmissionIds)->delete();
+            DB::table('online_admissions')->whereIn('id', $this->cleanupAdmissionIds)->delete();
+            $this->cleanupAdmissionIds = [];
+        }
+
         foreach ($this->cleanupStudentIds as $studentId) {
             $sessionIds = DB::table('student_session')->where('student_id', $studentId)->pluck('id');
             if ($sessionIds->isNotEmpty()) {
@@ -268,6 +314,10 @@ class FinanceReportFlowTest extends TestCase
         $this->get('/financereports/reportdailycollection')->assertRedirect();
         $this->get('/financereports/collection_report')->assertRedirect();
         $this->get('/financereports/onlinefees_report')->assertRedirect();
+        $this->get('/financereports/duefeesremark')->assertRedirect();
+        $this->get('/financereports/payroll')->assertRedirect();
+        $this->get('/financereports/onlineadmission')->assertRedirect();
+        $this->get('/financereports/incomeexpensebalancereport')->assertRedirect();
     }
 
     public function test_finance_report_slice_one_flows(): void
@@ -391,5 +441,186 @@ class FinanceReportFlowTest extends TestCase
             ->assertSee('Card', false)
             ->assertSee('online pay', false)
             ->assertDontSee('Cash');
+    }
+
+    public function test_finance_report_remark_payroll_onlineadmission_flows(): void
+    {
+        $ctx = $this->seedFeeContext();
+        $staffId = (int) end($this->createdStaffIds);
+        $today = now()->toDateString();
+        $suffix = uniqid('oa');
+
+        $this->post('/financereports/duefeesremark', [])
+            ->assertSessionHasErrors(['class_id', 'section_id']);
+
+        $remark = $this->post('/financereports/duefeesremark', [
+            'class_id' => $ctx['class']->id,
+            'section_id' => $ctx['section']->id,
+        ])->assertOk();
+        $remark->assertSee($ctx['student']->admission_no, false)
+            ->assertSee('1000.00', false)
+            ->assertSee('400.00', false)
+            ->assertSee('600.00', false);
+
+        $this->post('/financereports/printduefeesremark', [
+            'class_id' => $ctx['class']->id,
+            'section_id' => $ctx['section']->id,
+        ])->assertOk()
+            ->assertJson(['status' => 1]);
+
+        $payslipId = (int) DB::table('staff_payslip')->insertGetId([
+            'staff_id' => $staffId,
+            'basic' => 5000,
+            'total_allowance' => 200,
+            'total_deduction' => 100,
+            'leave_deduction' => 0,
+            'tax' => '50',
+            'net_salary' => 5050,
+            'status' => 'generated',
+            'month' => 'January',
+            'year' => (int) now()->format('Y'),
+            'payment_mode' => 'Cash',
+            'payment_date' => $today,
+            'remark' => '',
+            'generated_by' => null,
+        ]);
+        $this->cleanupPayslipIds[] = $payslipId;
+
+        $payroll = $this->get('/financereports/payroll')->assertOk();
+        $payroll->assertSee('5000.00', false)
+            ->assertSee('5050.00', false);
+
+        $this->post('/financereports/payroll', [
+            'search_type' => 'today',
+        ])->assertOk()
+            ->assertSee('5000.00', false);
+
+        $classSectionId = (int) DB::table('class_sections')
+            ->where('class_id', $ctx['class']->id)
+            ->where('section_id', $ctx['section']->id)
+            ->value('id');
+
+        $admissionId = (int) DB::table('online_admissions')->insertGetId([
+            'reference_no' => 'OA-'.$suffix,
+            'firstname' => 'Online',
+            'middlename' => '',
+            'lastname' => 'Applicant',
+            'mobileno' => '03001110000',
+            'email' => $suffix.'@example.test',
+            'cast' => '',
+            'dob' => '2012-01-01',
+            'gender' => 'Male',
+            'class_section_id' => $classSectionId,
+            'route_id' => 0,
+            'blood_group' => '',
+            'vehroute_id' => 0,
+            'guardian_is' => 'father',
+            'guardian_name' => 'Dad',
+            'guardian_relation' => 'Father',
+            'guardian_occupation' => '',
+            'guardian_email' => '',
+            'father_pic' => '',
+            'mother_pic' => '',
+            'guardian_pic' => '',
+            'is_enroll' => 0,
+            'height' => '',
+            'weight' => '',
+            'note' => '',
+            'form_status' => 1,
+            'paid_status' => 1,
+            'submit_date' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->cleanupAdmissionIds[] = $admissionId;
+
+        DB::table('online_admission_payment')->insert([
+            'online_admission_id' => $admissionId,
+            'paid_amount' => 150,
+            'payment_mode' => 'Paypal',
+            'payment_type' => 'online',
+            'transaction_id' => 'TXN-'.$suffix,
+            'note' => '',
+            'date' => $today.' 12:00:00',
+            'processing_charge_type' => '',
+            'processing_charge_value' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->post('/financereports/onlineadmission', [])
+            ->assertSessionHasErrors(['search_type']);
+
+        $oa = $this->post('/financereports/onlineadmission', [
+            'search_type' => 'today',
+        ])->assertOk();
+        $oa->assertSee('OA-'.$suffix, false)
+            ->assertSee('150.00', false)
+            ->assertSee('TXN-'.$suffix, false);
+    }
+
+    public function test_finance_report_income_expense_balance_flow(): void
+    {
+        $this->actingAsSuperAdmin();
+        $suffix = uniqid('ieb');
+        $today = now()->toDateString();
+
+        $incomeHeadId = (int) DB::table('income_head')->insertGetId([
+            'income_category' => 'IEB-IN-'.$suffix,
+            'description' => '',
+            'is_active' => 'yes',
+            'is_deleted' => 'no',
+        ]);
+        $this->cleanupIncomeHeadIds[] = $incomeHeadId;
+
+        $expenseHeadId = (int) DB::table('expense_head')->insertGetId([
+            'exp_category' => 'IEB-EX-'.$suffix,
+            'description' => '',
+            'is_active' => 'yes',
+            'is_deleted' => 'no',
+        ]);
+        $this->cleanupExpenseHeadIds[] = $expenseHeadId;
+
+        $this->cleanupIncomeIds[] = (int) DB::table('income')->insertGetId([
+            'income_head_id' => $incomeHeadId,
+            'name' => 'Income '.$suffix,
+            'invoice_no' => 'IN-'.$suffix,
+            'date' => $today,
+            'amount' => 1000,
+            'note' => 'in note',
+            'is_active' => 'yes',
+            'documents' => '',
+            'is_deleted' => 'no',
+        ]);
+
+        $this->cleanupExpenseIds[] = (int) DB::table('expenses')->insertGetId([
+            'exp_head_id' => $expenseHeadId,
+            'name' => 'Expense '.$suffix,
+            'invoice_no' => 'EX-'.$suffix,
+            'date' => $today,
+            'amount' => 250,
+            'documents' => '',
+            'note' => 'ex note',
+            'is_active' => 'yes',
+            'is_deleted' => 'no',
+        ]);
+
+        $this->get('/financereports/incomeexpensebalancereport')->assertOk();
+
+        $this->post('/financereports/incomeexpensebalancereport', [])
+            ->assertSessionHasErrors(['search_type']);
+
+        $report = $this->post('/financereports/incomeexpensebalancereport', [
+            'search_type' => 'today',
+        ])->assertOk();
+
+        // Running balance: income 1000 then expense 250 → overall 750 (order by date; same day UNION order).
+        $report->assertSee('Income '.$suffix, false)
+            ->assertSee('Expense '.$suffix, false)
+            ->assertSee('IEB-IN-'.$suffix, false)
+            ->assertSee('IEB-EX-'.$suffix, false)
+            ->assertSee('1000', false)
+            ->assertSee('250', false)
+            ->assertSee('750', false);
     }
 }
