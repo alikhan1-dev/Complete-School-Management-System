@@ -4,6 +4,7 @@ use App\Modules\Reports\Controllers\AttendanceReportController;
 use App\Modules\Reports\Controllers\BalanceFeesController;
 use App\Modules\Reports\Controllers\FinanceReportController;
 use App\Modules\Reports\Controllers\HumanResourceReportController;
+use App\Modules\Reports\Controllers\LessonPlanReportController;
 use App\Modules\Reports\Controllers\ModuleStatusController;
 use App\Modules\Reports\Controllers\StudentInformationReportController;
 use Illuminate\Support\Facades\Route;
@@ -132,4 +133,9 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.human_resource');
     Route::match(['get', 'post'], 'report/staff_report', [HumanResourceReportController::class, 'staff_report'])
         ->name('reports.staff_report');
+
+    Route::match(['get', 'post'], 'report/lesson_plan', [LessonPlanReportController::class, 'lesson_plan'])
+        ->name('reports.lesson_plan');
+    Route::match(['get', 'post'], 'report/teachersyllabusstatus', [LessonPlanReportController::class, 'teachersyllabusstatus'])
+        ->name('reports.teacher_syllabus_status');
 });
