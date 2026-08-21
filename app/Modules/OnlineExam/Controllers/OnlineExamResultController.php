@@ -140,7 +140,8 @@ class OnlineExamResultController extends Controller
     {
         abort_unless(
             $this->permissions->hasPrivilege('add_questions_in_exam', 'can_view')
-            || $this->permissions->hasPrivilege('online_examination', 'can_view'),
+            || $this->permissions->hasPrivilege('online_examination', 'can_view')
+            || $this->permissions->hasPrivilege('online_exam_wise_report', 'can_view'),
             403
         );
     }

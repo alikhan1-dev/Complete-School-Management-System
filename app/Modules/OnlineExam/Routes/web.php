@@ -68,9 +68,13 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::post('admin/onlineexam/fillmarks/{examId}', [OnlineExamResultController::class, 'fillMarks'])->name('onlineexam.evaluation.fillmarks');
     Route::get('admin/onlineexam/downloadattachment/{doc}', [OnlineExamResultController::class, 'downloadAttachment'])->name('onlineexam.results.attachment');
 
-    // CI Report online examinations hub + exams report (attempt/rank/result deferred)
+    // CI Report online examinations hub + exams + attempt + result (rank deferred)
     Route::get('report/online_examinations', [OnlineExamReportController::class, 'hub'])
         ->name('onlineexam.reports.hub');
     Route::match(['get', 'post'], 'report/onlineexams', [OnlineExamReportController::class, 'onlineexams'])
         ->name('onlineexam.reports.exams');
+    Route::match(['get', 'post'], 'report/onlineexamattend', [OnlineExamReportController::class, 'onlineexamattend'])
+        ->name('onlineexam.reports.attempt');
+    Route::match(['get', 'post'], 'admin/onlineexam/report', [OnlineExamReportController::class, 'report'])
+        ->name('onlineexam.reports.result');
 });

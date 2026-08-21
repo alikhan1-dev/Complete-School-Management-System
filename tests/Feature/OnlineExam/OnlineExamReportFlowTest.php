@@ -134,6 +134,8 @@ class OnlineExamReportFlowTest extends TestCase
     {
         $this->get('/report/online_examinations')->assertRedirect();
         $this->get('/report/onlineexams')->assertRedirect();
+        $this->get('/report/onlineexamattend')->assertRedirect();
+        $this->get('/admin/onlineexam/report')->assertRedirect();
     }
 
     public function test_hub_and_exams_report_lists_assigned_exams(): void
@@ -247,5 +249,197 @@ class OnlineExamReportFlowTest extends TestCase
 
         $content = $page->getContent();
         $this->assertMatchesRegularExpression('/OE Report Exam '.preg_quote($suffix, '/').'[\s\S]*?>2</', $content);
+    }
+
+    public function test_attempt_report_lists_students_with_assigned_exams(): void
+    {
+        $this->actingAsSuperAdmin();
+        $suffix = uniqid();
+
+        $session = AcademicSession::query()->first() ?: AcademicSession::query()->create(['session' => '2099-oea']);
+        DB::table('sch_settings')->limit(1)->update(['session_id' => $session->id]);
+        app(SchoolContext::class)->clearCache();
+
+        $section = Section::query()->create(['section' => 'OEAS-'.$suffix, 'is_active' => 'yes']);
+        $class = SchoolClass::query()->create(['class' => 'OEAC-'.$suffix, 'is_active' => 'yes']);
+        $this->cleanupSectionIds[] = $section->id;
+        $this->cleanupClassIds[] = $class->id;
+        ClassSection::query()->create([
+            'class_id' => $class->id,
+            'section_id' => $section->id,
+            'is_active' => 'yes',
+        ]);
+
+        $admissionNo = 'OEATT'.$suffix;
+        $this->post('/student/create', [
+            'admission_no' => $admissionNo,
+            'firstname' => 'Attempt',
+            'lastname' => 'Student',
+            'gender' => 'Male',
+            'dob' => '2012-01-01',
+            'class_id' => $class->id,
+            'section_id' => $section->id,
+            'guardian_is' => 'father',
+            'guardian_name' => 'Dad',
+            'guardian_phone' => '03000000001',
+        ])->assertRedirect();
+
+        $student = Student::query()->where('admission_no', $admissionNo)->firstOrFail();
+        $this->cleanupStudentIds[] = $student->id;
+        $studentSession = StudentSession::query()
+            ->where('student_id', $student->id)
+            ->where('session_id', $session->id)
+            ->firstOrFail();
+
+        $exam = OnlineExam::query()->create([
+            'session_id' => $session->id,
+            'exam' => 'OE Attempt Exam '.$suffix,
+            'attempt' => 1,
+            'exam_from' => now()->subDay()->format('Y-m-d H:i:s'),
+            'exam_to' => now()->addDay()->format('Y-m-d H:i:s'),
+            'is_quiz' => 0,
+            'auto_publish_date' => null,
+            'duration' => '00:20:00',
+            'passing_percentage' => 40,
+            'description' => 'Attempt report exam',
+            'publish_result' => 1,
+            'answer_word_count' => 0,
+            'is_active' => 1,
+            'is_marks_display' => 1,
+            'is_neg_marking' => 0,
+            'is_random_question' => 0,
+            'is_rank_generated' => 0,
+            'publish_exam_notification' => 0,
+            'publish_result_notification' => 0,
+        ]);
+        $this->cleanupExamIds[] = $exam->id;
+
+        DB::table('onlineexam_students')->insert([
+            'onlineexam_id' => $exam->id,
+            'student_session_id' => $studentSession->id,
+            'is_attempted' => 0,
+            'rank' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->get('/report/online_examinations')
+            ->assertOk()
+            ->assertSee('/report/onlineexamattend', false);
+
+        $page = $this->post('/report/onlineexamattend', [
+            'search_type' => 'this_year',
+            'date_type' => '',
+        ]);
+        $page->assertOk()
+            ->assertSee($admissionNo, false)
+            ->assertSee('OE Attempt Exam '.$suffix, false)
+            ->assertSee('00:20:00', false)
+            ->assertSee('student/view/'.$student->id, false);
+    }
+
+    public function test_result_report_lists_students_for_exam_class_section(): void
+    {
+        $this->actingAsSuperAdmin();
+        $suffix = uniqid();
+
+        $session = AcademicSession::query()->first() ?: AcademicSession::query()->create(['session' => '2099-oer']);
+        DB::table('sch_settings')->limit(1)->update(['session_id' => $session->id]);
+        app(SchoolContext::class)->clearCache();
+
+        $section = Section::query()->create(['section' => 'OERRS-'.$suffix, 'is_active' => 'yes']);
+        $class = SchoolClass::query()->create(['class' => 'OERRC-'.$suffix, 'is_active' => 'yes']);
+        $this->cleanupSectionIds[] = $section->id;
+        $this->cleanupClassIds[] = $class->id;
+        ClassSection::query()->create([
+            'class_id' => $class->id,
+            'section_id' => $section->id,
+            'is_active' => 'yes',
+        ]);
+
+        $admissionNo = 'OERES'.$suffix;
+        $this->post('/student/create', [
+            'admission_no' => $admissionNo,
+            'firstname' => 'Result',
+            'lastname' => 'Student',
+            'gender' => 'Male',
+            'dob' => '2012-01-01',
+            'class_id' => $class->id,
+            'section_id' => $section->id,
+            'guardian_is' => 'father',
+            'guardian_name' => 'Dad',
+            'guardian_phone' => '03000000002',
+        ])->assertRedirect();
+
+        $student = Student::query()->where('admission_no', $admissionNo)->firstOrFail();
+        $this->cleanupStudentIds[] = $student->id;
+        $studentSession = StudentSession::query()
+            ->where('student_id', $student->id)
+            ->where('session_id', $session->id)
+            ->firstOrFail();
+
+        $exam = OnlineExam::query()->create([
+            'session_id' => $session->id,
+            'exam' => 'OE Result Exam '.$suffix,
+            'attempt' => 3,
+            'exam_from' => now()->subDay()->format('Y-m-d H:i:s'),
+            'exam_to' => now()->addDay()->format('Y-m-d H:i:s'),
+            'is_quiz' => 0,
+            'auto_publish_date' => null,
+            'duration' => '00:30:00',
+            'passing_percentage' => 40,
+            'description' => 'Result report exam',
+            'publish_result' => 1,
+            'answer_word_count' => 0,
+            'is_active' => 1,
+            'is_marks_display' => 1,
+            'is_neg_marking' => 0,
+            'is_random_question' => 0,
+            'is_rank_generated' => 0,
+            'publish_exam_notification' => 0,
+            'publish_result_notification' => 0,
+        ]);
+        $this->cleanupExamIds[] = $exam->id;
+
+        $onlineexamStudentId = DB::table('onlineexam_students')->insertGetId([
+            'onlineexam_id' => $exam->id,
+            'student_session_id' => $studentSession->id,
+            'is_attempted' => 1,
+            'rank' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('onlineexam_attempts')->insert([
+            'onlineexam_student_id' => $onlineexamStudentId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->get('/admin/onlineexam/report')
+            ->assertOk()
+            ->assertSee('OE Result Exam '.$suffix, false);
+
+        $missing = $this->post('/admin/onlineexam/report', [
+            'exam_id' => '',
+            'class_id' => '',
+            'section_id' => '',
+        ]);
+        $missing->assertOk()
+            ->assertSee('field is required', false);
+
+        $page = $this->post('/admin/onlineexam/report', [
+            'exam_id' => $exam->id,
+            'class_id' => $class->id,
+            'section_id' => $section->id,
+        ]);
+        $page->assertOk()
+            ->assertSee($admissionNo, false)
+            ->assertSee('3', false)
+            ->assertSee('admin/onlineexam/studentresult/'.$exam->id.'/'.$onlineexamStudentId, false);
+
+        $content = $page->getContent();
+        // remaining = attempt(3) - attempts(1) = 2
+        $this->assertMatchesRegularExpression('/>3<\/td>\s*<td>2<\/td>/', $content);
     }
 }
