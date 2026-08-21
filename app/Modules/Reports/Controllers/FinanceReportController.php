@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI Financereports: hub + fee reports + collection/online + remark/payroll/onlineadmission.
+ * CI Financereports: hub + fee reports + remark/payroll/admission + income/expense (+ balance).
  */
 class FinanceReportController extends Controller
 {
@@ -458,6 +458,82 @@ class FinanceReportController extends Controller
             'contentView' => 'reports::admin.finance.income_expense_balance',
             'filters' => $filters,
             'incomeexpensebalancereport' => $rows,
+            'searched' => $searched,
+            'searchlist' => $this->reports->searchDurationTypes(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function income(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('income_report', 'can_view'), 403);
+
+        $filters = [
+            'search_type' => $request->input('search_type', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+        $incomeList = [];
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'search_type' => ['required'],
+            ], [
+                'search_type.required' => 'The Search Type field is required.',
+            ]);
+            $searched = true;
+            $range = $this->reports->dateRange(
+                (string) $filters['search_type'],
+                $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+                $filters['date_to'] !== '' ? (string) $filters['date_to'] : null
+            );
+            $incomeList = $this->reports->incomeReport($range['from'], $range['to']);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.income_report'),
+            'contentView' => 'reports::admin.finance.income',
+            'filters' => $filters,
+            'incomeList' => $incomeList,
+            'searched' => $searched,
+            'searchlist' => $this->reports->searchDurationTypes(),
+            'reports' => $this->reports,
+        ], $this->navFlags()));
+    }
+
+    public function expense(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('expense_report', 'can_view'), 403);
+
+        $filters = [
+            'search_type' => $request->input('search_type', ''),
+            'date_from' => $request->input('date_from', ''),
+            'date_to' => $request->input('date_to', ''),
+        ];
+        $expenseList = [];
+        $searched = false;
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'search_type' => ['required'],
+            ], [
+                'search_type.required' => 'The Search Type field is required.',
+            ]);
+            $searched = true;
+            $range = $this->reports->dateRange(
+                (string) $filters['search_type'],
+                $filters['date_from'] !== '' ? (string) $filters['date_from'] : null,
+                $filters['date_to'] !== '' ? (string) $filters['date_to'] : null
+            );
+            $expenseList = $this->reports->expenseReport($range['from'], $range['to']);
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.expense_report'),
+            'contentView' => 'reports::admin.finance.expense',
+            'filters' => $filters,
+            'expenseList' => $expenseList,
             'searched' => $searched,
             'searchlist' => $this->reports->searchDurationTypes(),
             'reports' => $this->reports,

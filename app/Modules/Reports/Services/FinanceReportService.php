@@ -10,8 +10,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Financereports: hub + fee/collection/online + remark/payroll/onlineadmission + income/expense balance.
- * Transport fee lines deferred. Class-teacher scope deferred. Income/expense DT reports deferred.
+ * CI Financereports: hub + fee reports + remark/payroll/admission + income/expense (+ balance).
+ * Transport fee lines deferred. Class-teacher scope deferred. Income/expense group DT deferred.
  */
 class FinanceReportService
 {
@@ -1064,6 +1064,56 @@ class FinanceReportService
                 'amount' => (float) $row->amount,
                 'source' => (string) $row->source,
             ])
+            ->all();
+    }
+
+    /**
+     * CI Income_model::search date range (report list; form-POST instead of DataTables).
+     *
+     * @return list<object>
+     */
+    public function incomeReport(string $startDate, string $endDate): array
+    {
+        return DB::table('income')
+            ->join('income_head', 'income.income_head_id', '=', 'income_head.id')
+            ->where('income.date', '>=', $startDate)
+            ->where('income.date', '<=', $endDate)
+            ->orderBy('income.date')
+            ->orderBy('income.id')
+            ->select([
+                'income.id',
+                'income.date',
+                'income.name',
+                'income.invoice_no',
+                'income.amount',
+                'income_head.income_category',
+            ])
+            ->get()
+            ->all();
+    }
+
+    /**
+     * CI Expense_model::search date range (report list; form-POST instead of DataTables).
+     *
+     * @return list<object>
+     */
+    public function expenseReport(string $startDate, string $endDate): array
+    {
+        return DB::table('expenses')
+            ->join('expense_head', 'expenses.exp_head_id', '=', 'expense_head.id')
+            ->where('expenses.date', '>=', $startDate)
+            ->where('expenses.date', '<=', $endDate)
+            ->orderBy('expenses.date')
+            ->orderBy('expenses.id')
+            ->select([
+                'expenses.id',
+                'expenses.date',
+                'expenses.name',
+                'expenses.invoice_no',
+                'expenses.amount',
+                'expense_head.exp_category',
+            ])
+            ->get()
             ->all();
     }
 

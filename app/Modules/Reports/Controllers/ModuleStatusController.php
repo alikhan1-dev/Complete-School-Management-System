@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Reports',
             'status' => 'in_progress',
-            'message' => 'Student information + Attendencereports full + Financereports slice 1–4 (through incomeexpensebalancereport) persist done. Deferred: income/expense/group DT reports, Balancefees/due_fees_report, transport fee lines, class-teacher scope, view-students modal, CI pixel-parity JS, student_profile custom-field columns.',
+            'message' => 'Student information + Attendencereports full + Financereports complete except group reports (income/expense list reports form-POST done). Deferred: incomegroup/expensegroup, Balancefees/due_fees_report, transport fee lines, class-teacher scope, view-students modal, CI pixel-parity JS/DataTables, student_profile custom-field columns.',
             'slices' => [
                 'student_information_hub' => 'done',
                 'student_report' => 'done',
@@ -37,6 +37,7 @@ class ModuleStatusController extends Controller
                 'finance_reports_collection_online' => 'done',
                 'finance_reports_remark_payroll_onlineadmission' => 'done',
                 'finance_reports_income_expense_balance' => 'done',
+                'finance_reports_income_expense_list' => 'done',
                 'finance_reports_income_expense_groups' => 'pending',
                 'balance_fees' => 'pending',
             ],

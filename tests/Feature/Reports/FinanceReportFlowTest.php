@@ -318,6 +318,8 @@ class FinanceReportFlowTest extends TestCase
         $this->get('/financereports/payroll')->assertRedirect();
         $this->get('/financereports/onlineadmission')->assertRedirect();
         $this->get('/financereports/incomeexpensebalancereport')->assertRedirect();
+        $this->get('/financereports/income')->assertRedirect();
+        $this->get('/financereports/expense')->assertRedirect();
     }
 
     public function test_finance_report_slice_one_flows(): void
@@ -622,5 +624,27 @@ class FinanceReportFlowTest extends TestCase
             ->assertSee('1000', false)
             ->assertSee('250', false)
             ->assertSee('750', false);
+
+        $this->post('/financereports/income', [])
+            ->assertSessionHasErrors(['search_type']);
+
+        $income = $this->post('/financereports/income', [
+            'search_type' => 'today',
+        ])->assertOk();
+        $income->assertSee('Income '.$suffix, false)
+            ->assertSee('IN-'.$suffix, false)
+            ->assertSee('IEB-IN-'.$suffix, false)
+            ->assertSee('1000.00', false);
+
+        $this->post('/financereports/expense', [])
+            ->assertSessionHasErrors(['search_type']);
+
+        $expense = $this->post('/financereports/expense', [
+            'search_type' => 'today',
+        ])->assertOk();
+        $expense->assertSee('Expense '.$suffix, false)
+            ->assertSee('EX-'.$suffix, false)
+            ->assertSee('IEB-EX-'.$suffix, false)
+            ->assertSee('250.00', false);
     }
 }
