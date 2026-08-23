@@ -10,7 +10,7 @@ use RuntimeException;
 
 /**
  * CI user/User::getfees — student/parent portal fee ledger.
- * Deferred: online gateway pay modal, processing-fee banner, print/SMS, DataTables pixel-parity.
+ * Deferred: online gateway pay modal, processing-fee banner, SMS, DataTables pixel-parity.
  */
 class StudentFeesPortalService
 {
@@ -109,6 +109,23 @@ class StudentFeesPortalService
             'offlineEnabled' => $this->offline->isPortalEnabled(),
             'transportActive' => $transportActive,
         ];
+    }
+
+    public function assertOwnsStudent(int $studentId): void
+    {
+        $this->assertPortalOwnsStudent($studentId);
+    }
+
+    /**
+     * Ensure the fee receipt / ledger row belongs to the authenticated portal student/parent.
+     */
+    public function assertOwnsFeeList(object $feeList): void
+    {
+        $studentId = (int) ($feeList->student_id ?? $feeList->std_id ?? 0);
+        if ($studentId <= 0) {
+            throw new RuntimeException('Unauthorized fee print access.');
+        }
+        $this->assertPortalOwnsStudent($studentId);
     }
 
     protected function displayPreviousFees(): bool

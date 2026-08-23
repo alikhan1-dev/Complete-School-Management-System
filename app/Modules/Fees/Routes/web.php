@@ -43,6 +43,7 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::post('admin/feemaster/edit/{id}', [FeeMasterController::class, 'update'])->name('fees.fee_masters.update');
     Route::get('admin/feemaster/delete/{id}', [FeeMasterController::class, 'destroy'])->name('fees.fee_masters.destroy');
     Route::get('admin/feemaster/deletegrp/{id}', [FeeMasterController::class, 'destroyGroup'])->name('fees.fee_masters.destroy_group');
+    Route::post('admin/feemaster/remove_row', [FeeMasterController::class, 'removeRow'])->name('fees.fee_masters.remove_row');
 
     // Assign fees group to students (CI feemaster/assign + studentfee/addfeegroup)
     Route::match(['get', 'post'], 'admin/feemaster/assign/{id}', [FeeAssignController::class, 'assign'])->name('fees.fee_masters.assign');
@@ -97,6 +98,9 @@ Route::middleware([
     // CI user/user/getfees
     Route::get('user/user/getfees', [UserFeesController::class, 'getfees'])->name('user.fees.getfees');
     Route::get('user/getfees', [UserFeesController::class, 'getfees']);
+    Route::post('user/user/printFeesByName', [UserFeesController::class, 'printFeesByName'])->name('user.fees.printFeesByName');
+    Route::get('user/user/printFeesByName', [UserFeesController::class, 'printFeesByNamePage'])->name('user.fees.printFeesByName.page');
+    Route::post('user/user/printFeesByGroupArray', [UserFeesController::class, 'printFeesByGroupArray'])->name('user.fees.printFeesByGroupArray');
 
     // CI user/gateway/Payment::pay offline_payment → user/offlinepayment
     Route::post('user/offlinepayment/start', [UserOfflinePaymentController::class, 'start'])

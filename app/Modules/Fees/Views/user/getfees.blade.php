@@ -40,11 +40,17 @@
     <div class="box box-primary">
         <div class="box-header with-border">
             <h3 class="box-title">{{ __('system.session') }} : {{ $block['session'] }}</h3>
+            <div class="box-tools">
+                <button type="button" class="btn btn-default btn-sm btn_print_selected" data-session="{{ $block['student_session_id'] }}">
+                    {{ __('system.print_selected') }}
+                </button>
+            </div>
         </div>
         <div class="box-body table-responsive">
             <table class="table table-striped table-bordered">
                 <thead>
                 <tr>
+                    <th style="width:36px;"><input type="checkbox" class="select_all_portal_fee_lines" data-target=".portal_fee_line_cb_{{ $block['student_session_id'] }}"></th>
                     <th>{{ __('system.fees') }}</th>
                     <th>{{ __('system.due_date') }}</th>
                     <th>{{ __('system.status') }}</th>
@@ -70,6 +76,15 @@
                         $grandBalance += max(0, $line->balance);
                     @endphp
                     <tr>
+                        <td>
+                            <input type="checkbox"
+                                   class="portal_fee_line_cb portal_fee_line_cb_{{ $block['student_session_id'] }}"
+                                   data-fee_category="fees"
+                                   data-fee_session_group_id="{{ $line->fee_session_group_id }}"
+                                   data-fee_master_id="{{ $line->student_fees_master_id }}"
+                                   data-fee_groups_feetype_id="{{ $line->fee_groups_feetype_id }}"
+                                   data-trans_fee_id="0">
+                        </td>
                         <td>{{ $line->fee_group_name }} — {{ $line->fee_type }} ({{ $line->fee_code }})</td>
                         <td>{{ $line->due_date ?: '—' }}</td>
                         <td>
@@ -108,6 +123,7 @@
                     </tr>
                     @foreach($line->payments as $pay)
                         <tr class="bg-gray-light">
+                            <td></td>
                             <td colspan="4" class="text-right">
                                 {{ __('system.payment_id') }} {{ $pay->payment_id }} — {{ $pay->date }} — {{ $pay->payment_mode }}
                                 @if($pay->description)<br><em>{{ $pay->description }}</em>@endif
@@ -116,11 +132,20 @@
                             <td class="text-right">{{ number_format($pay->amount_fine, 2) }}</td>
                             <td class="text-right">{{ number_format($pay->amount, 2) }}</td>
                             <td></td>
-                            <td></td>
+                            <td class="text-right">
+                                <a class="btn btn-default btn-xs"
+                                   href="{{ route('user.fees.printFeesByName.page', [
+                                       'main_invoice' => $pay->invoice_id,
+                                       'sub_invoice' => $pay->sub_invoice_id,
+                                       'fee_category' => $pay->fee_category ?? 'fees',
+                                   ]) }}"
+                                   target="_blank"
+                                   title="{{ __('system.print') }}">{{ __('system.print') }}</a>
+                            </td>
                         </tr>
                     @endforeach
                 @empty
-                    <tr><td colspan="9" class="text-center text-muted">{{ __('system.no_record_found') }}</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted">{{ __('system.no_record_found') }}</td></tr>
                 @endforelse
 
                 @foreach($block['transport_fees'] as $line)
@@ -133,6 +158,15 @@
                         $grandBalance += max(0, $line->balance);
                     @endphp
                     <tr>
+                        <td>
+                            <input type="checkbox"
+                                   class="portal_fee_line_cb portal_fee_line_cb_{{ $block['student_session_id'] }}"
+                                   data-fee_category="transport"
+                                   data-fee_session_group_id="0"
+                                   data-fee_master_id="0"
+                                   data-fee_groups_feetype_id="0"
+                                   data-trans_fee_id="{{ $line->student_transport_fee_id }}">
+                        </td>
                         <td>{{ $line->fee_group_name }} — {{ $line->fee_type }}</td>
                         <td>{{ $line->due_date ?: '—' }}</td>
                         <td>
@@ -171,6 +205,7 @@
                     </tr>
                     @foreach($line->payments as $pay)
                         <tr class="bg-gray-light">
+                            <td></td>
                             <td colspan="4" class="text-right">
                                 {{ __('system.payment_id') }} {{ $pay->payment_id }} — {{ $pay->date }} — {{ $pay->payment_mode }}
                             </td>
@@ -178,13 +213,23 @@
                             <td class="text-right">{{ number_format($pay->amount_fine, 2) }}</td>
                             <td class="text-right">{{ number_format($pay->amount, 2) }}</td>
                             <td></td>
-                            <td></td>
+                            <td class="text-right">
+                                <a class="btn btn-default btn-xs"
+                                   href="{{ route('user.fees.printFeesByName.page', [
+                                       'main_invoice' => $pay->invoice_id,
+                                       'sub_invoice' => $pay->sub_invoice_id,
+                                       'fee_category' => $pay->fee_category ?? 'transport',
+                                   ]) }}"
+                                   target="_blank"
+                                   title="{{ __('system.print') }}">{{ __('system.print') }}</a>
+                            </td>
                         </tr>
                     @endforeach
                 @endforeach
 
                 @if(count($block['fees']) || count($block['transport_fees']))
                     <tr>
+                        <th></th>
                         <th colspan="3" class="text-right">{{ __('system.grand_total') }}</th>
                         <th class="text-right">{{ number_format($grandDue, 2) }}</th>
                         <th class="text-right">{{ number_format($grandDiscount, 2) }}</th>
@@ -223,3 +268,39 @@
 @empty
     <div class="alert alert-danger">{{ __('system.no_record_found') }}</div>
 @endforelse
+
+<form method="post" action="{{ route('user.fees.printFeesByGroupArray') }}" id="portal_multi_print_form" target="_blank" style="display:none;">
+    @csrf
+    <input type="hidden" name="data" id="portal_multi_print_data" value="">
+</form>
+
+@push('scripts')
+<script>
+$(function () {
+    $('.select_all_portal_fee_lines').on('change', function () {
+        var target = $(this).data('target');
+        $(target).prop('checked', $(this).prop('checked'));
+    });
+    $('.btn_print_selected').on('click', function () {
+        var sessionId = $(this).data('session');
+        var $checked = $('.portal_fee_line_cb_' + sessionId + ':checked');
+        if ($checked.length === 0) {
+            alert(@json(__('system.no_record_selected')));
+            return;
+        }
+        var items = [];
+        $checked.each(function () {
+            items.push({
+                fee_category: $(this).data('fee_category'),
+                trans_fee_id: $(this).data('trans_fee_id'),
+                fee_session_group_id: $(this).data('fee_session_group_id'),
+                fee_master_id: $(this).data('fee_master_id'),
+                fee_groups_feetype_id: $(this).data('fee_groups_feetype_id')
+            });
+        });
+        $('#portal_multi_print_data').val(JSON.stringify(items));
+        $('#portal_multi_print_form').trigger('submit');
+    });
+});
+</script>
+@endpush
