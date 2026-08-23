@@ -520,6 +520,7 @@ class FeeCollectService
                 'fee_groups_feetype.fine_type',
                 'fee_groups_feetype.fine_amount',
                 'fee_groups_feetype.fine_percentage',
+                'fee_groups_feetype.fine_per_day',
                 'feetype.type as fee_type',
                 'feetype.code as fee_code',
                 DB::raw('IFNULL(student_fees_deposite.id, 0) as student_fees_deposite_id'),
@@ -651,11 +652,13 @@ class FeeCollectService
                 'student_fees_master.amount as student_fees_master_amount',
                 'student_fees_master.fee_session_group_id',
                 'fee_groups.name as fee_group_name',
+                'fee_groups_feetype.id as fee_groups_feetype_id',
                 'fee_groups_feetype.amount',
                 'fee_groups_feetype.due_date',
                 'fee_groups_feetype.fine_type',
                 'fee_groups_feetype.fine_amount',
                 'fee_groups_feetype.fine_percentage',
+                'fee_groups_feetype.fine_per_day',
                 'feetype.type as fee_type',
                 'feetype.code as fee_code',
                 DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
@@ -1155,8 +1158,14 @@ class FeeCollectService
             } else {
                 $dueFine = round($base * $pct / 100, 2);
             }
+        } elseif ($fineType === 'cumulative') {
+            $feeGroupsFeetypeId = (int) ($row->fee_groups_feetype_id ?? $row->id ?? 0);
+            $dueDays = (int) (new \DateTimeImmutable((string) $dueDate))
+                ->diff(new \DateTimeImmutable(date('Y-m-d')))
+                ->format('%a');
+            $calculated = app(CumulativeFineCalculator::class)->amountFor($feeGroupsFeetypeId, $dueDays);
+            $dueFine = $calculated === false ? 0.0 : (float) $calculated;
         }
-        // cumulative deferred (Slice 2)
 
         return max(0, round($dueFine - $paidFine, 2));
     }

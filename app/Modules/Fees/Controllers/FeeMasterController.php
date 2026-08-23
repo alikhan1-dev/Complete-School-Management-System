@@ -9,11 +9,13 @@ use App\Modules\Fees\Requests\StoreFeeMasterRequest;
 use App\Modules\Fees\Requests\UpdateFeeMasterRequest;
 use App\Modules\Fees\Services\FeeMasterService;
 use App\Modules\Roles\Services\PermissionService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI admin/Feemaster — fees master list + row CRUD (cumulative fines deferred).
+ * CI admin/Feemaster — fees master list + row CRUD + cumulative fine slabs.
  */
 class FeeMasterController extends Controller
 {
@@ -49,6 +51,9 @@ class FeeMasterController extends Controller
             'fine_percentage' => $request->input('fine_percentage', 0),
             'fine_amount' => $request->input('fine_amount', 0),
             'fine_per_day' => $request->boolean('fine_per_day') ? 1 : 0,
+            'overdue_day' => $request->input('overdue_day', []),
+            'overdue_fine' => $request->input('overdue_fine', []),
+            'cumulative_id' => $request->input('cumulative_id', []),
         ]);
 
         return redirect()->route('fees.fee_masters.index')->with('success', 'Fees master saved successfully.');
@@ -68,6 +73,7 @@ class FeeMasterController extends Controller
             'feeTypes' => FeeType::query()->adminList()->get(),
             'masters' => $this->masters->listForCurrentSession(),
             'row' => $row,
+            'cumulativeFines' => $row->cumulativeFines,
         ]);
     }
 
@@ -86,6 +92,9 @@ class FeeMasterController extends Controller
             'fine_percentage' => $request->input('fine_percentage', 0),
             'fine_amount' => $request->input('fine_amount', 0),
             'fine_per_day' => $request->boolean('fine_per_day') ? 1 : 0,
+            'overdue_day' => $request->input('overdue_day', []),
+            'overdue_fine' => $request->input('overdue_fine', []),
+            'cumulative_id' => $request->input('cumulative_id', []),
         ]);
 
         return redirect()->route('fees.fee_masters.index')->with('success', 'Fees master updated successfully.');
@@ -107,5 +116,21 @@ class FeeMasterController extends Controller
         $this->masters->deleteSessionGroup($id);
 
         return redirect()->route('fees.fee_masters.index')->with('success', 'Fees master group deleted successfully.');
+    }
+
+    /**
+     * CI Feemaster::remove_row — delete one cumulative_fine slab.
+     */
+    public function removeRow(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('fees_master', 'can_edit'), 403);
+
+        $data = $request->validate([
+            'cumulative_id' => ['required', 'integer'],
+        ]);
+
+        $this->masters->removeCumulative((int) $data['cumulative_id']);
+
+        return response()->json(['status' => 1, 'msg' => 'success']);
     }
 }

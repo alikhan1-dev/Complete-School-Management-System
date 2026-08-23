@@ -4,6 +4,7 @@ namespace App\Modules\Fees\Models;
 
 use App\Modules\Shared\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FeeGroupFeetype extends BaseModel
 {
@@ -38,5 +39,10 @@ class FeeGroupFeetype extends BaseModel
     public function feeType(): BelongsTo
     {
         return $this->belongsTo(FeeType::class, 'feetype_id');
+    }
+
+    public function cumulativeFines(): HasMany
+    {
+        return $this->hasMany(CumulativeFine::class, 'fee_groups_feetype_id')->orderBy('id');
     }
 }

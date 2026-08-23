@@ -41,27 +41,47 @@
                             <option value="none" @selected(old('account_type', 'none') === 'none')>None</option>
                             <option value="fix" @selected(old('account_type') === 'fix')>Fix Amount</option>
                             <option value="percentage" @selected(old('account_type') === 'percentage')>Percentage</option>
+                            <option value="cumulative" @selected(old('account_type') === 'cumulative')>Cumulative</option>
                         </select>
                     </div>
-                    <div class="form-group fine-fields" style="display:none;">
-                        <label>Due Date</label>
+                    <div class="form-group fine-due" style="display:none;">
+                        <label>Due Date</label> <small class="req">*</small>
                         <input type="date" name="due_date" class="form-control" value="{{ old('due_date') }}">
                     </div>
                     <div class="form-group fine-pct" style="display:none;">
                         <label>Fine Percentage</label>
                         <input type="number" step="0.01" min="0" name="fine_percentage" class="form-control" value="{{ old('fine_percentage', 0) }}">
                     </div>
-                    <div class="form-group fine-fields" style="display:none;">
+                    <div class="form-group fine-fix" style="display:none;">
                         <label>Fine Amount</label>
                         <input type="number" step="0.01" min="0" name="fine_amount" class="form-control" value="{{ old('fine_amount', 0) }}">
                     </div>
-                    <div class="checkbox fine-fields" style="display:none;">
+                    <div class="checkbox fine-fix" style="display:none;">
                         <label>
                             <input type="checkbox" name="fine_per_day" value="1" @checked(old('fine_per_day'))>
                             Fine Per Day
                         </label>
                     </div>
-                    <p class="help-block text-muted">Cumulative fine type will be added in a later slice.</p>
+                    <div id="cumulative_table" style="display:none;">
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" name="fine_per_day" id="fine_per_day_cum" value="1" @checked(old('fine_per_day'))>
+                                Per Day
+                            </label>
+                        </div>
+                        <table class="table table-bordered table-condensed">
+                            <thead>
+                            <tr>
+                                <th>Total Overdue (days)</th>
+                                <th>Fine Amount</th>
+                                <th style="width:60px;">
+                                    <button type="button" class="btn btn-info btn-xs" id="add_cumulative_row">Add</button>
+                                </th>
+                            </tr>
+                            </thead>
+                            <tbody id="finetable"></tbody>
+                        </table>
+                    </div>
                 </div>
                 <div class="box-footer">
                     <button type="submit" class="btn btn-info pull-right">Save</button>
@@ -113,6 +133,13 @@
                                                 ({{ number_format((float) $row->fine_amount, 2) }})
                                             @elseif($row->fine_type === 'percentage')
                                                 ({{ number_format((float) $row->fine_percentage, 2) }}% / {{ number_format((float) $row->fine_amount, 2) }})
+                                            @elseif($row->fine_type === 'cumulative')
+                                                @foreach($row->cumulativeFines as $fine)
+                                                    <div>Days: {{ $fine->overdue_day }} — Fine: {{ number_format((float) $fine->fine_amount, 2) }}</div>
+                                                @endforeach
+                                                @if((int) $row->fine_per_day === 1)
+                                                    <small>(per day)</small>
+                                                @endif
                                             @endif
                                         </td>
                                         <td>{{ $row->due_date }}</td>
@@ -144,12 +171,48 @@
 @push('scripts')
 <script>
 $(function () {
+    var cumulativeIndex = 0;
+    function addCumulativeRow(day, fine, id) {
+        cumulativeIndex++;
+        var html = '<tr data-row="' + cumulativeIndex + '">' +
+            '<td><input type="hidden" name="cumulative_id[]" value="' + (id || 0) + '">' +
+            '<input type="number" min="1" name="overdue_day[]" class="form-control" value="' + (day || '') + '" required></td>' +
+            '<td><input type="number" step="0.01" min="0" name="overdue_fine[]" class="form-control" value="' + (fine || '') + '" required></td>' +
+            '<td><button type="button" class="btn btn-danger btn-xs remove-cumulative-row">X</button></td>' +
+            '</tr>';
+        $('#finetable').append(html);
+    }
     function toggleFine() {
         var t = $('#account_type').val();
-        $('.fine-fields').toggle(t === 'fix' || t === 'percentage');
+        $('.fine-due').toggle(t === 'fix' || t === 'percentage' || t === 'cumulative');
         $('.fine-pct').toggle(t === 'percentage');
+        $('.fine-fix').toggle(t === 'fix' || t === 'percentage');
+        $('#cumulative_table').toggle(t === 'cumulative');
+        if (t === 'cumulative' && $('#finetable tr').length === 0) {
+            addCumulativeRow();
+        }
+        if (t !== 'cumulative') {
+            $('#finetable').empty();
+        }
+        // avoid duplicate fine_per_day when not cumulative
+        if (t === 'cumulative') {
+            $('.fine-fix input[name="fine_per_day"]').prop('disabled', true);
+            $('#fine_per_day_cum').prop('disabled', false);
+        } else {
+            $('.fine-fix input[name="fine_per_day"]').prop('disabled', false);
+            $('#fine_per_day_cum').prop('disabled', true);
+        }
     }
     $('#account_type').on('change', toggleFine);
+    $('#add_cumulative_row').on('click', function () { addCumulativeRow(); });
+    $(document).on('click', '.remove-cumulative-row', function () {
+        $(this).closest('tr').remove();
+    });
+    @if(old('account_type') === 'cumulative')
+        @foreach((array) old('overdue_day', []) as $i => $day)
+            addCumulativeRow(@json($day), @json(old('overdue_fine.'.$i)), @json(old('cumulative_id.'.$i, 0)));
+        @endforeach
+    @endif
     toggleFine();
 });
 </script>
