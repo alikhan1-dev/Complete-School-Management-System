@@ -156,6 +156,7 @@ class StudentSearchService
                 'classes.class',
                 'sections.section',
                 'users.username',
+                'users.password',
                 'users.id as user_tbl_id',
                 DB::raw("IFNULL(categories.category, '') as category"),
             ])

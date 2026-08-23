@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Placeholder for Phase 2–8 migration of the Parents module.
- * Feature code will be ported from smart_7.2 with parity testing.
+ * Phase 2 Parents migration status.
  */
 class ModuleStatusController extends Controller
 {
@@ -15,8 +14,15 @@ class ModuleStatusController extends Controller
     {
         return response()->json([
             'module' => 'Parents',
-            'status' => 'pending',
-            'message' => 'Module skeleton ready. Business features migrate in later phases.',
+            'status' => 'in_progress',
+            'message' => 'Parent portal credentials on student profile + getlogindetail + send student/parent password endpoints done. Deferred: live mail/SMS/WhatsApp for student_login_credential; sibling childs append (CI also omits); parent portal feature expansion.',
+            'slices' => [
+                'admission_parent_user_create' => 'done',
+                'sibling_parent_reuse_on_admit' => 'done',
+                'profile_credentials_login_detail' => 'done',
+                'send_student_parent_password_endpoints' => 'done',
+                'live_login_credential_gateways' => 'deferred',
+            ],
         ]);
     }
 }

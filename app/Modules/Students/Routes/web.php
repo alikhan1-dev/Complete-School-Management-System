@@ -76,6 +76,9 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('student/disablestudent/{id}', [StudentController::class, 'disable'])->name('students.disable');
     Route::post('student/enablestudent/{id}', [StudentController::class, 'enable'])->name('students.enable');
     Route::post('student/disable_reason', [StudentController::class, 'disableReason'])->name('students.disable_reason');
+    Route::post('student/getlogindetail', [StudentController::class, 'getlogindetail'])->name('students.login_detail');
+    Route::post('student/sendpassword', [StudentController::class, 'sendpassword'])->name('students.send_password');
+    Route::post('student/send_parent_password', [StudentController::class, 'sendParentPassword'])->name('students.send_parent_password');
 
     // Promote / transfer (CI Stdtransfer)
     Route::match(['get', 'post'], 'admin/stdtransfer/index', [StdTransferController::class, 'index'])->name('students.stdtransfer.index');

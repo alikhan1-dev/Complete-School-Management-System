@@ -33,8 +33,32 @@
             <tr><th>Father Name</th><td>{{ $student->father_name }}</td><th>Mother Name</th><td>{{ $student->mother_name }}</td></tr>
             <tr><th>Guardian</th><td>{{ $student->guardian_name }} ({{ $student->guardian_is }})</td><th>Guardian Phone</th><td>{{ $student->guardian_phone }}</td></tr>
             <tr><th>Status</th><td colspan="3">{{ ($student->is_active ?? '') === 'yes' ? 'Active' : 'Disabled' }}</td></tr>
-            <tr><th>Portal Username</th><td colspan="3">{{ $student->username }}</td></tr>
+            <tr>
+                <th>{{ __('system.student') }} {{ __('system.username') }}</th>
+                <td>{{ $student->username }}</td>
+                <th>{{ __('system.parent') }} {{ __('system.username') }}</th>
+                <td>{{ $guardianCredential->username ?? '' }}</td>
+            </tr>
         </table>
+
+        @if(($student->is_active ?? '') === 'yes')
+            <div style="margin: 10px 0 15px;">
+                @if(!empty($canViewLoginDetails))
+                    <button type="button" class="btn btn-default btn-sm" id="btn_login_details">
+                        <i class="fa fa-key"></i> {{ __('system.login_details') }}
+                    </button>
+                @endif
+                @if(!empty($canSendCredentials))
+                    <button type="button" class="btn btn-default btn-sm" id="btn_send_student_password">
+                        {{ __('system.send_student_password') }}
+                    </button>
+                    <button type="button" class="btn btn-default btn-sm" id="btn_send_parent_password">
+                        {{ __('system.send_parent_password') }}
+                    </button>
+                @endif
+                <span id="credential_msg" class="text-success" style="margin-left:8px;"></span>
+            </div>
+        @endif
 
         @if(($siblings ?? collect())->isNotEmpty())
             <h4>Siblings</h4>
@@ -303,3 +327,103 @@
         @endcan
     </div>
 </div>
+
+@if(($student->is_active ?? '') === 'yes' && (!empty($canViewLoginDetails) || !empty($canSendCredentials)))
+    <div class="modal fade" id="login_detail_modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title">{{ __('system.login_details') }}</h4>
+                </div>
+                <div class="modal-body" id="login_detail_body"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        var csrf = @json(csrf_token());
+        var studentId = @json((int) $student->id);
+        var studentSessionId = @json((int) ($student->student_session_id ?? 0));
+        var studentName = @json(trim($student->firstname.' '.($student->middlename ?? '').' '.($student->lastname ?? '')));
+        var msgEl = document.getElementById('credential_msg');
+
+        function postForm(url, data) {
+            var body = new URLSearchParams();
+            Object.keys(data).forEach(function (k) { body.append(k, data[k] == null ? '' : data[k]); });
+            body.append('_token', csrf);
+            return fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: body.toString()
+            }).then(function (r) { return r.json(); });
+        }
+
+        var loginBtn = document.getElementById('btn_login_details');
+        if (loginBtn) {
+            loginBtn.addEventListener('click', function () {
+                postForm(@json(url('student/getlogindetail')), { student_id: studentId }).then(function (rows) {
+                    var html = '<p class="lead text-center">' + studentName + '</p>';
+                    html += '<table class="table table-bordered"><thead><tr>';
+                    html += '<th>{{ __('system.user_type') }}</th>';
+                    html += '<th>{{ __('system.username') }}</th>';
+                    html += '<th>{{ __('system.password') }}</th>';
+                    html += '</tr></thead><tbody>';
+                    (rows || []).forEach(function (obj) {
+                        html += '<tr><td><b>' + (obj.role || '') + '</b></td>';
+                        html += '<td>' + (obj.username || '') + '</td>';
+                        html += '<td>' + (obj.password || '') + '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                    html += '<p><b>{{ __('system.login_url') }}:</b> ' + @json(url('site/userlogin')) + '</p>';
+                    document.getElementById('login_detail_body').innerHTML = html;
+                    if (window.jQuery && jQuery.fn.modal) {
+                        jQuery('#login_detail_modal').modal('show');
+                    } else {
+                        document.getElementById('login_detail_modal').style.display = 'block';
+                    }
+                }).catch(function () {});
+            });
+        }
+
+        var sendStudent = document.getElementById('btn_send_student_password');
+        if (sendStudent) {
+            sendStudent.addEventListener('click', function () {
+                postForm(@json(url('student/sendpassword')), {
+                    student_id: studentId,
+                    student_session_id: studentSessionId,
+                    username: @json((string) ($student->username ?? '')),
+                    password: @json((string) ($student->password ?? '')),
+                    contact_no: @json((string) ($student->mobileno ?? '')),
+                    email: @json((string) ($student->email ?? '')),
+                    admission_no: @json((string) ($student->admission_no ?? ''))
+                }).then(function () {
+                    if (msgEl) msgEl.textContent = @json(__('system.message_successfully_sent'));
+                }).catch(function () {});
+            });
+        }
+
+        var sendParent = document.getElementById('btn_send_parent_password');
+        if (sendParent) {
+            sendParent.addEventListener('click', function () {
+                postForm(@json(url('student/send_parent_password')), {
+                    student_id: studentId,
+                    student_session_id: studentSessionId,
+                    username: @json((string) ($guardianCredential->username ?? '')),
+                    password: @json((string) ($guardianCredential->password ?? '')),
+                    contact_no: @json((string) ($student->guardian_phone ?? '')),
+                    email: @json((string) ($student->guardian_email ?? '')),
+                    admission_no: @json((string) ($student->admission_no ?? ''))
+                }).then(function () {
+                    if (msgEl) msgEl.textContent = @json(__('system.message_successfully_sent'));
+                }).catch(function () {});
+            });
+        }
+    })();
+    </script>
+@endif

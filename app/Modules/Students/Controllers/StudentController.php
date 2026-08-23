@@ -5,6 +5,7 @@ namespace App\Modules\Students\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Academics\Services\CustomFieldValueService;
+use App\Modules\Parents\Services\ParentAccountService;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Settings\Models\SchSetting;
 use App\Modules\Students\Models\Category;
@@ -34,7 +35,8 @@ class StudentController extends Controller
         protected StudentLifecycleService $lifecycle,
         protected CustomFieldValueService $customFields,
         protected StudentDocumentService $documents,
-        protected StudentTimelineService $timeline
+        protected StudentTimelineService $timeline,
+        protected ParentAccountService $parents,
     ) {
     }
 
@@ -204,6 +206,7 @@ class StudentController extends Controller
         abort_if(! $student, 404);
 
         $schSetting = SchSetting::query()->first();
+        $guardianCredential = $this->parents->guardianCredential((int) ($student->parent_id ?? 0));
 
         return view('shared::layouts.admin', [
             'title' => 'Student Details',
@@ -219,6 +222,9 @@ class StudentController extends Controller
                 ? $this->timeline->find((int) request()->query('edit_timeline'))
                 : null,
             'siblings' => $this->search->siblingsOf((int) ($student->parent_id ?? 0), $id),
+            'guardianCredential' => $guardianCredential,
+            'canViewLoginDetails' => $this->permissions->hasPrivilege('student_login_credential_report', 'can_view'),
+            'canSendCredentials' => $this->permissions->hasPrivilege('disable_student', 'can_view'),
         ]);
     }
 
@@ -362,6 +368,85 @@ class StudentController extends Controller
         );
 
         return response()->json(['status' => 'success', 'error' => '', 'message' => 'Student disabled.']);
+    }
+
+    /**
+     * CI Student::getlogindetail — student + parent portal credentials.
+     */
+    public function getlogindetail(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('student_login_credential_report', 'can_view'), 403);
+
+        $studentId = (int) $request->input('student_id');
+        abort_if($studentId <= 0, 404);
+
+        $rows = [];
+        foreach ($this->parents->loginDetailsForStudent($studentId) as $row) {
+            $role = strtolower((string) ($row->role ?? ''));
+            $rows[] = [
+                'id' => (int) $row->id,
+                'user_id' => (int) $row->user_id,
+                'username' => (string) $row->username,
+                'password' => (string) $row->password,
+                'role' => $role !== '' ? (string) __('system.'.$role) : '',
+            ];
+        }
+
+        return response()->json($rows);
+    }
+
+    /**
+     * CI Student::sendpassword — student_login_credential (live send deferred).
+     */
+    public function sendpassword(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('disable_student', 'can_view')
+            || $this->permissions->hasPrivilege('student', 'can_view'), 403);
+
+        $studentId = (int) $request->input('student_id');
+        abort_if($studentId <= 0, 404);
+        Student::query()->findOrFail($studentId);
+
+        $credential = $this->parents->studentCredential($studentId);
+        $this->parents->queueLoginCredentialNotification([
+            'student_id' => $studentId,
+            'credential_for' => 'student',
+            'username' => (string) ($request->input('username') ?: ($credential->username ?? '')),
+            'password' => (string) ($request->input('password') ?: ($credential->password ?? '')),
+            'contact_no' => (string) $request->input('contact_no', ''),
+            'email' => (string) $request->input('email', ''),
+            'admission_no' => (string) $request->input('admission_no', ''),
+            'student_session_id' => $request->input('student_session_id'),
+        ]);
+
+        return response()->json(['status' => 1, 'message' => (string) __('system.message_successfully_sent')]);
+    }
+
+    /**
+     * CI Student::send_parent_password — parent credential notification (live send deferred).
+     */
+    public function sendParentPassword(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('disable_student', 'can_view')
+            || $this->permissions->hasPrivilege('student', 'can_view'), 403);
+
+        $studentId = (int) $request->input('student_id');
+        abort_if($studentId <= 0, 404);
+        $student = Student::query()->findOrFail($studentId);
+        $guardian = $this->parents->guardianCredential((int) ($student->parent_id ?? 0));
+
+        $this->parents->queueLoginCredentialNotification([
+            'student_id' => $studentId,
+            'credential_for' => 'parent',
+            'username' => (string) ($request->input('username') ?: ($guardian->username ?? '')),
+            'password' => (string) ($request->input('password') ?: ($guardian->password ?? '')),
+            'contact_no' => (string) $request->input('contact_no', ''),
+            'email' => (string) $request->input('email', ''),
+            'admission_no' => (string) $request->input('admission_no', ''),
+            'student_session_id' => $request->input('student_session_id'),
+        ]);
+
+        return response()->json(['status' => 1, 'message' => (string) __('system.message_successfully_sent')]);
     }
 
     public function getByClassAndSection(Request $request): JsonResponse
