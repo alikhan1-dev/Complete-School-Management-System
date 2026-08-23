@@ -28,14 +28,14 @@
     <div class="box-header with-border">
         <h3 class="box-title">Fees</h3>
         <div class="box-tools">
-            <button type="button" class="btn btn-primary btn-sm" id="btn_collect_selected">Collect Selected</button>
+            <button type="button" class="btn btn-primary btn-sm btn_collect_selected">Collect Selected</button>
         </div>
     </div>
     <div class="box-body table-responsive no-padding">
         <table class="table table-striped table-bordered">
             <thead>
             <tr>
-                <th style="width:36px;"><input type="checkbox" id="select_all_fees"></th>
+                <th style="width:36px;"><input type="checkbox" class="select_all_fee_lines" data-target=".regular_fee_line_cb"></th>
                 <th>Fees Group</th>
                 <th>Fees Code</th>
                 <th>Due Date</th>
@@ -63,7 +63,7 @@
                 <tr>
                     <td>
                         @if($line->balance > 0)
-                            <input type="checkbox" class="fee_line_cb" value="{{ $selectValue }}">
+                            <input type="checkbox" class="fee_line_cb regular_fee_line_cb" value="{{ $selectValue }}">
                         @endif
                     </td>
                     <td>{{ $line->fee_group_name }}</td>
@@ -145,11 +145,15 @@
 <div class="box box-primary">
     <div class="box-header with-border">
         <h3 class="box-title">{{ __('system.transport_fees') }}</h3>
+        <div class="box-tools">
+            <button type="button" class="btn btn-primary btn-sm btn_collect_selected">Collect Selected</button>
+        </div>
     </div>
     <div class="box-body table-responsive no-padding">
         <table class="table table-striped table-bordered">
             <thead>
             <tr>
+                <th style="width:36px;"><input type="checkbox" class="select_all_fee_lines" data-target=".transport_fee_line_cb"></th>
                 <th>{{ __('system.fees_group') }}</th>
                 <th>{{ __('system.month') }}</th>
                 <th>{{ __('system.due_date') }}</th>
@@ -168,6 +172,11 @@
                     $status = $line->balance <= 0 ? 'Paid' : ($line->paid_amount > 0 ? 'Partial' : 'Unpaid');
                 @endphp
                 <tr>
+                    <td>
+                        @if($line->balance > 0)
+                            <input type="checkbox" class="fee_line_cb transport_fee_line_cb" value="t:{{ $line->student_transport_fee_id }}">
+                        @endif
+                    </td>
                     <td>{{ $line->fee_group_name }}</td>
                     <td>{{ $line->fee_type }}</td>
                     <td>{{ $line->due_date ?: '—' }}</td>
@@ -198,6 +207,7 @@
                 </tr>
                 @foreach($line->payments as $pay)
                     <tr class="bg-gray-light">
+                        <td></td>
                         <td colspan="4" class="text-right">
                             Payment {{ $pay->payment_id }} — {{ $pay->date }} — {{ $pay->payment_mode }}
                             @if($pay->collected_by) <small>({{ $pay->collected_by }})</small>@endif
@@ -238,10 +248,11 @@
 @push('scripts')
 <script>
 $(function () {
-    $('#select_all_fees').on('change', function () {
-        $('.fee_line_cb').prop('checked', $(this).prop('checked'));
+    $('.select_all_fee_lines').on('change', function () {
+        var target = $(this).data('target');
+        $(target).prop('checked', $(this).prop('checked'));
     });
-    $('#btn_collect_selected').on('click', function () {
+    $('.btn_collect_selected').on('click', function () {
         var $checked = $('.fee_line_cb:checked');
         if ($checked.length === 0) {
             alert('Select at least one unpaid fee line.');

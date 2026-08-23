@@ -69,6 +69,7 @@
                     @foreach($lines as $i => $line)
                         @php
                             $row = $i + 1;
+                            $isTransport = ($line->fee_category ?? 'fees') === 'transport';
                             $payAmount = max(0, (float) $line->balance);
                             $payFine = max(0, (float) $line->remaining_fine);
                             $totalPaying += $payAmount + $payFine;
@@ -77,13 +78,19 @@
                             <td>
                                 {{ $line->fee_group_name }}
                                 <input type="hidden" name="row_counter[]" value="{{ $row }}">
-                                <input type="hidden" name="student_fees_master_id_{{ $row }}" value="{{ $line->student_fees_master_id }}">
-                                <input type="hidden" name="fee_groups_feetype_id_{{ $row }}" value="{{ $line->fee_groups_feetype_id }}">
-                                <input type="hidden" name="fee_session_group_id_{{ $row }}" value="{{ $line->fee_session_group_id }}">
-                                <input type="hidden" name="fee_category_{{ $row }}" value="fees">
-                                <input type="hidden" name="trans_fee_id_{{ $row }}" value="0">
+                                <input type="hidden" name="student_fees_master_id_{{ $row }}" value="{{ $isTransport ? 0 : $line->student_fees_master_id }}">
+                                <input type="hidden" name="fee_groups_feetype_id_{{ $row }}" value="{{ $isTransport ? 0 : $line->fee_groups_feetype_id }}">
+                                <input type="hidden" name="fee_session_group_id_{{ $row }}" value="{{ $isTransport ? 0 : ($line->fee_session_group_id ?? 0) }}">
+                                <input type="hidden" name="fee_category_{{ $row }}" value="{{ $isTransport ? 'transport' : 'fees' }}">
+                                <input type="hidden" name="trans_fee_id_{{ $row }}" value="{{ $isTransport ? $line->student_transport_fee_id : 0 }}">
                             </td>
-                            <td>{{ $line->fee_type }} ({{ $line->fee_code }})</td>
+                            <td>
+                                @if($isTransport)
+                                    {{ $line->fee_type }}
+                                @else
+                                    {{ $line->fee_type }} ({{ $line->fee_code }})
+                                @endif
+                            </td>
                             <td>{{ number_format($line->balance, 2) }}</td>
                             <td>{{ number_format($line->remaining_fine, 2) }}</td>
                             <td>

@@ -316,16 +316,41 @@ class StudentFeeController extends Controller
         $studentSessionId = (int) $data['student_session_id'];
         $lines = [];
         foreach ($data['row_counter'] as $row) {
+            $amount = (float) $request->input('fee_amount_'.$row, 0);
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $category = (string) $request->input('fee_category_'.$row, 'fees');
+            $transportId = (int) $request->input('trans_fee_id_'.$row, 0);
+            $fine = (float) $request->input('fee_groups_feetype_fine_amount_'.$row, 0);
+
+            if ($category === 'transport' || $transportId > 0) {
+                if ($transportId <= 0) {
+                    continue;
+                }
+                $lines[] = [
+                    'fee_category' => 'transport',
+                    'student_transport_fee_id' => $transportId,
+                    'student_fees_master_id' => 0,
+                    'fee_groups_feetype_id' => 0,
+                    'amount' => $amount,
+                    'amount_fine' => $fine,
+                ];
+
+                continue;
+            }
+
             $masterId = (int) $request->input('student_fees_master_id_'.$row);
             $feetypeId = (int) $request->input('fee_groups_feetype_id_'.$row);
-            $amount = (float) $request->input('fee_amount_'.$row, 0);
-            $fine = (float) $request->input('fee_groups_feetype_fine_amount_'.$row, 0);
-            if ($masterId <= 0 || $feetypeId <= 0 || $amount <= 0) {
+            if ($masterId <= 0 || $feetypeId <= 0) {
                 continue;
             }
             $lines[] = [
+                'fee_category' => 'fees',
                 'student_fees_master_id' => $masterId,
                 'fee_groups_feetype_id' => $feetypeId,
+                'student_transport_fee_id' => 0,
                 'amount' => $amount,
                 'amount_fine' => $fine,
             ];

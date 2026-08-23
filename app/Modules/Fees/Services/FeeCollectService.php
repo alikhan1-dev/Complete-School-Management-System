@@ -775,10 +775,24 @@ class FeeCollectService
     }
 
     /**
-     * CI fee_deposit_collections / addfeegrp — multi fee lines, no payment-time discounts.
+     * CI fee_deposit_collections / addfeegrp — multi fee lines (fees + transport), no payment-time discounts.
      *
-     * @param  list<array{student_fees_master_id:int,fee_groups_feetype_id:int,amount:float|string,amount_fine?:float|string}>  $lines
-     * @return list<array{invoice_id:int,sub_invoice_id:int,student_fees_master_id:int,fee_groups_feetype_id:int}>
+     * @param  list<array{
+     *     fee_category?:string,
+     *     student_fees_master_id?:int,
+     *     fee_groups_feetype_id?:int,
+     *     student_transport_fee_id?:int,
+     *     amount:float|string,
+     *     amount_fine?:float|string
+     * }>  $lines
+     * @return list<array{
+     *     invoice_id:int,
+     *     sub_invoice_id:int,
+     *     fee_category:string,
+     *     student_fees_master_id:?int,
+     *     fee_groups_feetype_id:?int,
+     *     student_transport_fee_id:?int
+     * }>
      */
     public function depositCollections(
         array $lines,
@@ -805,9 +819,44 @@ class FeeCollectService
                     continue;
                 }
 
-                $masterId = (int) $line['student_fees_master_id'];
-                $feetypeId = (int) $line['fee_groups_feetype_id'];
                 $fine = round((float) ($line['amount_fine'] ?? 0), 2);
+                $category = (string) ($line['fee_category'] ?? 'fees');
+                $transportId = (int) ($line['student_transport_fee_id'] ?? 0);
+
+                if ($category === 'transport' || $transportId > 0) {
+                    if ($transportId <= 0) {
+                        throw new InvalidArgumentException('Transport fee is required.');
+                    }
+
+                    $deposit = $this->depositTransport([
+                        'student_transport_fee_id' => $transportId,
+                        'student_session_id' => $studentSessionId,
+                        'date' => $date,
+                        'amount' => $amount,
+                        'amount_discount' => 0,
+                        'amount_fine' => $fine,
+                        'payment_mode' => $paymentMode,
+                        'description' => $description,
+                        'discounts' => [],
+                    ], $staff);
+
+                    $results[] = [
+                        'invoice_id' => $deposit['invoice_id'],
+                        'sub_invoice_id' => $deposit['sub_invoice_id'],
+                        'fee_category' => 'transport',
+                        'student_fees_master_id' => null,
+                        'fee_groups_feetype_id' => null,
+                        'student_transport_fee_id' => $transportId,
+                    ];
+
+                    continue;
+                }
+
+                $masterId = (int) ($line['student_fees_master_id'] ?? 0);
+                $feetypeId = (int) ($line['fee_groups_feetype_id'] ?? 0);
+                if ($masterId <= 0 || $feetypeId <= 0) {
+                    continue;
+                }
 
                 $deposit = $this->deposit([
                     'student_fees_master_id' => $masterId,
@@ -825,8 +874,10 @@ class FeeCollectService
                 $results[] = [
                     'invoice_id' => $deposit['invoice_id'],
                     'sub_invoice_id' => $deposit['sub_invoice_id'],
+                    'fee_category' => 'fees',
                     'student_fees_master_id' => $masterId,
                     'fee_groups_feetype_id' => $feetypeId,
+                    'student_transport_fee_id' => null,
                 ];
             }
 
@@ -839,18 +890,31 @@ class FeeCollectService
     }
 
     /**
-     * Resolve selected fee lines for group collect UI.
+     * Resolve selected fee lines for group collect UI (fees + transport).
      *
-     * @param  list<string>  $selected  values "masterId:feeGroupsFeetypeId"
+     * @param  list<string>  $selected  "masterId:feeGroupsFeetypeId" or "t:transportFeeId"
      * @return list<object>
      */
     public function resolveSelectedLines(int $studentSessionId, array $selected): array
     {
-        $ledger = $this->getStudentFees($studentSessionId);
         $map = [];
-        foreach ($ledger as $line) {
+
+        foreach ($this->getStudentFees($studentSessionId) as $line) {
+            $line->fee_category = 'fees';
+            $line->student_transport_fee_id = 0;
             $key = $line->student_fees_master_id.':'.$line->fee_groups_feetype_id;
             $map[$key] = $line;
+            $map['fees:'.$key] = $line;
+        }
+
+        $student = $this->findStudentBySession($studentSessionId);
+        $routeId = isset($student->route_pickup_point_id) ? (int) $student->route_pickup_point_id : 0;
+        if ($this->transportModuleActive() && $routeId > 0) {
+            foreach ($this->getStudentTransportFees($studentSessionId, $routeId) as $line) {
+                $key = 't:'.$line->student_transport_fee_id;
+                $map[$key] = $line;
+                $map['transport:'.$line->student_transport_fee_id] = $line;
+            }
         }
 
         $resolved = [];
