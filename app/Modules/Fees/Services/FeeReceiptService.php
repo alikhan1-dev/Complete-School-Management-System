@@ -6,8 +6,8 @@ use App\Modules\Shared\Services\SchoolContext;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI Studentfee::printFeesByName + Studentfeemaster_model invoice lookups.
- * Deferred: thermal print addon, printFeesByGroup / ByGroupArray, SMS on collect.
+ * CI Studentfee::printFeesByName + printFeesByGroup + Studentfeemaster_model lookups.
+ * Deferred: thermal print addon, SMS on collect.
  */
 class FeeReceiptService
 {
@@ -167,6 +167,14 @@ class FeeReceiptService
     /**
      * @return list<string> copy labels to print (office / student)
      */
+    public function invoiceCopiesPublic(): array
+    {
+        return $this->invoiceCopies();
+    }
+
+    /**
+     * @return list<string> copy labels to print (office / student)
+     */
     protected function invoiceCopies(): array
     {
         $raw = (string) $this->school->get('is_duplicate_fees_invoice', '0');
@@ -299,5 +307,235 @@ class FeeReceiptService
         }
 
         return (object) $decoded[$key];
+    }
+
+    /**
+     * CI Studentfee::printFeesByGroup — single fee-line ledger receipt.
+     *
+     * @return array{feeList:object,fee_category:string,line:array<string,mixed>}|null
+     */
+    public function groupReceiptPayload(string $feeCategory, array $params): ?array
+    {
+        if ($feeCategory === 'transport') {
+            $transFeeId = (int) ($params['trans_fee_id'] ?? 0);
+            if ($transFeeId <= 0) {
+                return null;
+            }
+            $feeList = $this->getTransportFeeById($transFeeId);
+            if (! $feeList) {
+                return null;
+            }
+
+            return [
+                'feeList' => $feeList,
+                'fee_category' => 'transport',
+                'line' => $this->buildGroupLine($feeList, 'transport'),
+            ];
+        }
+
+        $feeSessionGroupId = (int) ($params['fee_session_group_id'] ?? 0);
+        $feeMasterId = (int) ($params['fee_master_id'] ?? 0);
+        $feeGroupsFeetypeId = (int) ($params['fee_groups_feetype_id'] ?? 0);
+        if ($feeSessionGroupId <= 0 || $feeMasterId <= 0 || $feeGroupsFeetypeId <= 0) {
+            return null;
+        }
+
+        $feeList = $this->getDueFeeByFeeSessionGroupFeetype($feeSessionGroupId, $feeMasterId, $feeGroupsFeetypeId);
+        if (! $feeList) {
+            return null;
+        }
+
+        return [
+            'feeList' => $feeList,
+            'fee_category' => 'fees',
+            'line' => $this->buildGroupLine($feeList, 'fees'),
+        ];
+    }
+
+    /**
+     * CI Studentfee::printFeesByGroupArray — multiple fee lines for one student.
+     *
+     * @param  list<array<string, mixed>>  $selections
+     * @return list<array{feeList:object,fee_category:string,line:array<string,mixed>}>
+     */
+    public function groupReceiptPayloads(array $selections): array
+    {
+        $items = [];
+        foreach ($selections as $selection) {
+            if (! is_array($selection)) {
+                continue;
+            }
+            $category = (string) ($selection['fee_category'] ?? 'fees');
+            $payload = $this->groupReceiptPayload($category, $selection);
+            if ($payload !== null) {
+                $items[] = $payload;
+            }
+        }
+
+        return $items;
+    }
+
+    public function groupStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'paid' => (string) __('system.paid'),
+            'partial' => (string) __('system.partial'),
+            default => (string) __('system.unpaid'),
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function buildGroupLine(object $feeList, string $feeCategory): array
+    {
+        $due = $feeCategory === 'fees' && (int) ($feeList->is_system ?? 0) === 1
+            ? (float) ($feeList->student_fees_master_amount ?? 0)
+            : (float) ($feeList->amount ?? $feeList->fees ?? 0);
+
+        $totals = ['amount' => 0.0, 'amount_discount' => 0.0, 'amount_fine' => 0.0];
+        $payments = [];
+        $depositeId = (int) ($feeList->student_fees_deposite_id ?? 0);
+        $rawDetail = $feeList->amount_detail ?? null;
+
+        if ($rawDetail !== null && $rawDetail !== '' && $rawDetail !== '0') {
+            $decoded = json_decode((string) $rawDetail, true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $sub => $entry) {
+                    if (! is_array($entry)) {
+                        continue;
+                    }
+                    $subId = (int) ($entry['inv_no'] ?? $sub);
+                    $totals['amount'] += (float) ($entry['amount'] ?? 0);
+                    $totals['amount_discount'] += (float) ($entry['amount_discount'] ?? 0);
+                    $totals['amount_fine'] += (float) ($entry['amount_fine'] ?? 0);
+                    $payments[] = [
+                        'sub_invoice_id' => $subId,
+                        'payment_id' => $depositeId.'/'.$subId,
+                        'date' => $this->formatDate($entry['date'] ?? ''),
+                        'payment_mode' => $this->paymentModeLabel($entry['payment_mode'] ?? ''),
+                        'amount' => (float) ($entry['amount'] ?? 0),
+                        'amount_fine' => (float) ($entry['amount_fine'] ?? 0),
+                        'amount_discount' => (float) ($entry['amount_discount'] ?? 0),
+                    ];
+                }
+            }
+        }
+
+        $balance = round($due - ($totals['amount'] + $totals['amount_discount']), 2);
+        $status = $balance <= 0 ? 'paid' : ($totals['amount'] > 0 || $totals['amount_discount'] > 0 ? 'partial' : 'unpaid');
+
+        if ($feeCategory === 'transport') {
+            $monthKey = strtolower((string) ($feeList->month ?? ''));
+            $monthLabel = $monthKey !== '' ? (string) __('system.'.$monthKey) : '';
+            if ($monthLabel === 'system.'.$monthKey) {
+                $monthLabel = (string) ($feeList->month ?? '');
+            }
+            $feeList->name = (string) __('system.transport_fees');
+            $feeList->type = $monthLabel;
+            $feeList->code = '-';
+            $feeList->is_system = 0;
+        }
+
+        return [
+            'fee_line_label' => $this->feeLineLabel($feeList),
+            'due_date' => $this->formatDate($feeList->due_date ?? ''),
+            'status' => $status,
+            'due_amount' => $due,
+            'paid_amount' => $totals['amount'],
+            'paid_discount' => $totals['amount_discount'],
+            'paid_fine' => $totals['amount_fine'],
+            'balance' => max(0, $balance),
+            'fine_amount' => (float) ($feeList->fine_amount ?? 0),
+            'payments' => $payments,
+            'student_fees_deposite_id' => $depositeId,
+        ];
+    }
+
+    protected function getDueFeeByFeeSessionGroupFeetype(int $feeSessionGroupId, int $studentFeesMasterId, int $feeGroupsFeetypeId): ?object
+    {
+        return DB::table('student_fees_master')
+            ->join('fee_session_groups', 'fee_session_groups.id', '=', 'student_fees_master.fee_session_group_id')
+            ->join('fee_groups_feetype', 'fee_groups_feetype.fee_session_group_id', '=', 'fee_session_groups.id')
+            ->join('fee_groups', 'fee_groups.id', '=', 'fee_groups_feetype.fee_groups_id')
+            ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
+            ->leftJoin('student_fees_deposite', function ($join) {
+                $join->on('student_fees_deposite.student_fees_master_id', '=', 'student_fees_master.id')
+                    ->on('student_fees_deposite.fee_groups_feetype_id', '=', 'fee_groups_feetype.id');
+            })
+            ->join('student_session', 'student_session.id', '=', 'student_fees_master.student_session_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->where('student_fees_master.fee_session_group_id', $feeSessionGroupId)
+            ->where('student_fees_master.id', $studentFeesMasterId)
+            ->where('fee_groups_feetype.id', $feeGroupsFeetypeId)
+            ->select([
+                'student_fees_master.id',
+                'student_fees_master.is_system',
+                'student_fees_master.student_session_id',
+                'student_fees_master.fee_session_group_id',
+                'student_fees_master.amount as student_fees_master_amount',
+                'fee_groups_feetype.id as fee_groups_feetype_id',
+                'students.id as student_id',
+                'students.firstname',
+                'students.middlename',
+                'students.admission_no',
+                'students.lastname',
+                'students.father_name',
+                'student_session.class_id',
+                'classes.class',
+                'sections.section',
+                'student_session.section_id',
+                'fee_groups_feetype.amount',
+                'fee_groups_feetype.due_date',
+                'fee_groups_feetype.fine_amount',
+                'fee_groups_feetype.fine_type',
+                'fee_groups.name',
+                'feetype.code',
+                'feetype.type',
+                'feetype.is_system',
+                DB::raw('IFNULL(student_fees_deposite.id, 0) as student_fees_deposite_id'),
+                DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
+            ])
+            ->first();
+    }
+
+    protected function getTransportFeeById(int $transFeeId): ?object
+    {
+        $row = DB::table('student_transport_fees')
+            ->join('transport_feemaster', 'transport_feemaster.id', '=', 'student_transport_fees.transport_feemaster_id')
+            ->leftJoin('student_fees_deposite', 'student_fees_deposite.student_transport_fee_id', '=', 'student_transport_fees.id')
+            ->join('student_session', 'student_session.id', '=', 'student_transport_fees.student_session_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->join('route_pickup_point', 'route_pickup_point.id', '=', 'student_transport_fees.route_pickup_point_id')
+            ->where('student_transport_fees.id', $transFeeId)
+            ->select([
+                'student_transport_fees.*',
+                'route_pickup_point.fees',
+                'transport_feemaster.month',
+                'transport_feemaster.due_date',
+                'transport_feemaster.fine_amount',
+                'transport_feemaster.fine_type',
+                'transport_feemaster.fine_percentage',
+                'students.id as student_id',
+                'students.firstname',
+                'students.middlename',
+                'students.admission_no',
+                'students.lastname',
+                'students.father_name',
+                'student_session.class_id',
+                'classes.class',
+                'sections.section',
+                'student_session.section_id',
+                'student_session.student_id',
+                DB::raw('IFNULL(student_fees_deposite.id, 0) as student_fees_deposite_id'),
+                DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
+            ])
+            ->first();
+
+        return $row ?: null;
     }
 }

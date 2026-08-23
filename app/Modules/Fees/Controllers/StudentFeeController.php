@@ -556,6 +556,126 @@ class StudentFeeController extends Controller
     }
 
     /**
+     * CI Studentfee::printFeesByGroup — JSON {status:1, page:html} fee-line ledger receipt.
+     */
+    public function printFeesByGroup(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        $data = $request->validate([
+            'fee_category' => ['nullable', 'string', 'in:fees,transport'],
+            'trans_fee_id' => ['nullable', 'integer'],
+            'fee_session_group_id' => ['nullable', 'integer'],
+            'fee_master_id' => ['nullable', 'integer'],
+            'fee_groups_feetype_id' => ['nullable', 'integer'],
+            'student_session_id' => ['nullable', 'integer'],
+        ]);
+
+        $payload = $this->receipts->groupReceiptPayload(
+            (string) ($data['fee_category'] ?? 'fees'),
+            $data
+        );
+        abort_if($payload === null, 404);
+
+        $page = view('fees::print.printFeesByGroup', $this->groupReceiptViewData($payload))->render();
+
+        return response()->json(['status' => 1, 'page' => $page]);
+    }
+
+    /**
+     * Direct printable fee-line ledger (same payload as printFeesByGroup).
+     */
+    public function printFeesByGroupPage(Request $request): Response|View
+    {
+        abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        $data = $request->validate([
+            'fee_category' => ['nullable', 'string', 'in:fees,transport'],
+            'trans_fee_id' => ['nullable', 'integer'],
+            'fee_session_group_id' => ['nullable', 'integer'],
+            'fee_master_id' => ['nullable', 'integer'],
+            'fee_groups_feetype_id' => ['nullable', 'integer'],
+        ]);
+
+        $payload = $this->receipts->groupReceiptPayload(
+            (string) ($data['fee_category'] ?? 'fees'),
+            $data
+        );
+        abort_if($payload === null, 404);
+
+        return response()->view('fees::print.printFeesByGroup', $this->groupReceiptViewData($payload));
+    }
+
+    /**
+     * CI Studentfee::printFeesByGroupArray — HTML response for selected fee lines.
+     */
+    public function printFeesByGroupArray(Request $request): Response|View
+    {
+        abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        $data = $request->validate([
+            'data' => ['required', 'string'],
+        ]);
+
+        $decoded = json_decode($data['data'], true);
+        abort_unless(is_array($decoded) && $decoded !== [], 422);
+
+        $payloads = $this->receipts->groupReceiptPayloads($decoded);
+        abort_if($payloads === [], 404);
+
+        return response()->view(
+            'fees::print.printFeesByGroupArray',
+            $this->groupArrayReceiptViewData($payloads)
+        );
+    }
+
+    /**
+     * @param  array{feeList:object,fee_category:string,line:array<string,mixed>}  $payload
+     * @return array<string, mixed>
+     */
+    protected function groupReceiptViewData(array $payload): array
+    {
+        return array_merge($this->sharedPrintViewData(), [
+            'feeList' => $payload['feeList'],
+            'line' => $payload['line'],
+            'studentName' => $this->receipts->studentDisplayName($payload['feeList']),
+        ]);
+    }
+
+    /**
+     * @param  list<array{feeList:object,fee_category:string,line:array<string,mixed>}>  $payloads
+     * @return array<string, mixed>
+     */
+    protected function groupArrayReceiptViewData(array $payloads): array
+    {
+        $lines = array_map(fn (array $payload) => $payload['line'], $payloads);
+        $headerFeeList = $payloads[0]['feeList'];
+
+        return array_merge($this->sharedPrintViewData(), [
+            'headerFeeList' => $headerFeeList,
+            'lines' => $lines,
+            'studentName' => $this->receipts->studentDisplayName($headerFeeList),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function sharedPrintViewData(): array
+    {
+        return [
+            'copies' => $this->receipts->invoiceCopiesPublic(),
+            'printDate' => $this->receipts->formatDate(now()->format('Y-m-d')),
+            'headerUrl' => $this->receipts->receiptHeaderUrl(),
+            'footerHtml' => $this->receipts->receiptFooterHtml(),
+            'singlePagePrint' => $this->receipts->singlePagePrint(),
+            'currencySymbol' => $this->receipts->currencySymbol(),
+            'formatAmount' => fn (float|int|string $amount): string => $this->receipts->formatAmount($amount),
+            'groupStatusLabel' => fn (string $status): string => $this->receipts->groupStatusLabel($status),
+        ];
+    }
+
+    /**
      * @param  array{
      *     feeList:object,
      *     payment:object,
@@ -568,23 +688,16 @@ class StudentFeeController extends Controller
      */
     protected function receiptViewData(array $payload): array
     {
-        return [
+        return array_merge($this->sharedPrintViewData(), [
             'feeList' => $payload['feeList'],
             'payment' => $payload['payment'],
             'student' => $payload['student'],
             'sub_invoice_id' => $payload['sub_invoice_id'],
             'fee_category' => $payload['fee_category'],
-            'copies' => $payload['copies'],
             'studentName' => $this->receipts->studentDisplayName($payload['feeList']),
             'feeLineLabel' => $this->receipts->feeLineLabel($payload['feeList']),
             'paymentModeLabel' => $this->receipts->paymentModeLabel($payload['payment']->payment_mode ?? ''),
             'paymentDate' => $this->receipts->formatDate($payload['payment']->date ?? ''),
-            'printDate' => $this->receipts->formatDate(now()->format('Y-m-d')),
-            'headerUrl' => $this->receipts->receiptHeaderUrl(),
-            'footerHtml' => $this->receipts->receiptFooterHtml(),
-            'singlePagePrint' => $this->receipts->singlePagePrint(),
-            'currencySymbol' => $this->receipts->currencySymbol(),
-            'formatAmount' => fn (float|int|string $amount): string => $this->receipts->formatAmount($amount),
-        ];
+        ]);
     }
 }

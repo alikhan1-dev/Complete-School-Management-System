@@ -28,6 +28,7 @@
     <div class="box-header with-border">
         <h3 class="box-title">Fees</h3>
         <div class="box-tools">
+            <button type="button" class="btn btn-default btn-sm btn_print_selected">{{ __('system.print_selected') }}</button>
             <button type="button" class="btn btn-primary btn-sm btn_collect_selected">Collect Selected</button>
         </div>
     </div>
@@ -62,9 +63,14 @@
                 @endphp
                 <tr>
                     <td>
-                        @if($line->balance > 0)
-                            <input type="checkbox" class="fee_line_cb regular_fee_line_cb" value="{{ $selectValue }}">
-                        @endif
+                        <input type="checkbox" class="fee_line_cb regular_fee_line_cb"
+                               value="{{ $selectValue }}"
+                               data-fee_category="fees"
+                               data-fee_session_group_id="{{ $line->fee_session_group_id }}"
+                               data-fee_master_id="{{ $line->student_fees_master_id }}"
+                               data-fee_groups_feetype_id="{{ $line->fee_groups_feetype_id }}"
+                               data-trans_fee_id="0"
+                               @if($line->balance > 0) data-can-collect="1" @endif>
                     </td>
                     <td>{{ $line->fee_group_name }}</td>
                     <td>{{ $line->fee_type }} ({{ $line->fee_code }})</td>
@@ -92,6 +98,15 @@
                                    'fee_groups_feetype_id' => $line->fee_groups_feetype_id,
                                ]) }}">Collect</a>
                         @endif
+                        <a class="btn btn-default btn-xs"
+                           href="{{ route('fees.studentfee.printFeesByGroup.page', [
+                               'fee_category' => 'fees',
+                               'fee_session_group_id' => $line->fee_session_group_id,
+                               'fee_master_id' => $line->student_fees_master_id,
+                               'fee_groups_feetype_id' => $line->fee_groups_feetype_id,
+                           ]) }}"
+                           target="_blank"
+                           title="{{ __('system.print') }}">{{ __('system.print') }}</a>
                     </td>
                 </tr>
                 @foreach($line->payments as $pay)
@@ -154,6 +169,7 @@
     <div class="box-header with-border">
         <h3 class="box-title">{{ __('system.transport_fees') }}</h3>
         <div class="box-tools">
+            <button type="button" class="btn btn-default btn-sm btn_print_selected">{{ __('system.print_selected') }}</button>
             <button type="button" class="btn btn-primary btn-sm btn_collect_selected">Collect Selected</button>
         </div>
     </div>
@@ -181,9 +197,14 @@
                 @endphp
                 <tr>
                     <td>
-                        @if($line->balance > 0)
-                            <input type="checkbox" class="fee_line_cb transport_fee_line_cb" value="t:{{ $line->student_transport_fee_id }}">
-                        @endif
+                        <input type="checkbox" class="fee_line_cb transport_fee_line_cb"
+                               value="t:{{ $line->student_transport_fee_id }}"
+                               data-fee_category="transport"
+                               data-fee_session_group_id="0"
+                               data-fee_master_id="0"
+                               data-fee_groups_feetype_id="0"
+                               data-trans_fee_id="{{ $line->student_transport_fee_id }}"
+                               @if($line->balance > 0) data-can-collect="1" @endif>
                     </td>
                     <td>{{ $line->fee_group_name }}</td>
                     <td>{{ $line->fee_type }}</td>
@@ -211,6 +232,13 @@
                                    'transport_fees_id' => $line->student_transport_fee_id,
                                ]) }}">Collect</a>
                         @endif
+                        <a class="btn btn-default btn-xs"
+                           href="{{ route('fees.studentfee.printFeesByGroup.page', [
+                               'fee_category' => 'transport',
+                               'trans_fee_id' => $line->student_transport_fee_id,
+                           ]) }}"
+                           target="_blank"
+                           title="{{ __('system.print') }}">{{ __('system.print') }}</a>
                     </td>
                 </tr>
                 @foreach($line->payments as $pay)
@@ -261,6 +289,11 @@
     <div id="multi_collect_selected_fields"></div>
 </form>
 
+<form method="post" action="{{ route('fees.studentfee.printFeesByGroupArray') }}" id="multi_print_select_form" target="_blank" style="display:none;">
+    @csrf
+    <input type="hidden" name="data" id="multi_print_select_data" value="">
+</form>
+
 @push('scripts')
 <script>
 $(function () {
@@ -269,7 +302,7 @@ $(function () {
         $(target).prop('checked', $(this).prop('checked'));
     });
     $('.btn_collect_selected').on('click', function () {
-        var $checked = $('.fee_line_cb:checked');
+        var $checked = $('.fee_line_cb:checked[data-can-collect="1"]');
         if ($checked.length === 0) {
             alert('Select at least one unpaid fee line.');
             return;
@@ -282,6 +315,25 @@ $(function () {
             $fields.append($('<input>', {type: 'hidden', name: 'selected[]', value: $(this).val()}));
         });
         $('#multi_collect_select_form').trigger('submit');
+    });
+    $('.btn_print_selected').on('click', function () {
+        var $checked = $('.fee_line_cb:checked');
+        if ($checked.length === 0) {
+            alert(@json(__('system.no_record_selected')));
+            return;
+        }
+        var items = [];
+        $checked.each(function () {
+            items.push({
+                fee_category: $(this).data('fee_category'),
+                trans_fee_id: $(this).data('trans_fee_id'),
+                fee_session_group_id: $(this).data('fee_session_group_id'),
+                fee_master_id: $(this).data('fee_master_id'),
+                fee_groups_feetype_id: $(this).data('fee_groups_feetype_id')
+            });
+        });
+        $('#multi_print_select_data').val(JSON.stringify(items));
+        $('#multi_print_select_form').trigger('submit');
     });
 });
 </script>
