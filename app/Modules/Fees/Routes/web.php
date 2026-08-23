@@ -9,6 +9,7 @@ use App\Modules\Fees\Controllers\FeesForwardController;
 use App\Modules\Fees\Controllers\ModuleStatusController;
 use App\Modules\Fees\Controllers\OfflinePaymentController;
 use App\Modules\Fees\Controllers\StudentFeeController;
+use App\Modules\Fees\Controllers\UserFeesController;
 use App\Modules\Fees\Controllers\UserOfflinePaymentController;
 use Illuminate\Support\Facades\Route;
 
@@ -88,6 +89,10 @@ Route::middleware([
     'student_parent.selected_class',
     'student_parent.permission:fees',
 ])->group(function () {
+    // CI user/user/getfees
+    Route::get('user/user/getfees', [UserFeesController::class, 'getfees'])->name('user.fees.getfees');
+    Route::get('user/getfees', [UserFeesController::class, 'getfees']);
+
     // CI user/gateway/Payment::pay offline_payment → user/offlinepayment
     Route::post('user/offlinepayment/start', [UserOfflinePaymentController::class, 'start'])
         ->name('user.offlinepayment.start');

@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Fees',
             'status' => 'in_progress',
-            'message' => 'Phase 3 Fees operational core complete: types/groups/master/assign/discounts/collect/multi/due-fees/carry-forward + transport collect (single+multi) + offline bank payments (admin + portal). Deferred: student getfees ledger UI, print/SMS, transport fees-master admin.',
+            'message' => 'Phase 3 Fees operational core complete: types/groups/master/assign/discounts/collect/multi/due-fees/carry-forward + transport collect (single+multi) + offline bank payments + student getfees portal ledger. Deferred: online gateway pay modal, print/SMS, transport fees-master admin.',
             'slices' => [
                 'fee_types' => 'done',
                 'fee_groups' => 'done',
@@ -30,7 +30,8 @@ class ModuleStatusController extends Controller
                 'collect_transport_multi' => 'done',
                 'offline_bank_payments' => 'done',
                 'offline_bank_payments_portal' => 'done',
-                'student_getfees_ledger' => 'deferred',
+                'student_getfees_ledger' => 'done',
+                'student_getfees_online_pay' => 'deferred',
             ],
         ]);
     }

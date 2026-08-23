@@ -57,7 +57,7 @@ class UserOfflinePaymentController extends Controller
         $params = $this->offline->sessionParams();
         if ($params === null) {
             return redirect()
-                ->route('user.offlinepayment.requests')
+                ->route('user.fees.getfees')
                 ->withErrors(['payment' => 'Select a fee line before submitting an offline bank payment.']);
         }
 
@@ -87,7 +87,7 @@ class UserOfflinePaymentController extends Controller
             }
 
             return redirect()
-                ->route('user.offlinepayment.requests')
+                ->route('user.fees.getfees')
                 ->with('success', (string) __('system.thank_you_for_the_payment_we_will_review_and_update_your_payment'));
         }
 
