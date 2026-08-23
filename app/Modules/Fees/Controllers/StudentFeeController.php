@@ -5,21 +5,24 @@ namespace App\Modules\Fees\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Fees\Services\FeeCollectService;
+use App\Modules\Fees\Services\FeeReceiptService;
 use App\Modules\Roles\Services\PermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\View\View;
 use InvalidArgumentException;
 
 /**
- * CI Studentfee — collect fees: search, ledger, single deposit, multi-collect, delete, payment search.
+ * CI Studentfee — collect fees: search, ledger, single deposit, multi-collect, delete, payment search, print receipt.
  */
 class StudentFeeController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
-        protected FeeCollectService $collect
+        protected FeeCollectService $collect,
+        protected FeeReceiptService $receipts
     ) {
     }
 
@@ -500,5 +503,88 @@ class StudentFeeController extends Controller
                 'section_id' => $request->input('section_id'),
             ],
         ]);
+    }
+
+    /**
+     * CI Studentfee::printFeesByName — JSON {status:1, page:html} for AJAX print popup.
+     * Thermal print addon deferred.
+     */
+    public function printFeesByName(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        $data = $request->validate([
+            'main_invoice' => ['required', 'integer'],
+            'sub_invoice' => ['required', 'integer'],
+            'fee_category' => ['nullable', 'string', 'in:fees,transport'],
+            'student_session_id' => ['nullable', 'integer'],
+        ]);
+
+        $payload = $this->receipts->receiptPayload(
+            (int) $data['main_invoice'],
+            (int) $data['sub_invoice'],
+            (string) ($data['fee_category'] ?? 'fees')
+        );
+        abort_if($payload === null, 404);
+
+        $page = view('fees::print.printFeesByName', $this->receiptViewData($payload))->render();
+
+        return response()->json(['status' => 1, 'page' => $page]);
+    }
+
+    /**
+     * Direct printable receipt page (same payload as printFeesByName).
+     */
+    public function printFeesByNamePage(Request $request): Response|View
+    {
+        abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        $data = $request->validate([
+            'main_invoice' => ['required', 'integer'],
+            'sub_invoice' => ['required', 'integer'],
+            'fee_category' => ['nullable', 'string', 'in:fees,transport'],
+        ]);
+
+        $payload = $this->receipts->receiptPayload(
+            (int) $data['main_invoice'],
+            (int) $data['sub_invoice'],
+            (string) ($data['fee_category'] ?? 'fees')
+        );
+        abort_if($payload === null, 404);
+
+        return response()->view('fees::print.printFeesByName', $this->receiptViewData($payload));
+    }
+
+    /**
+     * @param  array{
+     *     feeList:object,
+     *     payment:object,
+     *     student:object,
+     *     sub_invoice_id:int,
+     *     fee_category:string,
+     *     copies:list<string>
+     * }  $payload
+     * @return array<string, mixed>
+     */
+    protected function receiptViewData(array $payload): array
+    {
+        return [
+            'feeList' => $payload['feeList'],
+            'payment' => $payload['payment'],
+            'student' => $payload['student'],
+            'sub_invoice_id' => $payload['sub_invoice_id'],
+            'fee_category' => $payload['fee_category'],
+            'copies' => $payload['copies'],
+            'studentName' => $this->receipts->studentDisplayName($payload['feeList']),
+            'feeLineLabel' => $this->receipts->feeLineLabel($payload['feeList']),
+            'paymentModeLabel' => $this->receipts->paymentModeLabel($payload['payment']->payment_mode ?? ''),
+            'paymentDate' => $this->receipts->formatDate($payload['payment']->date ?? ''),
+            'printDate' => $this->receipts->formatDate(now()->format('Y-m-d')),
+            'headerUrl' => $this->receipts->receiptHeaderUrl(),
+            'footerHtml' => $this->receipts->receiptFooterHtml(),
+            'singlePagePrint' => $this->receipts->singlePagePrint(),
+            'currencySymbol' => $this->receipts->currencySymbol(),
+            'formatAmount' => fn (float|int|string $amount): string => $this->receipts->formatAmount($amount),
+        ];
     }
 }

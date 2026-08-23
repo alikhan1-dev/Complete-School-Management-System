@@ -108,6 +108,14 @@
                         <td>{{ number_format($pay->amount, 2) }}</td>
                         <td></td>
                         <td>
+                            <a class="btn btn-default btn-xs"
+                               href="{{ route('fees.studentfee.printFeesByName.page', [
+                                   'main_invoice' => $pay->invoice_id,
+                                   'sub_invoice' => $pay->sub_invoice_id,
+                                   'fee_category' => $pay->fee_category ?? 'fees',
+                               ]) }}"
+                               target="_blank"
+                               title="{{ __('system.print') }}">{{ __('system.print') }}</a>
                             @if($canDelete)
                                 <form method="post" action="{{ route('fees.studentfee.deleteFee') }}" style="display:inline;"
                                       onsubmit="return confirm('Delete this payment?');">
@@ -219,6 +227,14 @@
                         <td>{{ number_format($pay->amount, 2) }}</td>
                         <td></td>
                         <td>
+                            <a class="btn btn-default btn-xs"
+                               href="{{ route('fees.studentfee.printFeesByName.page', [
+                                   'main_invoice' => $pay->invoice_id,
+                                   'sub_invoice' => $pay->sub_invoice_id,
+                                   'fee_category' => $pay->fee_category ?? 'transport',
+                               ]) }}"
+                               target="_blank"
+                               title="{{ __('system.print') }}">{{ __('system.print') }}</a>
                             @if($canDelete)
                                 <form method="post" action="{{ route('fees.studentfee.deleteFee') }}" style="display:inline;"
                                       onsubmit="return confirm('Delete this payment?');">

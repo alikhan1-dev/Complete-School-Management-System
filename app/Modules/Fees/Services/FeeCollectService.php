@@ -336,7 +336,7 @@ class FeeCollectService
                 'balance' => $balance,
                 'remaining_fine' => $remainingFine,
                 'student_fees_deposite_id' => (int) $row->student_fees_deposite_id,
-                'payments' => $this->paymentsList($row->amount_detail, (int) $row->student_fees_deposite_id),
+                'payments' => $this->paymentsList($row->amount_detail, (int) $row->student_fees_deposite_id, 'transport'),
             ];
         }
 
@@ -552,7 +552,7 @@ class FeeCollectService
                 'balance' => $balance,
                 'remaining_fine' => $remainingFine,
                 'student_fees_deposite_id' => (int) $row->student_fees_deposite_id,
-                'payments' => $this->paymentsList($row->amount_detail, (int) $row->student_fees_deposite_id),
+                'payments' => $this->paymentsList($row->amount_detail, (int) $row->student_fees_deposite_id, 'fees'),
                 'fine_type' => $row->fine_type,
             ];
         }
@@ -1091,7 +1091,7 @@ class FeeCollectService
     /**
      * @return list<object>
      */
-    protected function paymentsList(mixed $raw, int $depositeId): array
+    protected function paymentsList(mixed $raw, int $depositeId, string $feeCategory = 'fees'): array
     {
         if ($depositeId <= 0) {
             return [];
@@ -1112,6 +1112,7 @@ class FeeCollectService
                 'invoice_id' => $depositeId,
                 'sub_invoice_id' => (int) $sub,
                 'payment_id' => $depositeId.'/'.$sub,
+                'fee_category' => $feeCategory,
                 'amount' => (float) ($entry['amount'] ?? 0),
                 'amount_discount' => (float) ($entry['amount_discount'] ?? 0),
                 'amount_fine' => (float) ($entry['amount_fine'] ?? 0),

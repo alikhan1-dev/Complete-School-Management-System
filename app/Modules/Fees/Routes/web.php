@@ -70,6 +70,8 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::post('studentfee/deleteFee', [StudentFeeController::class, 'deleteFee'])->name('fees.studentfee.deleteFee');
     Route::match(['get', 'post'], 'studentfee/searchpayment', [StudentFeeController::class, 'searchpayment'])->name('fees.studentfee.searchpayment');
     Route::match(['get', 'post'], 'studentfee/feesearch', [StudentFeeController::class, 'feesearch'])->name('fees.studentfee.feesearch');
+    Route::post('studentfee/printFeesByName', [StudentFeeController::class, 'printFeesByName'])->name('fees.studentfee.printFeesByName');
+    Route::get('studentfee/printFeesByName', [StudentFeeController::class, 'printFeesByNamePage'])->name('fees.studentfee.printFeesByName.page');
 
     // Fees carry forward (CI admin/feesforward)
     Route::match(['get', 'post'], 'admin/feesforward', [FeesForwardController::class, 'index'])->name('fees.feesforward.index');
