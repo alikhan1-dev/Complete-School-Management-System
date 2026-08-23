@@ -7,7 +7,9 @@ use App\Modules\Fees\Controllers\FeeMasterController;
 use App\Modules\Fees\Controllers\FeeTypeController;
 use App\Modules\Fees\Controllers\FeesForwardController;
 use App\Modules\Fees\Controllers\ModuleStatusController;
+use App\Modules\Fees\Controllers\OfflinePaymentController;
 use App\Modules\Fees\Controllers\StudentFeeController;
+use App\Modules\Fees\Controllers\UserOfflinePaymentController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('migration-status/fees', [ModuleStatusController::class, 'status'])->name('fees.migration_status');
@@ -71,4 +73,33 @@ Route::middleware(['staff.auth'])->group(function () {
     // Fees carry forward (CI admin/feesforward)
     Route::match(['get', 'post'], 'admin/feesforward', [FeesForwardController::class, 'index'])->name('fees.feesforward.index');
     Route::match(['get', 'post'], 'admin/feesforward/index', [FeesForwardController::class, 'index']);
+
+    // Offline bank payments (CI admin/offlinepayment)
+    Route::get('admin/offlinepayment', [OfflinePaymentController::class, 'index'])->name('fees.offlinepayment.index');
+    Route::get('admin/offlinepayment/index', [OfflinePaymentController::class, 'index']);
+    Route::get('admin/offlinepayment/view/{id}', [OfflinePaymentController::class, 'show'])->name('fees.offlinepayment.show');
+    Route::post('admin/offlinepayment/update', [OfflinePaymentController::class, 'update'])->name('fees.offlinepayment.update');
+    Route::get('admin/offlinepayment/download/{id}', [OfflinePaymentController::class, 'download'])->name('fees.offlinepayment.download');
+});
+
+Route::middleware([
+    'student_parent.auth',
+    'student_parent.login_token',
+    'student_parent.selected_class',
+    'student_parent.permission:fees',
+])->group(function () {
+    // CI user/gateway/Payment::pay offline_payment → user/offlinepayment
+    Route::post('user/offlinepayment/start', [UserOfflinePaymentController::class, 'start'])
+        ->name('user.offlinepayment.start');
+    Route::match(['get', 'post'], 'user/offlinepayment', [UserOfflinePaymentController::class, 'index'])
+        ->name('user.offlinepayment.index');
+    Route::match(['get', 'post'], 'user/offlinepayment/index', [UserOfflinePaymentController::class, 'index']);
+    Route::get('user/offlinepayment/requests', [UserOfflinePaymentController::class, 'requests'])
+        ->name('user.offlinepayment.requests');
+    Route::get('user/offlinepayment/view/{id}', [UserOfflinePaymentController::class, 'show'])
+        ->whereNumber('id')
+        ->name('user.offlinepayment.show');
+    Route::get('user/offlinepayment/download/{id}', [UserOfflinePaymentController::class, 'download'])
+        ->whereNumber('id')
+        ->name('user.offlinepayment.download');
 });

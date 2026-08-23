@@ -24,6 +24,17 @@ class FeeCollectService
         'card',
     ];
 
+    /** Includes offline-approve mode used by CI OfflinePayment_model (not shown on collect forms). */
+    public const PAYMENT_MODES_ALL = [
+        'Cash',
+        'Cheque',
+        'DD',
+        'bank_transfer',
+        'bank_payment',
+        'upi',
+        'card',
+    ];
+
     public function __construct(protected CurrentSessionResolver $currentSession)
     {
     }
@@ -423,7 +434,7 @@ class FeeCollectService
         if ($amount < 0 || $discount < 0 || $fine < 0) {
             throw new InvalidArgumentException('Amounts cannot be negative.');
         }
-        if (! in_array($paymentMode, self::PAYMENT_MODES, true)) {
+        if (! in_array($paymentMode, self::PAYMENT_MODES_ALL, true)) {
             throw new InvalidArgumentException('Invalid payment mode.');
         }
 
@@ -705,7 +716,7 @@ class FeeCollectService
             throw new InvalidArgumentException('Amounts cannot be negative.');
         }
 
-        if (! in_array($paymentMode, self::PAYMENT_MODES, true)) {
+        if (! in_array($paymentMode, self::PAYMENT_MODES_ALL, true)) {
             throw new InvalidArgumentException('Invalid payment mode.');
         }
 
