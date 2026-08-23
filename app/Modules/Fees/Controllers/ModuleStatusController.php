@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Fees',
             'status' => 'in_progress',
-            'message' => 'Phase 3 Fees operational core complete: types/groups/master/assign/discounts/collect/multi/due-fees/carry-forward. Deferred: transport collect, print/SMS.',
+            'message' => 'Phase 3 Fees operational core complete: types/groups/master/assign/discounts/collect/multi/due-fees/carry-forward + transport single collect. Deferred: transport multi-collect, print/SMS.',
             'slices' => [
                 'fee_types' => 'done',
                 'fee_groups' => 'done',
@@ -26,7 +26,8 @@ class ModuleStatusController extends Controller
                 'collect_multi' => 'done',
                 'search_due_fees' => 'done',
                 'fees_carry_forward' => 'done',
-                'collect_transport' => 'pending',
+                'collect_transport' => 'done',
+                'collect_transport_multi' => 'deferred',
             ],
         ]);
     }

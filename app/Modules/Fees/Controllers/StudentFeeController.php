@@ -69,11 +69,20 @@ class StudentFeeController extends Controller
         $student = $this->collect->findStudentBySession($id);
         abort_if(! $student, 404);
 
+        $transportFees = [];
+        if ($this->collect->transportModuleActive()) {
+            $transportFees = $this->collect->getStudentTransportFees(
+                $id,
+                isset($student->route_pickup_point_id) ? (int) $student->route_pickup_point_id : null
+            );
+        }
+
         return view('shared::layouts.admin', [
             'title' => 'Collect Fees',
             'contentView' => 'fees::studentfee.addfee',
             'student' => $student,
             'ledger' => $this->collect->getStudentFees($id),
+            'transportFees' => $transportFees,
             'discounts' => $this->collect->getStudentDiscounts($id),
             'canDelete' => $this->permissions->hasPrivilege('collect_fees', 'can_delete'),
         ]);
@@ -82,6 +91,35 @@ class StudentFeeController extends Controller
     public function collectForm(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        if ($request->input('fee_category') === 'transport') {
+            $data = $request->validate([
+                'student_session_id' => ['required', 'integer'],
+                'transport_fees_id' => ['required', 'integer'],
+            ]);
+
+            $student = $this->collect->findStudentBySession((int) $data['student_session_id']);
+            abort_if(! $student, 404);
+
+            try {
+                $balance = $this->collect->getTransportBalance((int) $data['transport_fees_id']);
+            } catch (InvalidArgumentException $e) {
+                abort(404, $e->getMessage());
+            }
+
+            return view('shared::layouts.admin', [
+                'title' => 'Collect Transport Fee',
+                'contentView' => 'fees::studentfee.collect',
+                'student' => $student,
+                'balance' => $balance,
+                'studentFeesMasterId' => 0,
+                'feeGroupsFeetypeId' => 0,
+                'transportFeesId' => (int) $data['transport_fees_id'],
+                'feeCategory' => 'transport',
+                'availableDiscounts' => $this->collect->getAvailableDiscounts((int) $data['student_session_id']),
+                'paymentModes' => FeeCollectService::PAYMENT_MODES,
+            ]);
+        }
 
         $data = $request->validate([
             'student_session_id' => ['required', 'integer'],
@@ -104,6 +142,8 @@ class StudentFeeController extends Controller
             'balance' => $balance,
             'studentFeesMasterId' => (int) $data['student_fees_master_id'],
             'feeGroupsFeetypeId' => (int) $data['fee_groups_feetype_id'],
+            'transportFeesId' => 0,
+            'feeCategory' => 'fees',
             'availableDiscounts' => $this->collect->getAvailableDiscounts((int) $data['student_session_id']),
             'paymentModes' => FeeCollectService::PAYMENT_MODES,
         ]);
@@ -112,6 +152,62 @@ class StudentFeeController extends Controller
     public function addstudentfee(Request $request): JsonResponse|RedirectResponse
     {
         abort_unless($this->permissions->hasPrivilege('collect_fees', 'can_view'), 403);
+
+        $feeCategory = (string) $request->input('fee_category', 'fees');
+
+        if ($feeCategory === 'transport') {
+            $data = $request->validate([
+                'transport_fees_id' => ['required', 'integer'],
+                'student_session_id' => ['required', 'integer'],
+                'date' => ['required', 'date'],
+                'amount' => ['required', 'numeric', 'min:0'],
+                'amount_discount' => ['required', 'numeric', 'min:0'],
+                'amount_fine' => ['required', 'numeric', 'min:0'],
+                'payment_mode' => ['required', 'string', 'in:'.implode(',', FeeCollectService::PAYMENT_MODES)],
+                'description' => ['nullable', 'string'],
+                'discounts' => ['nullable', 'array'],
+                'discounts.*' => ['integer'],
+            ]);
+
+            /** @var \App\Modules\Staff\Models\Staff $staff */
+            $staff = $request->user('staff');
+
+            try {
+                $result = $this->collect->depositTransport([
+                    'student_transport_fee_id' => (int) $data['transport_fees_id'],
+                    'student_session_id' => (int) $data['student_session_id'],
+                    'date' => $data['date'],
+                    'amount' => $data['amount'],
+                    'amount_discount' => $data['amount_discount'],
+                    'amount_fine' => $data['amount_fine'],
+                    'payment_mode' => $data['payment_mode'],
+                    'description' => $data['description'] ?? '',
+                    'discounts' => $data['discounts'] ?? [],
+                ], $staff);
+            } catch (InvalidArgumentException $e) {
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json(['status' => 'fail', 'error' => ['amount' => $e->getMessage()]], 422);
+                }
+
+                return back()->withInput()->withErrors(['amount' => $e->getMessage()]);
+            }
+
+            $message = 'Transport fee collected. Payment ID: '.$result['invoice_id'].'/'.$result['sub_invoice_id'];
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'status' => 'success',
+                    'error' => '',
+                    'invoice_id' => $result['invoice_id'],
+                    'sub_invoice_id' => $result['sub_invoice_id'],
+                    'message' => $message,
+                ]);
+            }
+
+            return redirect()
+                ->route('fees.studentfee.addfee', (int) $data['student_session_id'])
+                ->with('success', $message);
+        }
 
         $data = $request->validate([
             'student_fees_master_id' => ['required', 'integer'],

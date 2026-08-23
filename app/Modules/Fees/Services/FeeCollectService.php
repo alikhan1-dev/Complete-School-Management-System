@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * CI Studentfee + Studentfeemaster_model deposit/ledger (fees category; transport deferred).
+ * CI Studentfee + Studentfeemaster_model deposit/ledger (fees + transport collect).
  */
 class FeeCollectService
 {
@@ -234,11 +234,247 @@ class FeeCollectService
                 'student_session.session_id',
                 'student_session.class_id',
                 'student_session.section_id',
+                'student_session.route_pickup_point_id',
                 'classes.class',
                 'sections.section',
                 'sessions.session',
             ])
             ->first();
+    }
+
+    /**
+     * Whether the Transport module is active (CI module_model::getPermissionByModulename).
+     */
+    public function transportModuleActive(): bool
+    {
+        $row = DB::table('permission_group')->where('short_code', 'transport')->first()
+            ?: DB::table('permission_group')->where('name', 'like', '%Transport%')->first();
+
+        if ($row && isset($row->is_active)) {
+            return (int) $row->is_active === 1 || (string) $row->is_active === '1';
+        }
+
+        // Fallback: show transport fees whenever ledger rows exist for the student.
+        return true;
+    }
+
+    /**
+     * CI Studentfeemaster_model::getStudentTransportFees.
+     *
+     * @return list<object>
+     */
+    public function getStudentTransportFees(int $studentSessionId, ?int $routePickupPointId): array
+    {
+        if ($studentSessionId <= 0 || $routePickupPointId === null || $routePickupPointId <= 0) {
+            return [];
+        }
+
+        $rows = DB::table('student_transport_fees')
+            ->join('transport_feemaster', 'transport_feemaster.id', '=', 'student_transport_fees.transport_feemaster_id')
+            ->join('route_pickup_point', 'route_pickup_point.id', '=', 'student_transport_fees.route_pickup_point_id')
+            ->leftJoin('student_fees_deposite', 'student_fees_deposite.student_transport_fee_id', '=', 'student_transport_fees.id')
+            ->where('student_transport_fees.student_session_id', $studentSessionId)
+            ->where('student_transport_fees.route_pickup_point_id', $routePickupPointId)
+            ->orderBy('student_transport_fees.id')
+            ->select([
+                'student_transport_fees.id as student_transport_fee_id',
+                'student_transport_fees.transport_feemaster_id',
+                'student_transport_fees.route_pickup_point_id',
+                'transport_feemaster.month',
+                'transport_feemaster.due_date',
+                'transport_feemaster.fine_amount',
+                'transport_feemaster.fine_type',
+                'transport_feemaster.fine_percentage',
+                'route_pickup_point.fees as amount',
+                DB::raw('IFNULL(student_fees_deposite.id, 0) as student_fees_deposite_id'),
+                DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
+            ])
+            ->get();
+
+        $ledger = [];
+        foreach ($rows as $row) {
+            $due = (float) $row->amount;
+            $totals = $this->sumAmountDetail($row->amount_detail);
+            $balance = round($due - ($totals['amount'] + $totals['amount_discount']), 2);
+            $fineRow = (object) [
+                'due_date' => $row->due_date,
+                'fine_type' => $row->fine_type,
+                'fine_amount' => $row->fine_amount,
+                'fine_percentage' => $row->fine_percentage,
+                'amount' => $due,
+                'is_system' => 0,
+            ];
+            $remainingFine = $this->remainingFine($fineRow, $totals['amount_fine'], $balance);
+            $monthKey = strtolower((string) ($row->month ?? ''));
+            $monthLabel = $monthKey !== '' ? (string) __('system.'.$monthKey) : '';
+            if ($monthLabel === 'system.'.$monthKey) {
+                $monthLabel = (string) $row->month;
+            }
+
+            $ledger[] = (object) [
+                'fee_category' => 'transport',
+                'student_transport_fee_id' => (int) $row->student_transport_fee_id,
+                'fee_group_name' => (string) __('system.transport_fees'),
+                'fee_type' => $monthLabel !== '' ? $monthLabel : (string) $row->month,
+                'fee_code' => '',
+                'due_date' => $row->due_date,
+                'due_amount' => $due,
+                'paid_amount' => $totals['amount'],
+                'paid_discount' => $totals['amount_discount'],
+                'paid_fine' => $totals['amount_fine'],
+                'balance' => $balance,
+                'remaining_fine' => $remainingFine,
+                'student_fees_deposite_id' => (int) $row->student_fees_deposite_id,
+                'payments' => $this->paymentsList($row->amount_detail, (int) $row->student_fees_deposite_id),
+            ];
+        }
+
+        return $ledger;
+    }
+
+    /**
+     * @return array{due:float,balance:float,remaining_fine:float,fee_group_name:string,fee_type:string,fee_code:string,student_transport_fee_id:int}
+     */
+    public function getTransportBalance(int $studentTransportFeeId): array
+    {
+        $row = DB::table('student_transport_fees')
+            ->join('transport_feemaster', 'transport_feemaster.id', '=', 'student_transport_fees.transport_feemaster_id')
+            ->join('route_pickup_point', 'route_pickup_point.id', '=', 'student_transport_fees.route_pickup_point_id')
+            ->leftJoin('student_fees_deposite', 'student_fees_deposite.student_transport_fee_id', '=', 'student_transport_fees.id')
+            ->where('student_transport_fees.id', $studentTransportFeeId)
+            ->select([
+                'student_transport_fees.id',
+                'student_transport_fees.student_session_id',
+                'student_transport_fees.route_pickup_point_id',
+                'transport_feemaster.month',
+                'transport_feemaster.due_date',
+                'transport_feemaster.fine_amount',
+                'transport_feemaster.fine_type',
+                'transport_feemaster.fine_percentage',
+                'route_pickup_point.fees as amount',
+                DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
+            ])
+            ->first();
+
+        if (! $row) {
+            throw new InvalidArgumentException('Transport fee line not found.');
+        }
+
+        $due = (float) $row->amount;
+        $totals = $this->sumAmountDetail($row->amount_detail);
+        $balance = round($due - ($totals['amount'] + $totals['amount_discount']), 2);
+        $fineRow = (object) [
+            'due_date' => $row->due_date,
+            'fine_type' => $row->fine_type,
+            'fine_amount' => $row->fine_amount,
+            'fine_percentage' => $row->fine_percentage,
+            'amount' => $due,
+            'is_system' => 0,
+        ];
+        $monthKey = strtolower((string) ($row->month ?? ''));
+        $monthLabel = $monthKey !== '' ? (string) __('system.'.$monthKey) : (string) $row->month;
+        if (str_starts_with($monthLabel, 'system.')) {
+            $monthLabel = (string) $row->month;
+        }
+
+        return [
+            'due' => $due,
+            'balance' => max(0, $balance),
+            'remaining_fine' => $this->remainingFine($fineRow, $totals['amount_fine'], $balance),
+            'fee_group_name' => (string) __('system.transport_fees'),
+            'fee_type' => $monthLabel,
+            'fee_code' => '',
+            'student_transport_fee_id' => (int) $row->id,
+            'fee_session_group_id' => 0,
+            'student_fees' => $due,
+        ];
+    }
+
+    /**
+     * CI fee_deposit for fee_category=transport.
+     *
+     * @param  array{
+     *     student_transport_fee_id:int,
+     *     student_session_id?:int,
+     *     date:string,
+     *     amount:float|string,
+     *     amount_discount:float|string,
+     *     amount_fine:float|string,
+     *     payment_mode:string,
+     *     description?:string|null,
+     *     discounts?:list<int|string>
+     * }  $input
+     * @return array{invoice_id:int,sub_invoice_id:int}
+     */
+    public function depositTransport(array $input, Staff $staff): array
+    {
+        $transportFeeId = (int) $input['student_transport_fee_id'];
+        $amount = round((float) $input['amount'], 2);
+        $discount = round((float) $input['amount_discount'], 2);
+        $fine = round((float) $input['amount_fine'], 2);
+        $paymentMode = (string) $input['payment_mode'];
+        $date = (string) $input['date'];
+        $description = (string) ($input['description'] ?? '');
+        $discountIds = array_values(array_unique(array_map('intval', $input['discounts'] ?? [])));
+
+        if ($transportFeeId <= 0) {
+            throw new InvalidArgumentException('Transport fee is required.');
+        }
+        if ($amount < 0 || $discount < 0 || $fine < 0) {
+            throw new InvalidArgumentException('Amounts cannot be negative.');
+        }
+        if (! in_array($paymentMode, self::PAYMENT_MODES, true)) {
+            throw new InvalidArgumentException('Invalid payment mode.');
+        }
+
+        $balanceInfo = $this->getTransportBalance($transportFeeId);
+        $effective = round($amount + $discount, 2);
+        if ($effective - $balanceInfo['balance'] > 0.001) {
+            throw new InvalidArgumentException('Deposit exceeds remaining balance.');
+        }
+
+        $collectedBy = trim($staff->name.' '.($staff->surname ?? '')).'('.$staff->employee_id.')';
+        $entry = [
+            'amount' => $amount,
+            'amount_discount' => $discount,
+            'amount_fine' => $fine,
+            'date' => $date,
+            'description' => $description,
+            'collected_by' => $collectedBy,
+            'payment_mode' => $paymentMode,
+            'received_by' => (int) $staff->id,
+        ];
+
+        return DB::transaction(function () use ($transportFeeId, $entry, $discountIds, $date) {
+            $row = StudentFeesDeposite::query()
+                ->where('student_transport_fee_id', $transportFeeId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($row) {
+                $detail = $row->decodedAmountDetail();
+                $invNo = $detail === [] ? 1 : ((int) max(array_map('intval', array_keys($detail))) + 1);
+                $entry['inv_no'] = $invNo;
+                $detail[(string) $invNo] = $entry;
+                $row->amount_detail = json_encode($detail);
+                $row->save();
+                $this->storeAppliedDiscounts((int) $row->id, $discountIds, $date, $invNo);
+
+                return ['invoice_id' => (int) $row->id, 'sub_invoice_id' => $invNo];
+            }
+
+            $entry['inv_no'] = 1;
+            $deposit = StudentFeesDeposite::query()->create([
+                'student_fees_master_id' => null,
+                'fee_groups_feetype_id' => null,
+                'student_transport_fee_id' => $transportFeeId,
+                'amount_detail' => json_encode(['1' => $entry]),
+                'is_active' => 'no',
+            ]);
+            $this->storeAppliedDiscounts((int) $deposit->id, $discountIds, $date, 1);
+
+            return ['invoice_id' => (int) $deposit->id, 'sub_invoice_id' => 1];
+        });
     }
 
     /**

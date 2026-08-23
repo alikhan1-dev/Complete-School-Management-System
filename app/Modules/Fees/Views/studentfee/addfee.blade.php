@@ -141,6 +141,94 @@
     </div>
 </div>
 
+@if(!empty($transportFees))
+<div class="box box-primary">
+    <div class="box-header with-border">
+        <h3 class="box-title">{{ __('system.transport_fees') }}</h3>
+    </div>
+    <div class="box-body table-responsive no-padding">
+        <table class="table table-striped table-bordered">
+            <thead>
+            <tr>
+                <th>{{ __('system.fees_group') }}</th>
+                <th>{{ __('system.month') }}</th>
+                <th>{{ __('system.due_date') }}</th>
+                <th>{{ __('system.status') }}</th>
+                <th>{{ __('system.amount') }}</th>
+                <th>{{ __('system.discount') }}</th>
+                <th>{{ __('system.fine') }}</th>
+                <th>{{ __('system.paid') }}</th>
+                <th>{{ __('system.balance') }}</th>
+                <th>{{ __('system.action') }}</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach($transportFees as $line)
+                @php
+                    $status = $line->balance <= 0 ? 'Paid' : ($line->paid_amount > 0 ? 'Partial' : 'Unpaid');
+                @endphp
+                <tr>
+                    <td>{{ $line->fee_group_name }}</td>
+                    <td>{{ $line->fee_type }}</td>
+                    <td>{{ $line->due_date ?: '—' }}</td>
+                    <td>
+                        @if($status === 'Paid')
+                            <span class="label label-success">Paid</span>
+                        @elseif($status === 'Partial')
+                            <span class="label label-info">Partial</span>
+                        @else
+                            <span class="label label-danger">Unpaid</span>
+                        @endif
+                    </td>
+                    <td>{{ number_format($line->due_amount, 2) }}</td>
+                    <td>{{ number_format($line->paid_discount, 2) }}</td>
+                    <td>{{ number_format($line->paid_fine, 2) }}@if($line->remaining_fine > 0) <small class="text-danger">(+{{ number_format($line->remaining_fine, 2) }} due)</small>@endif</td>
+                    <td>{{ number_format($line->paid_amount, 2) }}</td>
+                    <td>{{ number_format(max(0, $line->balance), 2) }}</td>
+                    <td>
+                        @if($line->balance > 0)
+                            <a class="btn btn-primary btn-xs"
+                               href="{{ route('fees.studentfee.collect', [
+                                   'student_session_id' => $student->student_session_id,
+                                   'fee_category' => 'transport',
+                                   'transport_fees_id' => $line->student_transport_fee_id,
+                               ]) }}">Collect</a>
+                        @endif
+                    </td>
+                </tr>
+                @foreach($line->payments as $pay)
+                    <tr class="bg-gray-light">
+                        <td colspan="4" class="text-right">
+                            Payment {{ $pay->payment_id }} — {{ $pay->date }} — {{ $pay->payment_mode }}
+                            @if($pay->collected_by) <small>({{ $pay->collected_by }})</small>@endif
+                            @if($pay->description) <br><em>{{ $pay->description }}</em>@endif
+                        </td>
+                        <td></td>
+                        <td>{{ number_format($pay->amount_discount, 2) }}</td>
+                        <td>{{ number_format($pay->amount_fine, 2) }}</td>
+                        <td>{{ number_format($pay->amount, 2) }}</td>
+                        <td></td>
+                        <td>
+                            @if($canDelete)
+                                <form method="post" action="{{ route('fees.studentfee.deleteFee') }}" style="display:inline;"
+                                      onsubmit="return confirm('Delete this payment?');">
+                                    @csrf
+                                    <input type="hidden" name="main_invoice" value="{{ $pay->invoice_id }}">
+                                    <input type="hidden" name="sub_invoice" value="{{ $pay->sub_invoice_id }}">
+                                    <input type="hidden" name="student_session_id" value="{{ $student->student_session_id }}">
+                                    <button type="submit" class="btn btn-danger btn-xs">Delete</button>
+                                </form>
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
+            @endforeach
+            </tbody>
+        </table>
+    </div>
+</div>
+@endif
+
 <form method="post" action="{{ route('fees.studentfee.collect_group') }}" id="multi_collect_select_form" style="display:none;">
     @csrf
     <input type="hidden" name="student_session_id" value="{{ $student->student_session_id }}">

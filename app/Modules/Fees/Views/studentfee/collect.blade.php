@@ -33,8 +33,9 @@
             <input type="hidden" name="student_session_id" value="{{ $student->student_session_id }}">
             <input type="hidden" name="student_fees_master_id" value="{{ $studentFeesMasterId }}">
             <input type="hidden" name="fee_groups_feetype_id" value="{{ $feeGroupsFeetypeId }}">
-            <input type="hidden" name="fee_session_group_id" value="{{ $balance['fee_session_group_id'] }}">
-            <input type="hidden" name="fee_category" value="fees">
+            <input type="hidden" name="fee_session_group_id" value="{{ $balance['fee_session_group_id'] ?? 0 }}">
+            <input type="hidden" name="transport_fees_id" value="{{ $transportFeesId ?? 0 }}">
+            <input type="hidden" name="fee_category" value="{{ $feeCategory ?? 'fees' }}">
 
             @if(count($availableDiscounts))
                 <div class="form-group">
