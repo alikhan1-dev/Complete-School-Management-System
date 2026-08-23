@@ -66,6 +66,8 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('reports.online_admission.validation');
     Route::match(['get', 'post'], 'report/dtonlineadmissionreportlist', [StudentInformationReportController::class, 'dtonlineadmissionreportlist'])
         ->name('reports.online_admission.datatable');
+    Route::match(['get', 'post'], 'report/alumnireport', [StudentInformationReportController::class, 'alumnireport'])
+        ->name('reports.alumni');
 
     Route::match(['get', 'post'], 'attendencereports/attendance', [AttendanceReportController::class, 'attendance'])
         ->name('reports.attendance.hub');

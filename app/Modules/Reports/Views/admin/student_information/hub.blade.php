@@ -93,6 +93,13 @@
                     </a>
                 </div>
             @endif
+            @if(!empty($canAlumniReport))
+                <div class="col-md-4" style="margin-bottom:12px;">
+                    <a class="btn btn-default btn-block" href="{{ url('report/alumnireport') }}">
+                        <i class="fa fa-file-text-o"></i> {{ __('system.alumni') }}
+                    </a>
+                </div>
+            @endif
         </div>
     </div>
 </div>

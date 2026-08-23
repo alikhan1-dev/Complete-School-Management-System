@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Reports',
             'status' => 'in_progress',
-            'message' => 'Student information + Attendencereports full + Financereports complete + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: transport fee lines, class-teacher scope, client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js, student_profile custom-field columns, online exam attempt/rank/result reports.',
+            'message' => 'Student information (incl. alumni report) + Attendencereports full + Financereports complete + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: transport fee lines, class-teacher scope, client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js, student_profile custom-field columns.',
             'slices' => [
                 'student_information_hub' => 'done',
                 'student_report' => 'done',
@@ -30,6 +30,7 @@ class ModuleStatusController extends Controller
                 'sibling_report' => 'done',
                 'student_profile' => 'done',
                 'online_admission_report' => 'done',
+                'alumni_report' => 'done',
                 'attendance_reports_hub_daywise_daily_type' => 'done',
                 'attendance_reports_monthly_calendars' => 'done',
                 'attendance_reports_period_biometric' => 'done',

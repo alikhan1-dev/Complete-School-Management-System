@@ -3,21 +3,24 @@
 namespace App\Modules\Reports\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Reports\Services\AlumniReportService;
 use App\Modules\Reports\Services\StudentInformationReportService;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Shared\Services\DataTableResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
- * CI Report student information hub + student / class-section / ratio / guardian / history / login / class-subject / admission / sibling / profile / online admission reports.
+ * CI Report student information hub + student / class-section / ratio / guardian / history / login / class-subject / admission / sibling / profile / online admission / alumni reports.
  */
 class StudentInformationReportController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
         protected StudentInformationReportService $reports,
+        protected AlumniReportService $alumniReports,
     ) {
     }
 
@@ -589,6 +592,69 @@ class StudentInformationReportController extends Controller
     }
 
     /**
+     * CI Report::alumnireport — filter by pass-out session + class (+ optional section).
+     */
+    public function alumnireport(Request $request): View
+    {
+        abort_unless($this->permissions->hasPrivilege('alumni_report', 'can_view'), 403);
+
+        $filters = [
+            'session_id' => $request->input('session_id', ''),
+            'class_id' => $request->input('class_id', ''),
+            'section_id' => $request->input('section_id', ''),
+        ];
+        $rows = collect();
+        $searched = false;
+
+        if ($request->isMethod('post') && $request->input('search') === 'search_filter') {
+            $request->validate([
+                'session_id' => ['required'],
+                'class_id' => ['required'],
+            ], [
+                'session_id.required' => 'The '.__('system.session').' field is required.',
+                'class_id.required' => 'The '.__('system.class').' field is required.',
+            ]);
+            $searched = true;
+            $rows = $this->alumniReports->searchByFilter(
+                (int) $filters['session_id'],
+                (int) $filters['class_id'],
+                $filters['section_id'] !== '' ? (int) $filters['section_id'] : null
+            );
+        }
+
+        return view('shared::layouts.admin', array_merge([
+            'title' => __('system.alumni'),
+            'contentView' => 'reports::admin.student_information.alumni_report',
+            'sessions' => $this->alumniReports->sessions(),
+            'classes' => $this->alumniReports->classes(),
+            'sectionOptions' => $this->sectionOptions((int) ($filters['class_id'] ?: 0)),
+            'filters' => $filters,
+            'rows' => $rows,
+            'searched' => $searched,
+            'alumniMap' => $this->alumniReports->alumniDetailsByStudentId(),
+            'reports' => $this->alumniReports,
+        ], $this->navFlags()));
+    }
+
+    /**
+     * @return list<object>
+     */
+    protected function sectionOptions(int $classId): array
+    {
+        if ($classId <= 0) {
+            return [];
+        }
+
+        return DB::table('class_sections')
+            ->join('sections', 'sections.id', '=', 'class_sections.section_id')
+            ->where('class_sections.class_id', $classId)
+            ->orderBy('sections.section')
+            ->select(['sections.id as section_id', 'sections.section'])
+            ->get()
+            ->all();
+    }
+
+    /**
      * @param  'student'|'parent'  $kind
      */
     protected function credentialPage(Request $request, string $kind): View
@@ -645,6 +711,7 @@ class StudentInformationReportController extends Controller
             'canGenderRatio' => $this->permissions->hasPrivilege('student_gender_ratio_report', 'can_view'),
             'canTeacherRatio' => $this->permissions->hasPrivilege('student_teacher_ratio_report', 'can_view'),
             'canOnlineAdmissionReport' => $this->permissions->hasPrivilege('online_admission_report', 'can_view'),
+            'canAlumniReport' => $this->permissions->hasPrivilege('alumni_report', 'can_view'),
         ];
     }
 }
