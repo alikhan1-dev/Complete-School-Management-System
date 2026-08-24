@@ -5,6 +5,7 @@ use App\Modules\Transport\Controllers\PickupPointController;
 use App\Modules\Transport\Controllers\RouteController;
 use App\Modules\Transport\Controllers\RoutePickupPointController;
 use App\Modules\Transport\Controllers\StudentTransportReportController;
+use App\Modules\Transport\Controllers\TransportFeeMasterController;
 use App\Modules\Transport\Controllers\VehicleController;
 use App\Modules\Transport\Controllers\VehrouteController;
 use Illuminate\Support\Facades\Route;
@@ -69,4 +70,8 @@ Route::middleware(['staff.auth'])->group(function () {
     // CI admin/pickuppoint/getpickuppointsbyroute — report / assign cascading dropdowns
     Route::post('admin/pickuppoint/getpickuppointsbyroute', [StudentTransportReportController::class, 'pickupPointsByRoute'])
         ->name('transport.route_pickup.by_route');
+
+    // CI admin/transport/feemaster — monthly transport fees master (current session)
+    Route::match(['get', 'post'], 'admin/transport/feemaster', [TransportFeeMasterController::class, 'index'])
+        ->name('transport.feemaster.index');
 });

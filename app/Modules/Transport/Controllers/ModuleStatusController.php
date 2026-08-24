@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Transport',
             'status' => 'in_progress',
-            'message' => 'Transport admin + student transport report done. Deferred: reorder, student fees, maps.',
+            'message' => 'Transport admin + student transport report + fees-master done. Deferred: reorder, student transport fees assign, maps.',
             'slices' => [
                 'vehicles_crud' => 'done',
                 'routes' => 'done',
@@ -23,6 +23,7 @@ class ModuleStatusController extends Controller
                 'pickup_points' => 'done',
                 'route_pickup_assign' => 'done',
                 'student_transport_report' => 'done',
+                'transport_fees_master' => 'done',
                 'student_transport_fees' => 'deferred',
                 'pickup_reorder' => 'deferred',
                 'maps' => 'deferred',

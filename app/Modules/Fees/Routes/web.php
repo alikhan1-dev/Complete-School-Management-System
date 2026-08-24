@@ -1,10 +1,12 @@
 <?php
 
+use App\Modules\Fees\Controllers\DownloadFeeReceiptController;
 use App\Modules\Fees\Controllers\FeeAssignController;
 use App\Modules\Fees\Controllers\FeeDiscountController;
 use App\Modules\Fees\Controllers\FeeGroupController;
 use App\Modules\Fees\Controllers\FeeMasterController;
 use App\Modules\Fees\Controllers\FeeReminderController;
+use App\Modules\Fees\Controllers\FeeReminderCronController;
 use App\Modules\Fees\Controllers\FeeTypeController;
 use App\Modules\Fees\Controllers\FeesForwardController;
 use App\Modules\Fees\Controllers\ModuleStatusController;
@@ -17,6 +19,15 @@ use App\Modules\Fees\Controllers\UserOfflinePaymentController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('migration-status/fees', [ModuleStatusController::class, 'status'])->name('fees.migration_status');
+
+// CI Site::download_fee_receipt_token — public receipt PDF link used by fee_submission notifications
+Route::get('download-receipt/{token}', DownloadFeeReceiptController::class)
+    ->where('token', '.*')
+    ->name('fees.download_receipt');
+
+// CI Cron::feereminder/{key} — public key-gated fee reminder cron (live send deferred)
+Route::get('cron/feereminder/{key}', FeeReminderCronController::class)
+    ->name('fees.cron.feereminder');
 
 Route::middleware(['staff.auth'])->group(function () {
     // Fee types (CI admin/feetype)

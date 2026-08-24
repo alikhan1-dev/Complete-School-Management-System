@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Fees\Services\FeeCollectService;
 use App\Modules\Fees\Services\FeeReceiptService;
+use App\Modules\Fees\Services\FeeSubmissionNotificationService;
 use App\Modules\Fees\Services\ThermalPrintService;
 use App\Modules\Roles\Services\PermissionService;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +26,7 @@ class StudentFeeController extends Controller
         protected FeeCollectService $collect,
         protected FeeReceiptService $receipts,
         protected ThermalPrintService $thermal,
+        protected FeeSubmissionNotificationService $feeSubmission,
     ) {
     }
 
@@ -197,6 +199,19 @@ class StudentFeeController extends Controller
                 return back()->withInput()->withErrors(['amount' => $e->getMessage()]);
             }
 
+            // CI Studentfee::addstudentfee → mailsmsconf::mailsms('fee_submission') — live send deferred.
+            $this->feeSubmission->queueSingle([
+                'invoice_id' => $result['invoice_id'],
+                'sub_invoice_id' => $result['sub_invoice_id'],
+                'fee_category' => 'transport',
+                'student_session_id' => (int) $data['student_session_id'],
+                'transport_fees_id' => (int) $data['transport_fees_id'],
+                'staff_id' => (int) $staff->id,
+                'guardian_phone' => $request->input('guardian_phone'),
+                'guardian_email' => $request->input('guardian_email'),
+                'parent_app_key' => $request->input('parent_app_key'),
+            ]);
+
             $message = 'Transport fee collected. Payment ID: '.$result['invoice_id'].'/'.$result['sub_invoice_id'];
 
             if ($request->expectsJson() || $request->ajax()) {
@@ -251,6 +266,21 @@ class StudentFeeController extends Controller
 
             return back()->withInput()->withErrors(['amount' => $e->getMessage()]);
         }
+
+        // CI Studentfee::addstudentfee → mailsmsconf::mailsms('fee_submission') — live send deferred.
+        $this->feeSubmission->queueSingle([
+            'invoice_id' => $result['invoice_id'],
+            'sub_invoice_id' => $result['sub_invoice_id'],
+            'fee_category' => 'fees',
+            'student_session_id' => (int) $data['student_session_id'],
+            'fee_groups_feetype_id' => (int) $data['fee_groups_feetype_id'],
+            'student_fees_master_id' => (int) $data['student_fees_master_id'],
+            'fee_session_group_id' => (int) $request->input('fee_session_group_id', 0),
+            'staff_id' => (int) $staff->id,
+            'guardian_phone' => $request->input('guardian_phone'),
+            'guardian_email' => $request->input('guardian_email'),
+            'parent_app_key' => $request->input('parent_app_key'),
+        ]);
 
         $message = 'Fee collected. Payment ID: '.$result['invoice_id'].'/'.$result['sub_invoice_id'];
 
@@ -380,6 +410,9 @@ class StudentFeeController extends Controller
 
             return back()->withInput()->withErrors(['row_counter' => $e->getMessage()]);
         }
+
+        // CI addfeegrp → mailsmsconf::mailsms('fee_submission', send_type=group) — live send deferred.
+        $this->feeSubmission->queueGroup($studentSessionId, (int) $staff->id, $results);
 
         $ids = array_map(
             fn (array $r) => $r['invoice_id'].'/'.$r['sub_invoice_id'],
