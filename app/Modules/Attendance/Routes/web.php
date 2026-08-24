@@ -22,6 +22,10 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('attendance.subjectattendence.index');
     Route::match(['get', 'post'], 'admin/subjectattendence/index', [SubjectAttendenceController::class, 'index']);
 
+    // CI admin/subjectattendence/reportbydate — period attendance matrix by date
+    Route::match(['get', 'post'], 'admin/subjectattendence/reportbydate', [SubjectAttendenceController::class, 'reportbydate'])
+        ->name('attendance.subjectattendence.reportbydate');
+
     // CI admin/subjectgroup/getSubjectByClassandSectionDate — periods for weekday of date
     Route::post('admin/subjectgroup/getSubjectByClassandSectionDate', [SubjectAttendenceController::class, 'getSubjectByClassandSectionDate'])
         ->name('attendance.subjectattendence.periods_by_date');

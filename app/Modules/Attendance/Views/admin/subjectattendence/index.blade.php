@@ -15,6 +15,7 @@
     <div class="box-header with-border">
         <h3 class="box-title">Period Attendance</h3>
         <div class="box-tools">
+            <a href="{{ route('attendance.subjectattendence.reportbydate') }}" class="btn btn-default btn-sm">{{ __('system.period_attendance_by_date') }}</a>
             <a href="{{ route('attendance.stuattendence.index') }}" class="btn btn-default btn-sm">Student Attendance</a>
         </div>
     </div>

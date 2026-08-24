@@ -14,7 +14,7 @@ use InvalidArgumentException;
 
 /**
  * CI admin/Subjectattendence — period / subject attendance mark + save.
- * reportbydate deferred. SMS / class-teacher subject filter deferred.
+ * SMS / class-teacher subject filter deferred.
  */
 class SubjectAttendenceController extends Controller
 {
@@ -159,5 +159,61 @@ class SubjectAttendenceController extends Controller
         }
 
         return response()->json($periods->values());
+    }
+
+    /**
+     * CI admin/subjectattendence/reportbydate — period attendance matrix by date.
+     * Privilege: period_attendance_by_date can_view (fallback student_attendance can_view).
+     */
+    public function reportbydate(Request $request): View|RedirectResponse
+    {
+        abort_unless(
+            $this->permissions->hasPrivilege('period_attendance_by_date', 'can_view')
+            || $this->permissions->hasPrivilege('student_attendance', 'can_view'),
+            403
+        );
+
+        $report = null;
+        $searched = false;
+        $types = collect();
+        $filters = [
+            'class_id' => $request->input('class_id'),
+            'section_id' => $request->input('section_id'),
+            'date' => $request->input('date', date('Y-m-d')),
+        ];
+
+        if ($request->isMethod('post')) {
+            $data = $request->validate([
+                'class_id' => ['required', 'integer', 'exists:classes,id'],
+                'section_id' => ['required', 'integer', 'exists:sections,id'],
+                'date' => ['required', 'date'],
+            ]);
+
+            $filters['class_id'] = $data['class_id'];
+            $filters['section_id'] = $data['section_id'];
+            $filters['date'] = $data['date'];
+            $types = $this->attendance->activeTypes();
+            $searched = true;
+
+            try {
+                $report = $this->attendance->searchByStudentsAttendanceByDate(
+                    (int) $data['class_id'],
+                    (int) $data['section_id'],
+                    $data['date']
+                );
+            } catch (InvalidArgumentException $e) {
+                return back()->withInput()->withErrors(['class_id' => $e->getMessage()]);
+            }
+        }
+
+        return view('shared::layouts.admin', [
+            'title' => __('system.period_attendance_by_date'),
+            'contentView' => 'attendance::admin.subjectattendence.reportbydate',
+            'classes' => SchoolClass::query()->orderBy('id')->get(),
+            'types' => $types,
+            'report' => $report,
+            'searched' => $searched,
+            'filters' => $filters,
+        ]);
     }
 }

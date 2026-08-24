@@ -175,6 +175,81 @@ class SubjectPeriodAttendanceService
         });
     }
 
+    /**
+     * CI Studentsubjectattendence_model::searchByStudentsAttendanceByDate.
+     * Matrix of students × subject periods for a class/section on a date.
+     *
+     * @return object{subjects: Collection<int, object>, student_record: Collection<int, object>}|null
+     */
+    public function searchByStudentsAttendanceByDate(int $classId, int $sectionId, string $date): ?object
+    {
+        $sessionId = $this->currentSession->id();
+        if ($sessionId <= 0) {
+            throw new InvalidArgumentException('Current academic session is not configured.');
+        }
+
+        $day = date('l', strtotime($date));
+        if ($day === false || $day === '') {
+            throw new InvalidArgumentException('Invalid date.');
+        }
+
+        $subjects = DB::table('subject_timetable')
+            ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'subject_timetable.subject_group_subject_id')
+            ->join('subjects', 'subjects.id', '=', 'subject_group_subjects.subject_id')
+            ->where('subject_timetable.class_id', $classId)
+            ->where('subject_timetable.section_id', $sectionId)
+            ->where('subject_timetable.session_id', $sessionId)
+            ->where('subject_timetable.day', $day)
+            ->select([
+                'subject_timetable.*',
+                'subjects.id as subject_id',
+                'subjects.name',
+                'subjects.code',
+                'subjects.type',
+            ])
+            ->get();
+
+        if ($subjects->isEmpty()) {
+            return null;
+        }
+
+        $query = DB::table('students')
+            ->join('student_session', function ($join) use ($classId, $sectionId, $sessionId) {
+                $join->on('students.id', '=', 'student_session.student_id')
+                    ->where('student_session.class_id', '=', $classId)
+                    ->where('student_session.section_id', '=', $sectionId)
+                    ->where('student_session.session_id', '=', $sessionId);
+            })
+            ->where('students.is_active', 'yes');
+
+        $selects = [
+            'students.id',
+            'students.firstname',
+            'students.middlename',
+            'students.lastname',
+            'students.admission_no',
+        ];
+
+        $count = 1;
+        foreach ($subjects as $subject) {
+            $alias = 'ssa_'.$count;
+            $query->leftJoin("student_subject_attendances as {$alias}", function ($join) use ($alias, $subject, $date) {
+                $join->on("{$alias}.student_session_id", '=', 'student_session.id')
+                    ->where("{$alias}.subject_timetable_id", '=', $subject->id)
+                    ->where("{$alias}.date", '=', $date);
+            });
+            $selects[] = DB::raw("{$alias}.attendence_type_id as attendence_type_id_{$count}");
+            $count++;
+        }
+
+        $studentRecord = $query->select($selects)->get();
+
+        return (object) [
+            'subjects' => $subjects,
+            'student_record' => $studentRecord,
+        ];
+    }
+
     protected function timetableBelongsToClassSection(
         int $timetableId,
         int $classId,
