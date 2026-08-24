@@ -2119,6 +2119,7 @@ return array (
   'the_pickup_point_field_is_required' => 'The Pickup Point field is required',
   'the_pickup_time_field_is_required' => 'The Pickup Time field is required',
   'theme' => 'Theme',
+  'thermal_print' => 'Thermal Print',
   'theory' => 'Theory',
   'theory_exam_date_time' => 'Theory Exam Date & Time',
   'there_is_no_class_subject_assigned_for_you' => 'There is no class/subject assigned for you.',

@@ -9,6 +9,7 @@ use App\Modules\Fees\Controllers\FeesForwardController;
 use App\Modules\Fees\Controllers\ModuleStatusController;
 use App\Modules\Fees\Controllers\OfflinePaymentController;
 use App\Modules\Fees\Controllers\StudentFeeController;
+use App\Modules\Fees\Controllers\ThermalPrintController;
 use App\Modules\Fees\Controllers\UserFeesController;
 use App\Modules\Fees\Controllers\UserGatewayPaymentController;
 use App\Modules\Fees\Controllers\UserOfflinePaymentController;
@@ -88,6 +89,10 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/offlinepayment/view/{id}', [OfflinePaymentController::class, 'show'])->name('fees.offlinepayment.show');
     Route::post('admin/offlinepayment/update', [OfflinePaymentController::class, 'update'])->name('fees.offlinepayment.update');
     Route::get('admin/offlinepayment/download/{id}', [OfflinePaymentController::class, 'download'])->name('fees.offlinepayment.download');
+
+    // Thermal print settings (CI System Setting > Thermal Print addon)
+    Route::get('admin/thermalprint', [ThermalPrintController::class, 'index'])->name('fees.thermal_print.index');
+    Route::post('admin/thermalprint', [ThermalPrintController::class, 'save'])->name('fees.thermal_print.save');
 });
 
 Route::middleware([

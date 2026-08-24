@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI Studentfee::printFeesByName + printFeesByGroup + Studentfeemaster_model lookups.
- * Deferred: thermal print addon, SMS on collect.
+ * Thermal print view switching is handled by ThermalPrintService in StudentFeeController.
  */
 class FeeReceiptService
 {

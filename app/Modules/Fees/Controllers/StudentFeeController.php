@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Fees\Services\FeeCollectService;
 use App\Modules\Fees\Services\FeeReceiptService;
+use App\Modules\Fees\Services\ThermalPrintService;
 use App\Modules\Roles\Services\PermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -22,7 +23,8 @@ class StudentFeeController extends Controller
     public function __construct(
         protected PermissionService $permissions,
         protected FeeCollectService $collect,
-        protected FeeReceiptService $receipts
+        protected FeeReceiptService $receipts,
+        protected ThermalPrintService $thermal,
     ) {
     }
 
@@ -507,7 +509,7 @@ class StudentFeeController extends Controller
 
     /**
      * CI Studentfee::printFeesByName — JSON {status:1, page:html} for AJAX print popup.
-     * Thermal print addon deferred.
+     * Switches to thermalPrintFeesByName when thermal module active + is_print=1.
      */
     public function printFeesByName(Request $request): JsonResponse
     {
@@ -527,7 +529,8 @@ class StudentFeeController extends Controller
         );
         abort_if($payload === null, 404);
 
-        $page = view('fees::print.printFeesByName', $this->receiptViewData($payload))->render();
+        $view = $this->thermal->viewName('fees::print.printFeesByName');
+        $page = view($view, $this->receiptViewData($payload))->render();
 
         return response()->json(['status' => 1, 'page' => $page]);
     }
@@ -552,7 +555,9 @@ class StudentFeeController extends Controller
         );
         abort_if($payload === null, 404);
 
-        return response()->view('fees::print.printFeesByName', $this->receiptViewData($payload));
+        $view = $this->thermal->viewName('fees::print.printFeesByName');
+
+        return response()->view($view, $this->receiptViewData($payload));
     }
 
     /**
@@ -577,7 +582,8 @@ class StudentFeeController extends Controller
         );
         abort_if($payload === null, 404);
 
-        $page = view('fees::print.printFeesByGroup', $this->groupReceiptViewData($payload))->render();
+        $view = $this->thermal->viewName('fees::print.printFeesByGroup');
+        $page = view($view, $this->groupReceiptViewData($payload))->render();
 
         return response()->json(['status' => 1, 'page' => $page]);
     }
@@ -603,7 +609,9 @@ class StudentFeeController extends Controller
         );
         abort_if($payload === null, 404);
 
-        return response()->view('fees::print.printFeesByGroup', $this->groupReceiptViewData($payload));
+        $view = $this->thermal->viewName('fees::print.printFeesByGroup');
+
+        return response()->view($view, $this->groupReceiptViewData($payload));
     }
 
     /**
@@ -623,10 +631,9 @@ class StudentFeeController extends Controller
         $payloads = $this->receipts->groupReceiptPayloads($decoded);
         abort_if($payloads === [], 404);
 
-        return response()->view(
-            'fees::print.printFeesByGroupArray',
-            $this->groupArrayReceiptViewData($payloads)
-        );
+        $view = $this->thermal->viewName('fees::print.printFeesByGroupArray');
+
+        return response()->view($view, $this->groupArrayReceiptViewData($payloads));
     }
 
     /**
@@ -663,7 +670,7 @@ class StudentFeeController extends Controller
      */
     protected function sharedPrintViewData(): array
     {
-        return [
+        $data = [
             'copies' => $this->receipts->invoiceCopiesPublic(),
             'printDate' => $this->receipts->formatDate(now()->format('Y-m-d')),
             'headerUrl' => $this->receipts->receiptHeaderUrl(),
@@ -673,6 +680,18 @@ class StudentFeeController extends Controller
             'formatAmount' => fn (float|int|string $amount): string => $this->receipts->formatAmount($amount),
             'groupStatusLabel' => fn (string $status): string => $this->receipts->groupStatusLabel($status),
         ];
+
+        // CI Studentfee passes thermal_print_result into thermal views when enabled.
+        if ($this->thermal->isEnabled()) {
+            $data['thermal_print'] = $this->thermal->settings() ?? [
+                'school_name' => '',
+                'address' => '',
+                'footer_text' => '',
+                'is_print' => 0,
+            ];
+        }
+
+        return $data;
     }
 
     /**
