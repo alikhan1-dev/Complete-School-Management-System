@@ -10,6 +10,7 @@ use App\Modules\Fees\Controllers\ModuleStatusController;
 use App\Modules\Fees\Controllers\OfflinePaymentController;
 use App\Modules\Fees\Controllers\StudentFeeController;
 use App\Modules\Fees\Controllers\UserFeesController;
+use App\Modules\Fees\Controllers\UserGatewayPaymentController;
 use App\Modules\Fees\Controllers\UserOfflinePaymentController;
 use Illuminate\Support\Facades\Route;
 
@@ -102,6 +103,14 @@ Route::middleware([
     Route::get('user/user/printFeesByName', [UserFeesController::class, 'printFeesByNamePage'])->name('user.fees.printFeesByName.page');
     Route::post('user/user/printFeesByGroupArray', [UserFeesController::class, 'printFeesByGroupArray'])->name('user.fees.printFeesByGroupArray');
     Route::post('user/user/getProcessingfees', [UserFeesController::class, 'getProcessingfees'])->name('user.fees.getProcessingfees');
+    Route::post('user/user/geBalanceFee', [UserFeesController::class, 'geBalanceFee'])->name('user.fees.geBalanceFee');
+    Route::post('user/user/getcollectfee', [UserFeesController::class, 'getcollectfee'])->name('user.fees.getcollectfee');
+
+    // CI user/gateway/Payment::pay online_payment (+ offline_payment redirect helper)
+    Route::post('user/gateway/payment/pay', [UserGatewayPaymentController::class, 'pay'])->name('user.gateway.payment.pay');
+    Route::get('user/gateway/{gateway}', [UserGatewayPaymentController::class, 'show'])
+        ->where('gateway', '[A-Za-z0-9_\-]+')
+        ->name('user.gateway.show');
 
     // CI user/gateway/Payment::pay offline_payment → user/offlinepayment
     Route::post('user/offlinepayment/start', [UserOfflinePaymentController::class, 'start'])

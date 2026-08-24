@@ -3,6 +3,7 @@
 namespace App\Modules\Fees\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
+use App\Modules\Payments\Services\PaymentSettingService;
 use App\Modules\Shared\Services\SchoolContext;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -10,7 +11,7 @@ use RuntimeException;
 
 /**
  * CI user/User::getfees — student/parent portal fee ledger.
- * Deferred: online gateway pay modal, SMS, DataTables pixel-parity.
+ * Deferred: live gateway charge APIs, SMS, DataTables pixel-parity.
  */
 class StudentFeesPortalService
 {
@@ -18,6 +19,7 @@ class StudentFeesPortalService
         protected FeeCollectService $collect,
         protected OfflinePaymentService $offline,
         protected ProcessingFeesService $processing,
+        protected PaymentSettingService $paymentSettings,
         protected SchoolContext $school,
         protected CurrentSessionResolver $currentSession,
     ) {
@@ -42,7 +44,9 @@ class StudentFeesPortalService
      *     }>,
      *     offlineEnabled:bool,
      *     transportActive:bool,
-     *     hasProcessingFees:bool
+     *     hasProcessingFees:bool,
+     *     paymentMethodActive:bool,
+     *     allowPartialPayment:bool
      * }
      */
     public function pageData(): array
@@ -111,7 +115,19 @@ class StudentFeesPortalService
             'offlineEnabled' => $this->offline->isPortalEnabled(),
             'transportActive' => $transportActive,
             'hasProcessingFees' => $this->processing->hasProcessingFees($selectedSessionId),
+            'paymentMethodActive' => $this->paymentSettings->activeMethod() !== null,
+            'allowPartialPayment' => $this->allowPartialPayment(),
         ];
+    }
+
+    protected function allowPartialPayment(): bool
+    {
+        $flag = $this->school->get('student_partial_payment', 0);
+        $normalized = strtolower(trim((string) $flag));
+
+        return in_array($normalized, ['enabled', '1', 'true', 'yes'], true)
+            || $flag === 1
+            || $flag === true;
     }
 
     /**

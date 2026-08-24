@@ -3,23 +3,28 @@
 namespace App\Modules\Fees\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Fees\Services\FeeCollectService;
 use App\Modules\Fees\Services\FeeReceiptService;
+use App\Modules\Fees\Services\PortalOnlinePayService;
 use App\Modules\Fees\Services\StudentFeesPortalService;
 use App\Modules\Shared\Services\SchoolContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\View\View;
+use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * CI user/User::getfees + portal fee receipt print + processing-fees modal.
+ * CI user/User::getfees + portal fee receipt print + processing-fees + online pay modal.
  */
 class UserFeesController extends Controller
 {
     public function __construct(
         protected StudentFeesPortalService $portal,
         protected FeeReceiptService $receipts,
+        protected PortalOnlinePayService $onlinePay,
+        protected FeeCollectService $collect,
         protected SchoolContext $school,
     ) {
     }
@@ -39,8 +44,78 @@ class UserFeesController extends Controller
             'sessionFees' => $data['sessionFees'],
             'offlineEnabled' => $data['offlineEnabled'],
             'hasProcessingFees' => $data['hasProcessingFees'],
+            'paymentMethodActive' => $data['paymentMethodActive'],
+            'allowPartialPayment' => $data['allowPartialPayment'],
             'currencySymbol' => $this->school->currencySymbol(),
         ]);
+    }
+
+    /**
+     * CI user/User::geBalanceFee — JSON balance/fine/discounts for single online pay modal.
+     */
+    public function geBalanceFee(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'fee_groups_feetype_id' => ['required'],
+            'student_fees_master_id' => ['required'],
+            'student_session_id' => ['required', 'integer'],
+            'fee_category' => ['nullable', 'string', 'in:fees,transport'],
+            'trans_fee_id' => ['nullable', 'integer'],
+            'student_transport_fee_id' => ['nullable', 'integer'],
+        ]);
+
+        $sessionId = (int) $data['student_session_id'];
+        $portalSession = $this->portal->currentStudentSessionId();
+        if ($portalSession > 0 && $portalSession !== $sessionId) {
+            // Prefer authenticated portal class session for ownership.
+            $sessionId = $portalSession;
+        }
+
+        try {
+            return response()->json($this->onlinePay->balanceFee($data, $sessionId));
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'status' => 'fail',
+                'error' => ['fee_groups_feetype_id' => $e->getMessage()],
+            ]);
+        } catch (RuntimeException $e) {
+            abort(403, $e->getMessage());
+        }
+    }
+
+    /**
+     * CI user/User::getcollectfee — JSON {view: html} for Pay Selected modal.
+     */
+    public function getcollectfee(Request $request): JsonResponse
+    {
+        abort_unless($this->onlinePay->hasActivePaymentMethod(), 403);
+
+        $data = $request->validate([
+            'data' => ['required', 'string'],
+        ]);
+
+        $decoded = json_decode($data['data'], true);
+        abort_unless(is_array($decoded) && $decoded !== [], 422);
+
+        $sessionId = $this->portal->currentStudentSessionId();
+        abort_if($sessionId <= 0, 403);
+
+        try {
+            $lines = $this->onlinePay->collectFeeLines($decoded, $sessionId);
+            $student = $this->collect->findStudentBySession($sessionId);
+            abort_if(! $student, 404);
+        } catch (RuntimeException $e) {
+            abort(403, $e->getMessage());
+        }
+
+        $view = view('fees::user.getcollectfee', [
+            'lines' => $lines,
+            'student' => $student,
+            'allowPartialPayment' => $this->onlinePay->allowPartialPayment(),
+            'currencySymbol' => $this->school->currencySymbol(),
+        ])->render();
+
+        return response()->json(['view' => $view]);
     }
 
     /**
