@@ -3,6 +3,8 @@
 namespace App\Modules\Students\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
+use App\Modules\Academics\Services\CustomFieldValueService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
 use App\Modules\Students\Models\AlumniStudent;
 use Illuminate\Http\UploadedFile;
@@ -11,19 +13,26 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI Alumni_model + Student_model alumni search — manage alumni contact details.
- * Deferred: events, mail/SMS, SaaS storage quota, custom-field columns, class-teacher scope.
+ * Deferred: mail/SMS fan-out (Communication), SaaS storage quota.
  */
 class AlumniService
 {
     public function __construct(
         protected CurrentSessionResolver $currentSession,
         protected SchoolContext $school,
+        protected ClassTeacherScopeService $classTeacherScope,
+        protected CustomFieldValueService $customFields,
     ) {
     }
 
     public function settingOn(string $key): bool
     {
         return (int) $this->school->get($key, 1) === 1;
+    }
+
+    public function tableCustomFields(): Collection
+    {
+        return $this->customFields->fieldsForTable('students');
     }
 
     public function studentDisplayName(object $student): string
@@ -40,6 +49,36 @@ class AlumniService
         }
 
         return $name !== '' ? $name : $first;
+    }
+
+    public function studentImageUrl(object $student, ?object $alumniDetail = null): string
+    {
+        $alumniPhoto = trim((string) ($alumniDetail->photo ?? ''));
+        if ($alumniPhoto !== '') {
+            return asset('uploads/alumni_student_images/'.$alumniPhoto);
+        }
+
+        $image = trim((string) ($student->image ?? ''));
+        if ($image === '') {
+            return asset('uploads/student_images/no_image.png');
+        }
+
+        return asset($image);
+    }
+
+    public function customFieldDisplay(object $student, object $field): string
+    {
+        $values = (array) ($student->table_custom ?? []);
+        $value = (string) ($values[(int) $field->id] ?? '');
+        if ($value === '') {
+            return '';
+        }
+
+        if ((string) ($field->type ?? '') === 'link') {
+            return '<a href="'.e($value).'" target="_blank">'.e($value).'</a>';
+        }
+
+        return e($value);
     }
 
     /**
@@ -62,11 +101,25 @@ class AlumniService
 
     /**
      * CI search_alumniStudent — pass-out session + is_alumni=1 + active students.
+     * Class-teacher restriction is via restricted class/section dropdowns (CI class_model->get).
      *
      * @return Collection<int, object>
      */
     public function searchByFilter(int $sessionId, int $classId, ?int $sectionId = null): Collection
     {
+        if ($this->classTeacherScope->isRestricted()) {
+            $allowedClasses = $this->classTeacherScope->restrictedClassIds();
+            if ($allowedClasses === [] || ! in_array($classId, $allowedClasses, true)) {
+                return collect();
+            }
+            if ($sectionId !== null && $sectionId > 0) {
+                $allowedSections = $this->classTeacherScope->restrictedSectionIdsForClass($classId);
+                if (! in_array($sectionId, $allowedSections, true)) {
+                    return collect();
+                }
+            }
+        }
+
         $sessionQuery = DB::table('student_session')
             ->where('is_alumni', 1)
             ->where('session_id', $sessionId)
@@ -75,6 +128,54 @@ class AlumniService
             $sessionQuery->where('section_id', $sectionId);
         }
         $studentIds = $sessionQuery->distinct()->pluck('student_id')->all();
+
+        return $this->hydrateAlumniStudents($studentIds, $sessionId, $classId);
+    }
+
+    /**
+     * CI search_alumniStudentbyAdmissionNo — current session + admission_no LIKE
+     * + class-teacher class/section restriction.
+     *
+     * @return Collection<int, object>
+     */
+    public function searchByAdmissionNo(string $term): Collection
+    {
+        $sessionId = $this->currentSession->id();
+        if ($sessionId <= 0) {
+            return collect();
+        }
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return collect();
+            }
+        }
+
+        $like = '%'.str_replace(['%', '_'], ['\\%', '\\_'], trim($term)).'%';
+
+        $query = DB::table('students')
+            ->join('student_session', 'student_session.student_id', '=', 'students.id')
+            ->where('student_session.session_id', $sessionId)
+            ->where('students.is_active', 'yes')
+            ->where('student_session.is_alumni', 1)
+            ->where('students.admission_no', 'like', $like);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $this->classTeacherScope->applyStudentSessionScope($query);
+        }
+
+        $studentIds = $query->distinct()->pluck('students.id')->all();
+
+        return $this->hydrateAlumniStudents($studentIds, $sessionId, null);
+    }
+
+    /**
+     * @param  list<int|string>  $studentIds
+     * @return Collection<int, object>
+     */
+    protected function hydrateAlumniStudents(array $studentIds, int $sessionId, ?int $filterClassId): Collection
+    {
         if ($studentIds === []) {
             return collect();
         }
@@ -82,7 +183,7 @@ class AlumniService
         $students = DB::table('students')
             ->whereIn('id', $studentIds)
             ->where('is_active', 'yes')
-            ->orderBy('admission_no')
+            ->orderBy($filterClassId !== null ? 'admission_no' : 'id')
             ->select([
                 'id',
                 'admission_no',
@@ -93,84 +194,35 @@ class AlumniService
                 'dob',
                 'image',
                 'adhar_no',
+                'current_address',
             ])
             ->get();
 
-        $labels = DB::table('student_session')
+        $labelQuery = DB::table('student_session')
             ->join('classes', 'classes.id', '=', 'student_session.class_id')
             ->join('sections', 'sections.id', '=', 'student_session.section_id')
             ->where('student_session.is_alumni', 1)
-            ->where('student_session.session_id', $sessionId)
-            ->where('student_session.class_id', $classId)
             ->whereIn('student_session.student_id', $studentIds)
             ->select([
                 'student_session.student_id',
                 DB::raw('GROUP_CONCAT(classes.class, "(", sections.section, ")") as class_label'),
             ])
-            ->groupBy('student_session.student_id')
-            ->pluck('class_label', 'student_id');
+            ->groupBy('student_session.student_id');
 
-        return $students->map(function ($student) use ($labels) {
-            $student->class = (string) ($labels[$student->id] ?? '');
-
-            return $student;
-        });
-    }
-
-    /**
-     * CI search_alumniStudentbyAdmissionNo — current session + admission_no LIKE.
-     *
-     * @return Collection<int, object>
-     */
-    public function searchByAdmissionNo(string $term): Collection
-    {
-        $sessionId = $this->currentSession->id();
-        $like = '%'.str_replace(['%', '_'], ['\\%', '\\_'], trim($term)).'%';
-
-        $studentIds = DB::table('students')
-            ->join('student_session', 'student_session.student_id', '=', 'students.id')
-            ->where('student_session.session_id', $sessionId)
-            ->where('students.is_active', 'yes')
-            ->where('student_session.is_alumni', 1)
-            ->where('students.admission_no', 'like', $like)
-            ->distinct()
-            ->pluck('students.id')
-            ->all();
-        if ($studentIds === []) {
-            return collect();
+        if ($filterClassId !== null) {
+            $labelQuery->where('student_session.session_id', $sessionId)
+                ->where('student_session.class_id', $filterClassId);
+        } else {
+            $labelQuery->where('student_session.session_id', $sessionId);
         }
 
-        $students = DB::table('students')
-            ->whereIn('id', $studentIds)
-            ->orderBy('id')
-            ->select([
-                'id',
-                'admission_no',
-                'firstname',
-                'middlename',
-                'lastname',
-                'gender',
-                'dob',
-                'image',
-                'adhar_no',
-            ])
-            ->get();
+        $labels = $labelQuery->pluck('class_label', 'student_id');
+        $customMaps = $this->customFields->tableValuesByBelongIds('students', $studentIds);
 
-        $labels = DB::table('student_session')
-            ->join('classes', 'classes.id', '=', 'student_session.class_id')
-            ->join('sections', 'sections.id', '=', 'student_session.section_id')
-            ->where('student_session.session_id', $sessionId)
-            ->where('student_session.is_alumni', 1)
-            ->whereIn('student_session.student_id', $studentIds)
-            ->select([
-                'student_session.student_id',
-                DB::raw('GROUP_CONCAT(classes.class, "(", sections.section, ")") as class_label'),
-            ])
-            ->groupBy('student_session.student_id')
-            ->pluck('class_label', 'student_id');
-
-        return $students->map(function ($student) use ($labels) {
-            $student->class = (string) ($labels[$student->id] ?? '');
+        return $students->map(function ($student) use ($labels, $customMaps) {
+            $studentId = (int) $student->id;
+            $student->class = (string) ($labels[$studentId] ?? '');
+            $student->table_custom = $customMaps[$studentId] ?? [];
 
             return $student;
         });

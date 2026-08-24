@@ -62,6 +62,7 @@ class DisabledStudentController extends Controller
             'classlist' => $this->classTeacherScope->classesForDropdown(),
             'sectionOptions' => $this->classTeacherScope->sectionsForClass((int) ($filters['class_id'] ?: 0)),
             'disabled' => $this->disabled,
+            'tableCustomFields' => $this->disabled->tableCustomFields(),
             'dateFormat' => (string) $this->school->dateFormat(),
         ]);
     }

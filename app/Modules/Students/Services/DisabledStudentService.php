@@ -3,6 +3,7 @@
 namespace App\Modules\Students\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
+use App\Modules\Academics\Services\CustomFieldValueService;
 use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
 use Illuminate\Support\Collection;
@@ -10,7 +11,6 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI Student::disablestudentslist + Student_model disable searches.
- * Deferred: custom-field columns on list.
  */
 class DisabledStudentService
 {
@@ -18,12 +18,21 @@ class DisabledStudentService
         protected CurrentSessionResolver $currentSession,
         protected SchoolContext $school,
         protected ClassTeacherScopeService $classTeacherScope,
+        protected CustomFieldValueService $customFields,
     ) {
     }
 
     public function settingOn(string $key): bool
     {
         return (int) $this->school->get($key, 1) === 1;
+    }
+
+    /**
+     * CI get_custom_fields('students', 1) for list columns.
+     */
+    public function tableCustomFields(): Collection
+    {
+        return $this->customFields->fieldsForTable('students');
     }
 
     public function studentDisplayName(object $student): string
@@ -50,6 +59,21 @@ class DisabledStudentService
         }
 
         return asset($image);
+    }
+
+    public function customFieldDisplay(object $student, object $field): string
+    {
+        $values = (array) ($student->table_custom ?? []);
+        $value = (string) ($values[(int) $field->id] ?? '');
+        if ($value === '') {
+            return '';
+        }
+
+        if ((string) ($field->type ?? '') === 'link') {
+            return '<a href="'.e($value).'" target="_blank">'.e($value).'</a>';
+        }
+
+        return e($value);
     }
 
     /**
@@ -204,13 +228,16 @@ class DisabledStudentService
             }
         }
 
-        return $students->map(function ($student) use ($labels, $primary) {
+        $customMaps = $this->customFields->tableValuesByBelongIds('students', $studentIds);
+
+        return $students->map(function ($student) use ($labels, $primary, $customMaps) {
             $studentId = (int) $student->id;
             $student->class_section_list = isset($labels[$studentId])
                 ? implode(', ', $labels[$studentId])
                 : '';
             $student->class = $primary[$studentId]['class'] ?? '';
             $student->section = $primary[$studentId]['section'] ?? '';
+            $student->table_custom = $customMaps[$studentId] ?? [];
 
             return $student;
         });

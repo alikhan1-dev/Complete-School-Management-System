@@ -130,6 +130,43 @@ class AlumniEventService
         $event->delete();
     }
 
+    /**
+     * CI Alumni_model::get_eventbydaterange + Alumni::getevent JSON shape.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function calendarEvents(string $start, string $end): array
+    {
+        $rows = AlumniEvent::query()
+            ->where(function ($query) use ($start, $end) {
+                $query->where(function ($inner) use ($start, $end) {
+                    $inner->where('from_date', '>=', $start)
+                        ->where('from_date', '<=', $end);
+                })->orWhere(function ($inner) use ($start, $end) {
+                    $inner->where('to_date', '>=', $start)
+                        ->where('to_date', '<=', $end);
+                });
+            })
+            ->orderBy('from_date')
+            ->get();
+
+        $events = [];
+        foreach ($rows as $value) {
+            $events[] = [
+                'title' => (string) $value->title,
+                'start' => (string) $value->from_date,
+                'end' => (string) $value->to_date,
+                'description' => (string) ($value->note ?? ''),
+                'id' => (int) $value->id,
+                'backgroundColor' => '#27ab00',
+                'borderColor' => '#27ab00',
+                'event_type' => 'Present',
+            ];
+        }
+
+        return $events;
+    }
+
     public function formatDate(mixed $value): string
     {
         if ($value === null || $value === '' || $value === '0000-00-00' || $value === '0000-00-00 00:00:00') {

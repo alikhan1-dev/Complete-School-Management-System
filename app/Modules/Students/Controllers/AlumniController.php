@@ -4,8 +4,9 @@ namespace App\Modules\Students\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\AcademicSession;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
+use App\Modules\Shared\Services\SchoolContext;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Services\AlumniService;
 use Illuminate\Http\RedirectResponse;
@@ -21,6 +22,8 @@ class AlumniController extends Controller
     public function __construct(
         protected PermissionService $permissions,
         protected AlumniService $alumni,
+        protected ClassTeacherScopeService $classTeacherScope,
+        protected SchoolContext $school,
     ) {
     }
 
@@ -66,9 +69,11 @@ class AlumniController extends Controller
             'resultlist' => $resultlist,
             'alumniMap' => $this->alumni->alumniDetailsByStudentId(),
             'sessionlist' => AcademicSession::query()->orderByDesc('id')->get(),
-            'classlist' => SchoolClass::query()->orderBy('class')->get(),
-            'sectionOptions' => $this->sectionOptions((int) ($filters['class_id'] ?: 0)),
+            'classlist' => $this->classTeacherScope->classesForDropdown(),
+            'sectionOptions' => $this->classTeacherScope->sectionsForClass((int) ($filters['class_id'] ?: 0)),
             'alumni' => $this->alumni,
+            'tableCustomFields' => $this->alumni->tableCustomFields(),
+            'dateFormat' => (string) $this->school->dateFormat(),
             'canAdd' => $this->permissions->hasPrivilege('manage_alumni', 'can_add'),
             'canEdit' => $this->permissions->hasPrivilege('manage_alumni', 'can_edit'),
             'canDelete' => $this->permissions->hasPrivilege('manage_alumni', 'can_delete'),
@@ -125,23 +130,5 @@ class AlumniController extends Controller
         return redirect()
             ->route('students.alumni.list')
             ->with('success', __('system.delete_message'));
-    }
-
-    /**
-     * @return list<object>
-     */
-    protected function sectionOptions(int $classId): array
-    {
-        if ($classId <= 0) {
-            return [];
-        }
-
-        return \Illuminate\Support\Facades\DB::table('class_sections')
-            ->join('sections', 'sections.id', '=', 'class_sections.section_id')
-            ->where('class_sections.class_id', $classId)
-            ->orderBy('sections.section')
-            ->select(['sections.id as section_id', 'sections.section'])
-            ->get()
-            ->all();
     }
 }

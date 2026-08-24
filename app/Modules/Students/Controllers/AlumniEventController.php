@@ -4,22 +4,24 @@ namespace App\Modules\Students\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\AcademicSession;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Students\Services\AlumniEventService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI admin/Alumni::events + add_event + delete_event.
- * Deferred: FullCalendar, mail/SMS notifications, SaaS quota.
+ * CI admin/Alumni::events + add_event + delete_event + getevent.
+ * Deferred: mail/SMS notifications, SaaS quota.
  */
 class AlumniEventController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
         protected AlumniEventService $events,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -36,6 +38,19 @@ class AlumniEventController extends Controller
             'canEdit' => $this->permissions->hasPrivilege('events', 'can_edit'),
             'canDelete' => $this->permissions->hasPrivilege('events', 'can_delete'),
         ]);
+    }
+
+    /**
+     * CI admin/alumni/getevent — FullCalendar feed.
+     */
+    public function getevent(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('events', 'can_view'), 403);
+
+        return response()->json($this->events->calendarEvents(
+            (string) $request->query('start', ''),
+            (string) $request->query('end', '')
+        ));
     }
 
     public function create(Request $request): View|RedirectResponse
@@ -111,7 +126,7 @@ class AlumniEventController extends Controller
             'contentView' => 'students::admin.alumni.event_form',
             'editing' => $editing,
             'sessionlist' => AcademicSession::query()->orderByDesc('id')->get(),
-            'classlist' => SchoolClass::query()->orderBy('class')->get(),
+            'classlist' => $this->classTeacherScope->classesForDropdown(),
             'sectionOptions' => $this->events->sectionsForClass($classId),
             'selectedSections' => $selectedSections,
             'events' => $this->events,

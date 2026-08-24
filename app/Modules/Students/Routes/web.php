@@ -34,9 +34,11 @@ Route::middleware(['staff.auth'])->group(function () {
         ->whereNumber('id')
         ->name('students.alumni.delete');
 
-    // CI admin/alumni events (mail/SMS + calendar deferred)
+    // CI admin/alumni events (mail/SMS deferred to Communication)
     Route::get('admin/alumni/events', [AlumniEventController::class, 'index'])
         ->name('students.alumni.events');
+    Route::get('admin/alumni/getevent', [AlumniEventController::class, 'getevent'])
+        ->name('students.alumni.events.calendar');
     Route::match(['get', 'post'], 'admin/alumni/event/create', [AlumniEventController::class, 'create'])
         ->name('students.alumni.event.create');
     Route::match(['get', 'post'], 'admin/alumni/event/edit/{id}', [AlumniEventController::class, 'edit'])

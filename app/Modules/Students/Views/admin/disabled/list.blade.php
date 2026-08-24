@@ -88,6 +88,9 @@
                                 @if($disabled->settingOn('mobile_no'))
                                     <th>{{ __('system.mobile_number') }}</th>
                                 @endif
+                                @foreach($tableCustomFields as $field)
+                                    <th>{{ $field->name }}</th>
+                                @endforeach
                                 <th class="text-right">{{ __('system.action') }}</th>
                             </tr>
                         </thead>
@@ -119,6 +122,9 @@
                                     @if($disabled->settingOn('mobile_no'))
                                         <td>{{ $student->mobileno }}</td>
                                     @endif
+                                    @foreach($tableCustomFields as $field)
+                                        <td>{!! $disabled->customFieldDisplay($student, $field) !!}</td>
+                                    @endforeach
                                     <td class="text-right">
                                         <a href="{{ url('student/view/'.$student->id) }}" class="btn btn-primary btn-xs" title="{{ __('system.view') }}">
                                             <i class="fa fa-reorder"></i>
@@ -127,7 +133,9 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8">{{ __('system.no_record_found') }}</td>
+                                    <td colspan="{{ 6 + ($disabled->settingOn('father_name') ? 1 : 0) + ($disabled->settingOn('mobile_no') ? 1 : 0) + $tableCustomFields->count() }}">
+                                        {{ __('system.no_record_found') }}
+                                    </td>
                                 </tr>
                             @endforelse
                         </tbody>

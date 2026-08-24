@@ -25,6 +25,49 @@ class CustomFieldValueService
     }
 
     /**
+     * CI customfield_model::get_custom_fields($belongTo, 1).
+     *
+     * @return Collection<int, CustomField>
+     */
+    public function fieldsForTable(string $belongTo): Collection
+    {
+        return CustomField::query()
+            ->where('belong_to', $belongTo)
+            ->where('visible_on_table', 1)
+            ->orderBy('weight')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Batched values for table-visible fields: student_id => [field_id => value].
+     *
+     * @param  list<int|string>  $belongTableIds
+     * @return array<int, array<int, string>>
+     */
+    public function tableValuesByBelongIds(string $belongTo, array $belongTableIds): array
+    {
+        $belongTableIds = array_values(array_unique(array_filter(array_map('intval', $belongTableIds), fn (int $id) => $id > 0)));
+        $fields = $this->fieldsForTable($belongTo);
+        if ($belongTableIds === [] || $fields->isEmpty()) {
+            return [];
+        }
+
+        $fieldIds = $fields->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $rows = CustomFieldValue::query()
+            ->whereIn('belong_table_id', $belongTableIds)
+            ->whereIn('custom_field_id', $fieldIds)
+            ->get(['belong_table_id', 'custom_field_id', 'field_value']);
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row->belong_table_id][(int) $row->custom_field_id] = (string) ($row->field_value ?? '');
+        }
+
+        return $map;
+    }
+
+    /**
      * Posted shape: custom_fields[students][fieldId] = scalar|array
      *
      * @param  array<string, mixed>  $posted  request()->input('custom_fields.students', [])
