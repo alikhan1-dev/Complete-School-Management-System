@@ -12,21 +12,25 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Mirrors CI Student_model::addNewMethod core path (student + session + portal users + custom fields).
- * Deferred for later parity passes: fees master, transport fees, multi-class rows,
- * sibling parent reuse, media uploads, barcode, SMS.
+ * Mirrors CI Student_model::addNewMethod core path (student + session + portal users + custom fields + fees + multi-class).
+ * Deferred for later parity passes: media uploads, barcode, SMS.
  */
 class StudentAdmissionService
 {
     public function __construct(
         protected CurrentSessionResolver $currentSession,
-        protected CustomFieldValueService $customFields
+        protected CustomFieldValueService $customFields,
+        protected StudentAdmissionFeeService $admissionFees,
+        protected MultiClassStudentService $multiClass,
     ) {
     }
 
     /**
      * @param  array<string, mixed>  $studentData
      * @param  list<array{custom_field_id:int,field_value:string}>  $customFieldRows
+     * @param  list<int|string>  $feeSessionGroupIds
+     * @param  list<int|string>  $feesDiscountIds
+     * @param  list<int|string>  $transportFeemasterIds
      * @return array{student_id:int,student_session_id:int,student_username:string,student_password:string,parent_password:string,sibling_reused:bool}
      */
     public function admit(
@@ -35,7 +39,13 @@ class StudentAdmissionService
         int $sectionId,
         ?float $feesDiscount = 0,
         array $customFieldRows = [],
-        int $siblingId = 0
+        int $siblingId = 0,
+        array $feeSessionGroupIds = [],
+        array $feesDiscountIds = [],
+        array $transportFeemasterIds = [],
+        ?int $routePickupPointId = null,
+        ?int $vehrouteId = null,
+        array $multiclassRows = [],
     ): array {
         $settings = SchSetting::query()->firstOrFail();
         $sessionId = $this->currentSession->id();
@@ -44,7 +54,22 @@ class StudentAdmissionService
             throw new \RuntimeException('Current academic session is not configured in sch_settings.');
         }
 
-        return DB::transaction(function () use ($studentData, $classId, $sectionId, $feesDiscount, $settings, $sessionId, $customFieldRows, $siblingId) {
+        return DB::transaction(function () use (
+            $studentData,
+            $classId,
+            $sectionId,
+            $feesDiscount,
+            $settings,
+            $sessionId,
+            $customFieldRows,
+            $siblingId,
+            $feeSessionGroupIds,
+            $feesDiscountIds,
+            $transportFeemasterIds,
+            $routePickupPointId,
+            $vehrouteId,
+            $multiclassRows
+        ) {
             if (empty($studentData['admission_no']) && (int) $settings->adm_auto_insert === 1) {
                 $studentData['admission_no'] = $this->nextAdmissionNo($settings);
                 if ((int) $settings->adm_update_status === 0) {
@@ -82,14 +107,26 @@ class StudentAdmissionService
                 'section_id' => $sectionId,
                 'session_id' => $sessionId,
                 'fees_discount' => $feesDiscount ?? 0,
-                'route_pickup_point_id' => null,
-                'vehroute_id' => null,
+                'route_pickup_point_id' => $routePickupPointId,
+                'vehroute_id' => $vehrouteId,
                 'is_alumni' => 0,
                 'is_active' => 'yes',
                 'is_leave' => 0,
                 'default_login' => 0,
                 'transport_fees' => 0,
             ]);
+
+            $this->admissionFees->assignOnAdmit(
+                (int) $studentSession->id,
+                $feeSessionGroupIds,
+                $feesDiscountIds,
+                $transportFeemasterIds,
+                $routePickupPointId
+            );
+
+            if ($multiclassRows !== []) {
+                $this->multiClass->insertExtraSessionsOnAdmit((int) $student->id, $multiclassRows);
+            }
 
             // Role library prefixes (std / parent). CI Student_model properties are empty
             // (known quirk); using Role.php values so portal usernames stay distinct.

@@ -31,7 +31,7 @@ A module is complete when routes, validation, permissions, views, AJAX, reports,
 |-------|-------|--------|
 | **0** | Inventory + docs (`docs/modules.md`, `database.md`, `known_issues.md`) | Done (baseline) |
 | **1** | Shared, Auth, Roles, Staff — foundation | Done (core) |
-| **2** | Academics, Students (Parents/Timetable partial deferred) | Done (core Academics + Students; disable/alumni + alumni report done; Parents credentials/login-detail/send-password endpoints done — live gateway deferred; Timetable class create/report + teacher mytimetable + print + duplicate-check + quick period generator done) |
+| **2** | Academics, Students (Parents/Timetable partial deferred) | Done (core Academics + Students; fees-on-admit assign + multi-class admin/admit/edit/delete-guard + multi-class class-teacher matrix + disabled-list class-teacher scope/details view done; disable/alumni + alumni report done; Parents credentials/login-detail/send-password endpoints done — live gateway deferred; Timetable class create/report + teacher mytimetable + print + duplicate-check + quick period generator done; batch subjects skipped — not in vanilla schema; deferred: alumni mail/SMS, disabled list custom-field columns) |
 | **3** | **Fees** (delivery pivot: Fees first; Attendance follows as 3b) — was Phase 4 in original plan | Operational core done (multi-collect, due-fees, carry-forward + transport single/multi collect + offline bank payments + student getfees portal ledger/print/processing-banner + online pay modal persist + printFeesByName/ByGroup/ByGroupArray + cumulative fine + thermal print + fees reminder settings + fee_submission notification persist + download-receipt PDF + fee-reminder cron persist; deferred: live gateway charges → Payments, fee_submission/fees_reminder live mail/SMS → Communication; transport fees-master admin → Transport) |
 | **3b** | Attendance (day / subject / staff) + remaining student history | Operational core done (day + by-date + subject/period + staff mark-save + period reportbydate); deferred: SMS, biometric, class-teacher filter, staff profile month view |
 | **4** | Finance, Payments (gateway infrastructure) | In progress (Finance operational core done — heads + income/expense CRUD + search screens; finance reports owned by Reports; Payments admin method credentials + online admission checkout + student fee `gateway_ins`/`student_fees_processing` persist + callback/webhook stubs done; live gateway drivers + fee settlement pending) |
@@ -58,7 +58,7 @@ A module is complete when routes, validation, permissions, views, AJAX, reports,
 - [x] Shared: BaseModel, YesNoBoolean, SchoolContext, DataTableResponse, middleware, layouts
 - [x] Auth: staff + student/parent login, LegacyPasswordVerifier, choose-class flow
 - [x] Roles: permission service, role list, permission matrix
-- [x] Staff: list + DataTables + create/edit + profile (incl. payroll + photo + leave summary + rating) + attendance AJAX + documents (incl. create/edit upload) + timeline + disable/enable + delete + import + SaaS/credential hooks + teachers rating admin list
+- [x] Staff: list + DataTables + create/edit + profile (incl. payroll + photo + leave summary + rating) + attendance AJAX + documents (incl. create/edit upload) + timeline + disable/enable + delete + import + SaaS/credential hooks + teachers rating admin list + department/designation masters
 - [ ] Baseline migrations applied to `ssnodb_laravel`
 - [ ] Feature tests for auth and permissions
 - [ ] Language conversion (77 locales)

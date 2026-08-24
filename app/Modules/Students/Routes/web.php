@@ -4,6 +4,7 @@ use App\Modules\Students\Controllers\AlumniController;
 use App\Modules\Students\Controllers\AlumniEventController;
 use App\Modules\Students\Controllers\DisableReasonController;
 use App\Modules\Students\Controllers\DisabledStudentController;
+use App\Modules\Students\Controllers\MultiClassStudentController;
 use App\Modules\Students\Controllers\ModuleStatusController;
 use App\Modules\Students\Controllers\StdTransferController;
 use App\Modules\Students\Controllers\StudentController;
@@ -48,6 +49,12 @@ Route::middleware(['staff.auth'])->group(function () {
     // CI student/disablestudentslist
     Route::match(['get', 'post'], 'student/disablestudentslist', [DisabledStudentController::class, 'index'])
         ->name('students.disabled.list');
+
+    // CI student/multiclass + savemulticlass
+    Route::match(['get', 'post'], 'student/multiclass', [MultiClassStudentController::class, 'index'])
+        ->name('students.multiclass.index');
+    Route::post('student/savemulticlass', [MultiClassStudentController::class, 'save'])
+        ->name('students.multiclass.save');
 
     Route::get('student/search', [StudentController::class, 'search'])->name('students.search');
     Route::post('student/searchvalidation', [StudentController::class, 'searchValidation'])->name('students.search_validation');

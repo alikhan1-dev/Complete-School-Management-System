@@ -67,68 +67,132 @@
     </div>
 
     @if($resultlist !== null)
-        <div class="box-header with-border">
-            <h3 class="box-title">{{ __('system.disable_student_list') }}</h3>
-        </div>
-        <div class="box-body table-responsive">
-            <table class="table table-striped table-bordered table-hover">
-                <thead>
-                    <tr>
-                        <th>{{ __('system.admission_no') }}</th>
-                        <th>{{ __('system.student_name') }}</th>
-                        <th>{{ __('system.class') }}</th>
-                        @if($disabled->settingOn('father_name'))
-                            <th>{{ __('system.father_name') }}</th>
-                        @endif
-                        <th>{{ __('system.disable_reason') }}</th>
-                        <th>{{ __('system.gender') }}</th>
-                        @if($disabled->settingOn('mobile_no'))
-                            <th>{{ __('system.mobile_number') }}</th>
-                        @endif
-                        <th class="text-right">{{ __('system.action') }}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($resultlist as $student)
-                        <tr>
-                            <td>{{ $student->admission_no }}</td>
-                            <td>
-                                <a href="{{ url('student/view/'.$student->id) }}">
-                                    {{ $disabled->studentDisplayName($student) }}
-                                </a>
-                            </td>
-                            <td>
-                                @if($student->class_section_list !== '')
-                                    <ul class="liststyle1" style="margin:0;padding-left:18px;">
-                                        @foreach(explode(', ', $student->class_section_list) as $label)
-                                            <li>{{ $label }}</li>
-                                        @endforeach
-                                    </ul>
+        <div class="nav-tabs-custom" style="margin-bottom:0;box-shadow:none;border:0;">
+            <ul class="nav nav-tabs">
+                <li class="active"><a href="#tab_1" data-toggle="tab"><i class="fa fa-list"></i> {{ __('system.list_view') }}</a></li>
+                <li><a href="#tab_2" data-toggle="tab"><i class="fa fa-newspaper-o"></i> {{ __('system.details_view') }}</a></li>
+            </ul>
+            <div class="tab-content">
+                <div class="tab-pane active table-responsive" id="tab_1">
+                    <table class="table table-striped table-bordered table-hover">
+                        <thead>
+                            <tr>
+                                <th>{{ __('system.admission_no') }}</th>
+                                <th>{{ __('system.student_name') }}</th>
+                                <th>{{ __('system.class') }}</th>
+                                @if($disabled->settingOn('father_name'))
+                                    <th>{{ __('system.father_name') }}</th>
                                 @endif
-                            </td>
-                            @if($disabled->settingOn('father_name'))
-                                <td>{{ $student->father_name }}</td>
-                            @endif
-                            <td title="{{ $student->dis_note }}">
-                                {{ $reasonMap[(int) $student->dis_reason] ?? '' }}
-                            </td>
-                            <td>{{ $student->gender !== '' ? __('system.'.strtolower((string) $student->gender)) : '' }}</td>
-                            @if($disabled->settingOn('mobile_no'))
-                                <td>{{ $student->mobileno }}</td>
-                            @endif
-                            <td class="text-right">
-                                <a href="{{ url('student/view/'.$student->id) }}" class="btn btn-primary btn-xs" title="{{ __('system.view') }}">
-                                    <i class="fa fa-reorder"></i>
-                                </a>
-                            </td>
-                        </tr>
+                                <th>{{ __('system.disable_reason') }}</th>
+                                <th>{{ __('system.gender') }}</th>
+                                @if($disabled->settingOn('mobile_no'))
+                                    <th>{{ __('system.mobile_number') }}</th>
+                                @endif
+                                <th class="text-right">{{ __('system.action') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($resultlist as $student)
+                                <tr>
+                                    <td>{{ $student->admission_no }}</td>
+                                    <td>
+                                        <a href="{{ url('student/view/'.$student->id) }}">
+                                            {{ $disabled->studentDisplayName($student) }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        @if($student->class_section_list !== '')
+                                            <ul class="liststyle1" style="margin:0;padding-left:18px;">
+                                                @foreach(explode(', ', $student->class_section_list) as $label)
+                                                    <li>{{ $label }}</li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                    </td>
+                                    @if($disabled->settingOn('father_name'))
+                                        <td>{{ $student->father_name }}</td>
+                                    @endif
+                                    <td title="{{ $student->dis_note }}">
+                                        {{ $reasonMap[(int) $student->dis_reason] ?? '' }}
+                                    </td>
+                                    <td>{{ $student->gender !== '' ? __('system.'.strtolower((string) $student->gender)) : '' }}</td>
+                                    @if($disabled->settingOn('mobile_no'))
+                                        <td>{{ $student->mobileno }}</td>
+                                    @endif
+                                    <td class="text-right">
+                                        <a href="{{ url('student/view/'.$student->id) }}" class="btn btn-primary btn-xs" title="{{ __('system.view') }}">
+                                            <i class="fa fa-reorder"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="8">{{ __('system.no_record_found') }}</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+                <div class="tab-pane" id="tab_2">
+                    @forelse($resultlist as $student)
+                        <div class="box box-solid" style="margin-bottom:12px;">
+                            <div class="box-body">
+                                <div class="row">
+                                    <div class="col-sm-2">
+                                        <a href="{{ url('student/view/'.$student->id) }}">
+                                            <img class="img-responsive img-thumbnail" alt="{{ $disabled->studentDisplayName($student) }}"
+                                                 src="{{ $disabled->studentImageUrl($student) }}">
+                                        </a>
+                                    </div>
+                                    <div class="col-sm-10">
+                                        <h4>
+                                            <a href="{{ url('student/view/'.$student->id) }}">
+                                                {{ $disabled->studentDisplayName($student) }}
+                                            </a>
+                                        </h4>
+                                        <div class="row">
+                                            <div class="col-sm-6">
+                                                <strong>{{ __('system.class') }}:</strong>
+                                                {{ $student->class }}({{ $student->section }})<br>
+                                                <strong>{{ __('system.admission_no') }}:</strong> {{ $student->admission_no }}<br>
+                                                <strong>{{ __('system.date_of_birth') }}:</strong>
+                                                @if(!empty($student->dob) && $student->dob !== '0000-00-00')
+                                                    {{ \Carbon\Carbon::parse($student->dob)->format($dateFormat ?: 'd/m/Y') }}
+                                                @endif
+                                                <br>
+                                                <strong>{{ __('system.gender') }}:</strong>
+                                                {{ $student->gender !== '' ? __('system.'.strtolower((string) $student->gender)) : '' }}
+                                            </div>
+                                            <div class="col-sm-6">
+                                                @if($disabled->settingOn('local_identification_no'))
+                                                    <strong>{{ __('system.local_identification_number') }}:</strong> {{ $student->samagra_id }}<br>
+                                                @endif
+                                                @if($disabled->settingOn('guardian_name'))
+                                                    <strong>{{ __('system.guardian_name') }}:</strong> {{ $student->guardian_name }}<br>
+                                                @endif
+                                                @if($disabled->settingOn('guardian_phone'))
+                                                    <strong>{{ __('system.guardian_phone') }}:</strong> {{ $student->guardian_phone }}<br>
+                                                @endif
+                                                @if($disabled->settingOn('current_address'))
+                                                    <strong>{{ __('system.current_address') }}:</strong>
+                                                    {{ $student->current_address }} {{ $student->city }}
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <div class="text-right" style="margin-top:8px;">
+                                            <a href="{{ url('student/view/'.$student->id) }}" class="btn btn-primary btn-xs" title="{{ __('system.view') }}">
+                                                <i class="fa fa-reorder"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     @empty
-                        <tr>
-                            <td colspan="8">{{ __('system.no_record_found') }}</td>
-                        </tr>
+                        <div class="alert alert-info">{{ __('system.no_record_found') }}</div>
                     @endforelse
-                </tbody>
-            </table>
+                </div>
+            </div>
         </div>
     @endif
 </div>

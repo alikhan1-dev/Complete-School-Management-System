@@ -11,10 +11,10 @@
     </div>
 @endif
 
+<form method="post" action="{{ route('students.store') }}">
+@csrf
 <div class="box box-primary">
     <div class="box-header with-border"><h3 class="box-title">Student Admission</h3></div>
-    <form method="post" action="{{ route('students.store') }}">
-        @csrf
         <div class="box-body">
             <div class="row">
                 @if(! (int) ($schSetting->adm_auto_insert ?? 0))
@@ -207,11 +207,18 @@
                 'belongTo' => $belongTo ?? 'students',
             ])
         </div>
+    </div>
+
+    @include('students::admin.partials.admission_fees')
+
+    @include('students::admin.partials.admission_multiclass')
+
+    <div class="box box-primary">
         <div class="box-footer">
             <button type="submit" class="btn btn-info pull-right">Save</button>
         </div>
-    </form>
-</div>
+    </div>
+</form>
 
 <div class="modal fade" id="mySiblingModal" tabindex="-1" role="dialog">
     <div class="modal-dialog" role="document">

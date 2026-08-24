@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\Staff\Controllers\DepartmentController;
+use App\Modules\Staff\Controllers\DesignationController;
 use App\Modules\Staff\Controllers\ModuleStatusController;
 use App\Modules\Staff\Controllers\StaffController;
 use App\Modules\Staff\Controllers\StaffRatingController;
@@ -30,6 +32,26 @@ Route::middleware(['staff.auth'])->prefix('admin')->group(function () {
     Route::get('staff/delete_rateing/{id}', [StaffRatingController::class, 'destroy'])->middleware('permission:teachers_rating,can_delete')->name('staff.rating.destroy');
     Route::get('Staff/ratingapr/{id}', [StaffRatingController::class, 'approve'])->middleware('permission:teachers_rating,can_edit');
     Route::get('Staff/delete_rateing/{id}', [StaffRatingController::class, 'destroy'])->middleware('permission:teachers_rating,can_delete');
+
+    Route::match(['get', 'post'], 'department/department', [DepartmentController::class, 'index'])
+        ->middleware('permission:department,can_view')
+        ->name('staff.departments.index');
+    Route::get('department/departmentedit/{id}', [DepartmentController::class, 'edit'])
+        ->middleware('permission:department,can_edit')
+        ->name('staff.departments.edit');
+    Route::get('department/departmentdelete/{id}', [DepartmentController::class, 'destroy'])
+        ->middleware('permission:department,can_delete')
+        ->name('staff.departments.destroy');
+
+    Route::match(['get', 'post'], 'designation/designation', [DesignationController::class, 'index'])
+        ->middleware('permission:designation,can_view')
+        ->name('staff.designations.index');
+    Route::get('designation/designationedit/{id}', [DesignationController::class, 'edit'])
+        ->middleware('permission:designation,can_edit')
+        ->name('staff.designations.edit');
+    Route::get('designation/designationdelete/{id}', [DesignationController::class, 'destroy'])
+        ->middleware('permission:designation,can_delete')
+        ->name('staff.designations.destroy');
 
     Route::post('timeline/add_staff_timeline', [StaffTimelineController::class, 'store'])->name('staff.timeline.store');
     Route::post('timeline/editstafftimeline', [StaffTimelineController::class, 'update'])->name('staff.timeline.update');

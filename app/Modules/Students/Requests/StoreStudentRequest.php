@@ -70,6 +70,17 @@ class StoreStudentRequest extends FormRequest
             'fees_discount' => ['nullable', 'numeric'],
             'sibling_id' => ['nullable', 'integer', 'exists:students,id'],
             'sibling_name' => ['nullable', 'string', 'max:255'],
+            'fee_session_group_id' => ['nullable', 'array'],
+            'fee_session_group_id.*' => ['integer', 'exists:fee_session_groups,id'],
+            'discount_id' => ['nullable', 'array'],
+            'discount_id.*' => ['integer', 'exists:fees_discounts,id'],
+            'transport_feemaster_id' => ['nullable', 'array'],
+            'transport_feemaster_id.*' => ['integer', 'exists:transport_feemaster,id'],
+            'route_pickup_point_id' => ['nullable', 'integer', 'exists:route_pickup_point,id'],
+            'vehroute_id' => ['nullable', 'integer'],
+            'multiclass' => ['nullable', 'array'],
+            'multiclass.*.class' => ['nullable', 'integer', 'exists:classes,id'],
+            'multiclass.*.section' => ['nullable', 'integer', 'exists:sections,id'],
             'custom_fields' => ['nullable', 'array'],
             'custom_fields.students' => ['nullable', 'array'],
         ];
@@ -90,6 +101,34 @@ class StoreStudentRequest extends FormRequest
             $errors = app(CustomFieldValueService::class)->validateRequired('students', $posted);
             foreach ($errors as $key => $message) {
                 $validator->errors()->add($key, $message);
+            }
+
+            $transportMonths = array_filter((array) $this->input('transport_feemaster_id', []));
+            if ($transportMonths !== []) {
+                if (! $this->filled('vehroute_id')) {
+                    $validator->errors()->add('vehroute_id', 'The '.__('system.route_list').' field is required.');
+                }
+                if (! $this->filled('route_pickup_point_id')) {
+                    $validator->errors()->add('route_pickup_point_id', 'The '.__('system.pickup_point').' field is required.');
+                }
+            }
+
+            $seen = [];
+            foreach ((array) $this->input('multiclass', []) as $index => $row) {
+                $classId = (int) ($row['class'] ?? 0);
+                $sectionId = (int) ($row['section'] ?? 0);
+                if ($classId <= 0 && $sectionId <= 0) {
+                    continue;
+                }
+                if ($classId <= 0 || $sectionId <= 0) {
+                    $validator->errors()->add("multiclass.$index.class", 'The '.__('system.class').' / '.__('system.section').' combination is required.');
+                    continue;
+                }
+                $key = $classId.'-'.$sectionId;
+                if (isset($seen[$key])) {
+                    $validator->errors()->add("multiclass.$index.class", (string) __('system.duplicate_entry'));
+                }
+                $seen[$key] = true;
             }
         });
     }

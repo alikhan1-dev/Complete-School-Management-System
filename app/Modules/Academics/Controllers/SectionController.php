@@ -3,12 +3,12 @@
 namespace App\Modules\Academics\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\ClassSection;
 use App\Modules\Academics\Models\Section;
 use App\Modules\Academics\Requests\StoreSectionRequest;
 use App\Modules\Academics\Requests\UpdateSectionRequest;
 use App\Modules\Academics\Services\OrphanStudentCleanup;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +19,8 @@ class SectionController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
-        protected OrphanStudentCleanup $orphanCleanup
+        protected OrphanStudentCleanup $orphanCleanup,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -88,20 +89,18 @@ class SectionController extends Controller
     /**
      * Exact CI JSON contract:
      * [{ "id": class_sections.id, "section_id": sections.id, "section": name }]
+     * Class-teacher restriction mirrors CI Section_model::getClassBySection.
      */
     public function getByClass(Request $request): JsonResponse
     {
         $classId = (int) $request->query('class_id', 0);
 
-        $rows = ClassSection::query()
-            ->with('section')
-            ->where('class_id', $classId)
-            ->get()
-            ->map(function (ClassSection $row) {
+        $rows = collect($this->classTeacherScope->sectionsForClass($classId))
+            ->map(function ($row) {
                 return [
                     'id' => (string) $row->id,
                     'section_id' => (string) $row->section_id,
-                    'section' => $row->section?->section ?? '',
+                    'section' => (string) ($row->section ?? ''),
                 ];
             })
             ->values();

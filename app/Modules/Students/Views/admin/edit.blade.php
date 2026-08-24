@@ -8,10 +8,10 @@
     </div>
 @endif
 
+<form method="post" action="{{ route('students.update', $student->id) }}">
+@csrf
 <div class="box box-primary">
     <div class="box-header with-border"><h3 class="box-title">Edit Student</h3></div>
-    <form method="post" action="{{ route('students.update', $student->id) }}">
-        @csrf
         <div class="box-body">
             <div class="row">
                 <div class="col-md-3">
@@ -138,12 +138,19 @@
                 'belongTo' => $belongTo ?? 'students',
             ])
         </div>
+    </div>
+
+    @include('students::admin.partials.admission_fees')
+
+    @include('students::admin.partials.admission_multiclass')
+
+    <div class="box box-primary">
         <div class="box-footer">
             <a href="{{ route('students.view', $student->id) }}" class="btn btn-default">Cancel</a>
             <button type="submit" class="btn btn-info pull-right">Save</button>
         </div>
-    </form>
-</div>
+    </div>
+</form>
 
 @push('scripts')
 <script>

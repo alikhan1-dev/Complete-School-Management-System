@@ -3,11 +3,11 @@
 namespace App\Modules\Students\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
+use App\Modules\Shared\Services\SchoolContext;
 use App\Modules\Students\Services\DisabledStudentService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
@@ -18,6 +18,8 @@ class DisabledStudentController extends Controller
     public function __construct(
         protected PermissionService $permissions,
         protected DisabledStudentService $disabled,
+        protected ClassTeacherScopeService $classTeacherScope,
+        protected SchoolContext $school,
     ) {
     }
 
@@ -57,27 +59,10 @@ class DisabledStudentController extends Controller
             'errors' => $errors,
             'resultlist' => $resultlist,
             'reasonMap' => $this->disabled->reasonMap(),
-            'classlist' => SchoolClass::query()->orderBy('class')->get(),
-            'sectionOptions' => $this->sectionOptions((int) ($filters['class_id'] ?: 0)),
+            'classlist' => $this->classTeacherScope->classesForDropdown(),
+            'sectionOptions' => $this->classTeacherScope->sectionsForClass((int) ($filters['class_id'] ?: 0)),
             'disabled' => $this->disabled,
+            'dateFormat' => (string) $this->school->dateFormat(),
         ]);
-    }
-
-    /**
-     * @return list<object>
-     */
-    protected function sectionOptions(int $classId): array
-    {
-        if ($classId <= 0) {
-            return [];
-        }
-
-        return DB::table('class_sections')
-            ->join('sections', 'sections.id', '=', 'class_sections.section_id')
-            ->where('class_sections.class_id', $classId)
-            ->orderBy('sections.section')
-            ->select(['sections.id as section_id', 'sections.section'])
-            ->get()
-            ->all();
     }
 }

@@ -4,6 +4,7 @@ namespace App\Modules\Students\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\SchoolClass;
+use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Academics\Services\CustomFieldValueService;
 use App\Modules\Parents\Services\ParentAccountService;
 use App\Modules\Roles\Services\PermissionService;
@@ -13,6 +14,8 @@ use App\Modules\Students\Models\Student;
 use App\Modules\Students\Requests\StoreStudentDocumentRequest;
 use App\Modules\Students\Requests\StoreStudentRequest;
 use App\Modules\Students\Requests\UpdateStudentRequest;
+use App\Modules\Students\Services\MultiClassStudentService;
+use App\Modules\Students\Services\StudentAdmissionFeeService;
 use App\Modules\Students\Services\StudentAdmissionService;
 use App\Modules\Students\Services\StudentDocumentService;
 use App\Modules\Students\Services\StudentLifecycleService;
@@ -22,6 +25,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -32,11 +36,14 @@ class StudentController extends Controller
         protected PermissionService $permissions,
         protected StudentSearchService $search,
         protected StudentAdmissionService $admission,
+        protected StudentAdmissionFeeService $admissionFees,
         protected StudentLifecycleService $lifecycle,
         protected CustomFieldValueService $customFields,
         protected StudentDocumentService $documents,
         protected StudentTimelineService $timeline,
         protected ParentAccountService $parents,
+        protected CurrentSessionResolver $currentSession,
+        protected MultiClassStudentService $multiClass,
     ) {
     }
 
@@ -160,6 +167,17 @@ class StudentController extends Controller
             'customFields' => $this->customFields->fieldsFor('students'),
             'customFieldValues' => [],
             'belongTo' => 'students',
+            'feeSessionGroups' => $this->admissionFees->feeSessionGroupsForForm(),
+            'feeDiscounts' => $this->admissionFees->feeDiscountsForForm(),
+            'transportFeeMonths' => $this->admissionFees->transportFeeMonthsForForm(),
+            'routePickupPoints' => $this->admissionFees->routePickupPointsForForm(),
+            'assignedFeeSessionGroupIds' => [],
+            'assignedDiscountIds' => [],
+            'assignedTransportFeemasterIds' => [],
+            'selectedRoutePickupPointId' => old('route_pickup_point_id'),
+            'selectedVehrouteId' => old('vehroute_id'),
+            'multiClassEnabled' => $this->multiClass->formMultiClassEnabled(),
+            'multiClassRows' => old('multiclass', []),
         ]);
     }
 
@@ -178,6 +196,17 @@ class StudentController extends Controller
         );
 
         $siblingId = (int) ($request->input('sibling_id') ?? 0);
+        $transportMonths = (array) $request->input('transport_feemaster_id', []);
+        $routePickupPointId = $request->filled('route_pickup_point_id')
+            ? (int) $request->input('route_pickup_point_id')
+            : null;
+        $vehrouteId = $request->filled('vehroute_id')
+            ? (int) $request->input('vehroute_id')
+            : null;
+
+        $multiclassRows = $this->multiClass->formMultiClassEnabled()
+            ? (array) $request->input('multiclass', [])
+            : [];
 
         $result = $this->admission->admit(
             $data,
@@ -185,7 +214,13 @@ class StudentController extends Controller
             (int) $request->validated('section_id'),
             (float) ($request->input('fees_discount') ?? 0),
             $customRows,
-            $siblingId
+            $siblingId,
+            (array) $request->input('fee_session_group_id', []),
+            (array) $request->input('discount_id', []),
+            $transportMonths,
+            $routePickupPointId,
+            $vehrouteId,
+            $multiclassRows
         );
 
         $message = 'Student created successfully. Login: '.$result['student_username'].' / '.$result['student_password'];
@@ -281,6 +316,19 @@ class StudentController extends Controller
         $student = $this->search->findForView($id);
         abort_if(! $student, 404);
 
+        $studentSessionId = (int) ($student->student_session_id ?? 0);
+        if ($studentSessionId <= 0) {
+            $studentSessionId = (int) (DB::table('student_session')
+                ->where('student_id', $id)
+                ->where('session_id', $this->currentSession->id())
+                ->orderBy('id')
+                ->value('id') ?? 0);
+        }
+
+        $sessionRow = $studentSessionId > 0
+            ? DB::table('student_session')->where('id', $studentSessionId)->first()
+            : null;
+
         return view('shared::layouts.admin', [
             'title' => 'Edit Student',
             'contentView' => 'students::admin.edit',
@@ -291,6 +339,27 @@ class StudentController extends Controller
             'customFields' => $this->customFields->fieldsFor('students'),
             'customFieldValues' => $this->customFields->valuesMap('students', $id),
             'belongTo' => 'students',
+            'feeSessionGroups' => $this->admissionFees->feeSessionGroupsForForm(),
+            'feeDiscounts' => $this->admissionFees->feeDiscountsForForm(),
+            'transportFeeMonths' => $this->admissionFees->transportFeeMonthsForForm(),
+            'routePickupPoints' => $this->admissionFees->routePickupPointsForForm(),
+            'assignedFeeSessionGroupIds' => $studentSessionId > 0
+                ? $this->admissionFees->assignedFeeSessionGroupIds($studentSessionId)
+                : [],
+            'assignedDiscountIds' => $studentSessionId > 0
+                ? $this->admissionFees->assignedDiscountIds($studentSessionId)
+                : [],
+            'assignedTransportFeemasterIds' => $studentSessionId > 0
+                ? $this->admissionFees->assignedTransportFeemasterIds($studentSessionId)
+                : [],
+            'selectedRoutePickupPointId' => old(
+                'route_pickup_point_id',
+                $sessionRow->route_pickup_point_id ?? null
+            ),
+            'selectedVehrouteId' => old('vehroute_id', $sessionRow->vehroute_id ?? null),
+            'feesDiscountAmount' => old('fees_discount', $sessionRow->fees_discount ?? 0),
+            'multiClassEnabled' => $this->multiClass->formMultiClassEnabled(),
+            'multiClassRows' => old('multiclass', $this->multiClassExtraRowsForEdit($id, (int) ($student->class_id ?? 0), (int) ($student->section_id ?? 0))),
         ]);
     }
 
@@ -307,11 +376,48 @@ class StudentController extends Controller
         }
         $student->save();
 
-        $this->lifecycle->syncCurrentSessionClassSection(
-            $id,
-            (int) $request->validated('class_id'),
-            (int) $request->validated('section_id')
-        );
+        $classId = (int) $request->validated('class_id');
+        $sectionId = (int) $request->validated('section_id');
+
+        $this->lifecycle->syncCurrentSessionClassSection($id, $classId, $sectionId);
+
+        $studentSession = DB::table('student_session')
+            ->where('student_id', $id)
+            ->where('session_id', $this->currentSession->id())
+            ->orderBy('id')
+            ->first();
+
+        if ($studentSession) {
+            $routePickupPointId = $request->filled('route_pickup_point_id')
+                ? (int) $request->input('route_pickup_point_id')
+                : null;
+            $vehrouteId = $request->filled('vehroute_id')
+                ? (int) $request->input('vehroute_id')
+                : null;
+
+            DB::table('student_session')->where('id', $studentSession->id)->update([
+                'fees_discount' => (float) ($request->input('fees_discount') ?? 0),
+                'route_pickup_point_id' => $routePickupPointId,
+                'vehroute_id' => $vehrouteId,
+            ]);
+
+            $this->admissionFees->syncOnEdit(
+                (int) $studentSession->id,
+                (array) $request->input('fee_session_group_id', []),
+                (array) $request->input('discount_id', []),
+                (array) $request->input('transport_feemaster_id', []),
+                $routePickupPointId
+            );
+        }
+
+        if ($this->multiClass->formMultiClassEnabled()) {
+            $this->multiClass->syncFromAdmissionForm(
+                $id,
+                $classId,
+                $sectionId,
+                (array) $request->input('multiclass', [])
+            );
+        }
 
         $customRows = $this->customFields->normalizePosted(
             'students',
@@ -325,6 +431,12 @@ class StudentController extends Controller
     public function destroy(int $id): RedirectResponse
     {
         abort_unless($this->permissions->hasPrivilege('student', 'can_delete'), 403);
+
+        if ($this->multiClass->sessionCount($id) > 1) {
+            return redirect()
+                ->route('students.view', $id)
+                ->with('error', __('system.this_student_is_enrolled_in_a_multi_class_please_go_to_the_student_information_multi_class_student_and_remove_the_student_from_there'));
+        }
 
         $this->lifecycle->delete($id);
 
@@ -481,6 +593,26 @@ class StudentController extends Controller
         abort_if(! $row, 404);
 
         return response()->json($row);
+    }
+
+    /**
+     * Extra multiclass rows for edit form (exclude primary class/section).
+     *
+     * @return list<array{class:int,section:int}>
+     */
+    protected function multiClassExtraRowsForEdit(int $studentId, int $primaryClassId, int $primarySectionId): array
+    {
+        $rows = [];
+        foreach ($this->multiClass->sessionsForStudent($studentId) as $session) {
+            $classId = (int) $session->class_id;
+            $sectionId = (int) $session->section_id;
+            if ($classId === $primaryClassId && $sectionId === $primarySectionId) {
+                continue;
+            }
+            $rows[] = ['class' => $classId, 'section' => $sectionId];
+        }
+
+        return $rows;
     }
 
     /**
