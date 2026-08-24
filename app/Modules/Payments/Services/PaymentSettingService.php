@@ -310,6 +310,15 @@ class PaymentSettingService
         return PaymentSetting::query()->where('is_active', 'yes')->first();
     }
 
+    public function instamojoWebhookSalt(): ?string
+    {
+        $salt = PaymentSetting::query()
+            ->where('payment_type', 'instamojo')
+            ->value('salt');
+
+        return $salt !== null && $salt !== '' ? (string) $salt : null;
+    }
+
     /**
      * @param  array<string, mixed>  $input
      */

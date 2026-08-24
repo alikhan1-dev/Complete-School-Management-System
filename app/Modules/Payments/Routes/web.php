@@ -1,11 +1,20 @@
 <?php
 
+use App\Modules\Payments\Controllers\GatewayInsCallbackController;
 use App\Modules\Payments\Controllers\ModuleStatusController;
 use App\Modules\Payments\Controllers\OnlineAdmissionCheckoutController;
 use App\Modules\Payments\Controllers\PaymentSettingController;
+use App\Modules\Payments\Controllers\WebhooksController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('migration-status/payments', [ModuleStatusController::class, 'status'])->name('payments.migration_status');
+
+Route::post('gateway_ins/{gateway}', [GatewayInsCallbackController::class, 'index'])
+    ->where('gateway', '[a-zA-Z0-9_-]+');
+Route::match(['get', 'post'], 'gateway_ins/{gateway}/index', [GatewayInsCallbackController::class, 'index'])
+    ->where('gateway', '[a-zA-Z0-9_-]+');
+
+Route::post('webhooks/insta_webhook', [WebhooksController::class, 'instaWebhook']);
 
 Route::post('onlineadmission/checkout', [OnlineAdmissionCheckoutController::class, 'index']);
 Route::get('onlineadmission/checkout/successinvoice/{reference_no}', [OnlineAdmissionCheckoutController::class, 'successinvoice']);

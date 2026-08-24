@@ -324,6 +324,7 @@ class PortalOnlinePayService
         $processingCharge = $this->gatewayProcessingCharge($method, $subtotal);
         $params = [
             'payment_type' => (string) $method->payment_type,
+            'processing_charge_type' => (string) ($method->charge_type ?? ''),
             'student_id' => (int) $student->id,
             'student_session_id' => $studentSessionId,
             'student_name' => trim(($student->firstname ?? '').' '.($student->middlename ?? '').' '.($student->lastname ?? '')),

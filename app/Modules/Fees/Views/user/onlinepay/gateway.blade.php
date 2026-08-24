@@ -53,6 +53,9 @@
 
         <div class="alert alert-info">
             Live gateway charge is deferred. Checkout totals and session params are persisted for parity with CI <code>user/gateway/Payment::pay</code>.
+            @if(!empty($params['transaction_id']))
+                <br><strong>{{ __('system.transaction_id') }}:</strong> {{ $params['transaction_id'] }}
+            @endif
         </div>
     </div>
 </div>

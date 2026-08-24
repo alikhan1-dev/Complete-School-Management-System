@@ -4,6 +4,7 @@ namespace App\Modules\Fees\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Fees\Services\PortalOnlinePayService;
+use App\Modules\Payments\Services\StudentFeeGatewayPersistService;
 use App\Modules\Shared\Services\SchoolContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +20,7 @@ class UserGatewayPaymentController extends Controller
 {
     public function __construct(
         protected PortalOnlinePayService $onlinePay,
+        protected StudentFeeGatewayPersistService $gatewayPersist,
         protected SchoolContext $school,
     ) {
     }
@@ -62,6 +64,8 @@ class UserGatewayPaymentController extends Controller
                 ->route('user.fees.getfees')
                 ->withErrors(['payment' => 'Select a fee line before online payment.']);
         }
+
+        $params = $this->gatewayPersist->persistFromSession($params, $gateway);
 
         return view('shared::layouts.student_parent', [
             'title' => (string) __('system.payment_details'),
