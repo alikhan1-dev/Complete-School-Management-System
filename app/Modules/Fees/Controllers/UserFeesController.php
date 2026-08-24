@@ -13,7 +13,7 @@ use Illuminate\View\View;
 use RuntimeException;
 
 /**
- * CI user/User::getfees + portal fee receipt print.
+ * CI user/User::getfees + portal fee receipt print + processing-fees modal.
  */
 class UserFeesController extends Controller
 {
@@ -38,8 +38,30 @@ class UserFeesController extends Controller
             'student' => $data['student'],
             'sessionFees' => $data['sessionFees'],
             'offlineEnabled' => $data['offlineEnabled'],
+            'hasProcessingFees' => $data['hasProcessingFees'],
             'currencySymbol' => $this->school->currencySymbol(),
         ]);
+    }
+
+    /**
+     * CI user/User::getProcessingfees — JSON {view: html} for processing fees modal.
+     */
+    public function getProcessingfees(): JsonResponse
+    {
+        try {
+            $data = $this->portal->processingModalData();
+        } catch (RuntimeException $e) {
+            abort(403, $e->getMessage());
+        }
+
+        $view = view('fees::user.getProcessingfees', [
+            'student' => $data['student'],
+            'student_due_fee' => $data['student_due_fee'],
+            'transport_fees' => $data['transport_fees'],
+            'currencySymbol' => $this->school->currencySymbol(),
+        ])->render();
+
+        return response()->json(['view' => $view]);
     }
 
     /**

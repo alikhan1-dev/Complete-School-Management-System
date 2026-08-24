@@ -101,6 +101,7 @@ Route::middleware([
     Route::post('user/user/printFeesByName', [UserFeesController::class, 'printFeesByName'])->name('user.fees.printFeesByName');
     Route::get('user/user/printFeesByName', [UserFeesController::class, 'printFeesByNamePage'])->name('user.fees.printFeesByName.page');
     Route::post('user/user/printFeesByGroupArray', [UserFeesController::class, 'printFeesByGroupArray'])->name('user.fees.printFeesByGroupArray');
+    Route::post('user/user/getProcessingfees', [UserFeesController::class, 'getProcessingfees'])->name('user.fees.getProcessingfees');
 
     // CI user/gateway/Payment::pay offline_payment → user/offlinepayment
     Route::post('user/offlinepayment/start', [UserOfflinePaymentController::class, 'start'])

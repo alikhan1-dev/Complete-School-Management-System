@@ -10,13 +10,14 @@ use RuntimeException;
 
 /**
  * CI user/User::getfees — student/parent portal fee ledger.
- * Deferred: online gateway pay modal, processing-fee banner, SMS, DataTables pixel-parity.
+ * Deferred: online gateway pay modal, SMS, DataTables pixel-parity.
  */
 class StudentFeesPortalService
 {
     public function __construct(
         protected FeeCollectService $collect,
         protected OfflinePaymentService $offline,
+        protected ProcessingFeesService $processing,
         protected SchoolContext $school,
         protected CurrentSessionResolver $currentSession,
     ) {
@@ -40,7 +41,8 @@ class StudentFeesPortalService
      *         discounts:\Illuminate\Support\Collection
      *     }>,
      *     offlineEnabled:bool,
-     *     transportActive:bool
+     *     transportActive:bool,
+     *     hasProcessingFees:bool
      * }
      */
     public function pageData(): array
@@ -108,7 +110,30 @@ class StudentFeesPortalService
             'sessionFees' => $sessionFees,
             'offlineEnabled' => $this->offline->isPortalEnabled(),
             'transportActive' => $transportActive,
+            'hasProcessingFees' => $this->processing->hasProcessingFees($selectedSessionId),
         ];
+    }
+
+    /**
+     * CI user/User::getProcessingfees — pending gateway payment lines for modal.
+     *
+     * @return array{
+     *     student:object,
+     *     student_due_fee:list<object>,
+     *     transport_fees:list<object>
+     * }
+     */
+    public function processingModalData(): array
+    {
+        $selectedSessionId = $this->currentStudentSessionId();
+        if ($selectedSessionId <= 0) {
+            throw new RuntimeException('Student session is required.');
+        }
+
+        $data = $this->processing->modalData($selectedSessionId);
+        $this->assertPortalOwnsStudent((int) $data['student']->id);
+
+        return $data;
     }
 
     public function assertOwnsStudent(int $studentId): void

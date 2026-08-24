@@ -19,6 +19,12 @@
     <div class="box-header with-border">
         <h3 class="box-title">{{ __('system.student_fees') }}</h3>
         <div class="box-tools">
+            @if($hasProcessingFees ?? false)
+                <button type="button" class="btn btn-primary btn-sm" id="btn_get_processing_fees"
+                        data-loading-text="<i class='fa fa-spinner fa-spin'></i> {{ __('system.please_wait') }}">
+                    <i class="fa fa-money"></i> {{ __('system.processing_fees') }}
+                </button>
+            @endif
             @if($offlineEnabled)
                 <a href="{{ route('user.offlinepayment.requests') }}" class="btn btn-primary btn-sm">
                     <i class="fa fa-money"></i> {{ __('system.offline_bank_payments') }}
@@ -274,6 +280,20 @@
     <input type="hidden" name="data" id="portal_multi_print_data" value="">
 </form>
 
+@if($hasProcessingFees ?? false)
+<div id="processing_fess_modal" class="modal fade" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">{{ __('system.processing_fees') }}</h4>
+            </div>
+            <div class="modal-body scroll-area"></div>
+        </div>
+    </div>
+</div>
+@endif
+
 @push('scripts')
 <script>
 $(function () {
@@ -301,6 +321,29 @@ $(function () {
         $('#portal_multi_print_data').val(JSON.stringify(items));
         $('#portal_multi_print_form').trigger('submit');
     });
+
+    @if($hasProcessingFees ?? false)
+    $('#btn_get_processing_fees').on('click', function () {
+        var $this = $(this);
+        $this.prop('disabled', true);
+        $.ajax({
+            type: 'POST',
+            url: @json(route('user.fees.getProcessingfees')),
+            data: { _token: @json(csrf_token()) },
+            dataType: 'JSON',
+            success: function (data) {
+                $('#processing_fess_modal .modal-body').html(data.view);
+                $('#processing_fess_modal').modal({ backdrop: 'static', keyboard: false });
+            },
+            error: function () {
+                alert(@json(__('system.error_occurred_please_try_again')));
+            },
+            complete: function () {
+                $this.prop('disabled', false);
+            }
+        });
+    });
+    @endif
 });
 </script>
 @endpush
