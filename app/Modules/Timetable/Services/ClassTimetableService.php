@@ -10,7 +10,7 @@ use InvalidArgumentException;
 
 /**
  * CI Subjecttimetable_model + Timetable classreport/create/savegroup/mytimetable/print core.
- * Deferred: duplicate-check AJAX, quick period generator.
+ * Deferred: quick period generator.
  */
 class ClassTimetableService
 {
@@ -232,6 +232,43 @@ class ClassTimetableService
             'class' => $class->class,
             'section' => $section->section,
         ];
+    }
+
+    /**
+     * CI Timetable_model::dublicate_recored — staff already assigned same day/time slot.
+     *
+     * @return Collection<int, object>
+     */
+    public function duplicateRecord(int $staffId, string $day, string $timeFrom, string $timeTo): Collection
+    {
+        if ($staffId <= 0) {
+            throw new InvalidArgumentException('Teacher is required.');
+        }
+        if (! in_array($day, $this->dayNames(), true)) {
+            throw new InvalidArgumentException('Invalid day.');
+        }
+
+        $fromTs = strtotime($timeFrom);
+        $toTs = strtotime($timeTo);
+        if ($fromTs === false || $toTs === false) {
+            throw new InvalidArgumentException('Invalid time.');
+        }
+
+        // CI Customlib::timeFormat($time, true) → H:i for DB comparison.
+        $startTime = date('H:i', $fromTs);
+        $endTime = date('H:i', $toTs);
+
+        return DB::table('subject_timetable')
+            ->leftJoin('staff', 'staff.id', '=', 'subject_timetable.staff_id')
+            ->where('subject_timetable.staff_id', $staffId)
+            ->where('subject_timetable.day', $day)
+            ->where('subject_timetable.start_time', $startTime)
+            ->where('subject_timetable.end_time', $endTime)
+            ->select([
+                'subject_timetable.*',
+                'staff.name as staff_name',
+            ])
+            ->get();
     }
 
     /**

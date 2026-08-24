@@ -36,4 +36,8 @@ Route::middleware(['staff.auth'])->group(function () {
     // CI admin/timetable/printteachertimetable — teacher print HTML (JSON page)
     Route::post('admin/timetable/printteachertimetable', [TimetableController::class, 'printTeacherTimetable'])
         ->name('timetable.print_teacher');
+
+    // CI admin/timetable/check_class_dublicate_recored — teacher slot conflict (CI spelling preserved)
+    Route::post('admin/timetable/check_class_dublicate_recored', [TimetableController::class, 'checkClassDuplicateRecord'])
+        ->name('timetable.check_duplicate_record');
 });

@@ -17,7 +17,7 @@ use InvalidArgumentException;
 
 /**
  * CI admin/Timetable — class timetable create/save + class report + teacher mytimetable + print.
- * Deferred: duplicate check, quick generator.
+ * Deferred: quick period generator.
  */
 class TimetableController extends Controller
 {
@@ -348,6 +348,56 @@ class TimetableController extends Controller
                 'staff' => $staff,
                 'timetable' => $week,
             ])->render(),
+        ]);
+    }
+
+    /**
+     * CI admin/timetable/check_class_dublicate_recored — teacher slot conflict AJAX.
+     */
+    public function checkClassDuplicateRecord(Request $request): JsonResponse
+    {
+        abort_unless(
+            $this->permissions->hasPrivilege('class_timetable', 'can_view')
+            || $this->permissions->hasPrivilege('class_timetable', 'can_add')
+            || $this->permissions->hasPrivilege('class_timetable', 'can_edit'),
+            403
+        );
+
+        $data = $request->validate([
+            'staff_id' => ['required', 'integer', 'exists:staff,id'],
+            'day' => ['required', 'string'],
+            'time_from' => ['required', 'string'],
+            'time_to' => ['required', 'string'],
+        ]);
+
+        try {
+            $result = $this->timetable->duplicateRecord(
+                (int) $data['staff_id'],
+                $data['day'],
+                $data['time_from'],
+                $data['time_to']
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'status' => 0,
+                'result' => [],
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        if ($result->isNotEmpty()) {
+            $staffName = (string) ($result->first()->staff_name ?? '');
+
+            return response()->json([
+                'status' => 1,
+                'result' => $result->values(),
+                'error' => trim($staffName.' '.__('system.is_already_allotted_to_other_class_section_or_period_for_the_same_time')),
+            ]);
+        }
+
+        return response()->json([
+            'status' => 0,
+            'result' => [],
         ]);
     }
 }

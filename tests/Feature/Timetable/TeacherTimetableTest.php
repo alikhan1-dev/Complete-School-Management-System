@@ -274,4 +274,55 @@ class TeacherTimetableTest extends TestCase
             ->assertSee($seed['subjectName'], false)
             ->assertSee($seed['className'], false);
     }
+
+    public function test_duplicate_check_detects_conflicting_teacher_slot(): void
+    {
+        $superRoleId = (int) (DB::table('roles')->where('is_superadmin', 1)->value('id')
+            ?: DB::table('roles')->where('name', 'Super Admin')->value('id'));
+        $admin = $this->insertStaff(['name' => 'Dup', 'surname' => 'Admin']);
+        $this->assignRole($admin, $superRoleId);
+
+        $teacherRoleId = (int) (DB::table('roles')->where('id', ClassTimetableService::TEACHER_ROLE_ID)->value('id')
+            ?: DB::table('roles')->where('name', 'Teacher')->value('id'));
+        $teacher = $this->insertStaff(['name' => 'Dup', 'surname' => 'Teacher']);
+        $this->assignRole($teacher, $teacherRoleId);
+
+        $this->seedTimetablePeriod($teacher);
+        $this->actingAs($admin, 'staff');
+
+        $this->postJson('/admin/timetable/check_class_dublicate_recored', [
+            'staff_id' => $teacher->id,
+            'day' => 'Wednesday',
+            'time_from' => '10:00',
+            'time_to' => '10:45',
+        ])
+            ->assertOk()
+            ->assertJsonPath('status', 1)
+            ->assertJsonStructure(['status', 'result', 'error']);
+    }
+
+    public function test_duplicate_check_passes_when_no_conflict(): void
+    {
+        $superRoleId = (int) (DB::table('roles')->where('is_superadmin', 1)->value('id')
+            ?: DB::table('roles')->where('name', 'Super Admin')->value('id'));
+        $admin = $this->insertStaff(['name' => 'Clear', 'surname' => 'Admin']);
+        $this->assignRole($admin, $superRoleId);
+
+        $teacherRoleId = (int) (DB::table('roles')->where('id', ClassTimetableService::TEACHER_ROLE_ID)->value('id')
+            ?: DB::table('roles')->where('name', 'Teacher')->value('id'));
+        $teacher = $this->insertStaff(['name' => 'Clear', 'surname' => 'Teacher']);
+        $this->assignRole($teacher, $teacherRoleId);
+
+        $this->seedTimetablePeriod($teacher);
+        $this->actingAs($admin, 'staff');
+
+        $this->postJson('/admin/timetable/check_class_dublicate_recored', [
+            'staff_id' => $teacher->id,
+            'day' => 'Wednesday',
+            'time_from' => '11:00',
+            'time_to' => '11:45',
+        ])
+            ->assertOk()
+            ->assertJsonPath('status', 0);
+    }
 }

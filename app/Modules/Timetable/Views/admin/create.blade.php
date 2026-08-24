@@ -98,15 +98,15 @@
                                         </select>
                                     </td>
                                     <td>
-                                        <input type="time" name="periods[{{ $i }}][time_from]" class="form-control"
+                                        <input type="time" name="periods[{{ $i }}][time_from]" class="form-control time_from"
                                                value="{{ $service->toTimeInput($period->time_from, $period->start_time) }}" required>
                                     </td>
                                     <td>
-                                        <input type="time" name="periods[{{ $i }}][time_to]" class="form-control"
+                                        <input type="time" name="periods[{{ $i }}][time_to]" class="form-control time_to"
                                                value="{{ $service->toTimeInput($period->time_to, $period->end_time) }}" required>
                                     </td>
                                     <td>
-                                        <select name="periods[{{ $i }}][staff_id]" class="form-control" required>
+                                        <select name="periods[{{ $i }}][staff_id]" class="form-control staff" required>
                                             <option value="">Select</option>
                                             @foreach($teachers as $teacher)
                                                 <option value="{{ $teacher->id }}" @selected((int) $period->staff_id === (int) $teacher->id)>
@@ -134,10 +134,10 @@
                                             @endforeach
                                         </select>
                                     </td>
-                                    <td><input type="time" name="periods[0][time_from]" class="form-control"></td>
-                                    <td><input type="time" name="periods[0][time_to]" class="form-control"></td>
+                                    <td><input type="time" name="periods[0][time_from]" class="form-control time_from"></td>
+                                    <td><input type="time" name="periods[0][time_to]" class="form-control time_to"></td>
                                     <td>
-                                        <select name="periods[0][staff_id]" class="form-control">
+                                        <select name="periods[0][staff_id]" class="form-control staff">
                                             <option value="">Select</option>
                                             @foreach($teachers as $teacher)
                                                 <option value="{{ $teacher->id }}">{{ trim($teacher->name.' '.$teacher->surname) }} ({{ $teacher->employee_id }})</option>
@@ -177,10 +177,10 @@
                     @endforeach
                 </select>
             </td>
-            <td><input type="time" name="periods[__INDEX__][time_from]" class="form-control"></td>
-            <td><input type="time" name="periods[__INDEX__][time_to]" class="form-control"></td>
+            <td><input type="time" name="periods[__INDEX__][time_from]" class="form-control time_from"></td>
+            <td><input type="time" name="periods[__INDEX__][time_to]" class="form-control time_to"></td>
             <td>
-                <select name="periods[__INDEX__][staff_id]" class="form-control">
+                <select name="periods[__INDEX__][staff_id]" class="form-control staff">
                     <option value="">Select</option>
                     @foreach($teachers as $teacher)
                         <option value="{{ $teacher->id }}">{{ trim($teacher->name.' '.$teacher->surname) }} ({{ $teacher->employee_id }})</option>
@@ -263,6 +263,38 @@ $(function () {
             return;
         }
         $(this).closest('tr').remove();
+    });
+
+    function checkDuplicateStaffSlot($row) {
+        var $form = $row.closest('form');
+        var timeFrom = $row.find('.time_from').val();
+        var timeTo = $row.find('.time_to').val();
+        var staffId = $row.find('.staff').val();
+        var day = $form.find('input[name=day]').val();
+        if (!staffId || !timeFrom || !timeTo || !day) {
+            return;
+        }
+        $.ajax({
+            type: 'POST',
+            url: '{{ route('timetable.check_duplicate_record') }}',
+            data: {
+                _token: csrfToken,
+                time_from: timeFrom,
+                time_to: timeTo,
+                staff_id: staffId,
+                day: day
+            },
+            dataType: 'json',
+            success: function (res) {
+                if (String(res.status) === '1' || res.status === 1) {
+                    alert(res.error || '{{ __('system.is_already_allotted_to_other_class_section_or_period_for_the_same_time') }}');
+                }
+            }
+        });
+    }
+
+    $(document).on('change', '.staff', function () {
+        checkDuplicateStaffSlot($(this).closest('tr'));
     });
 });
 </script>
