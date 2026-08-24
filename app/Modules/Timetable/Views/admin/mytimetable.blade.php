@@ -40,6 +40,8 @@
     </div>
 </div>
 
+@include('timetable::admin.partials.print_popup_script')
+
 @if($isAdminPicker)
 @push('scripts')
 <script>

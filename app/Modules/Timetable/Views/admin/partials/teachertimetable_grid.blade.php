@@ -1,6 +1,13 @@
 @if(empty($week))
     <div class="alert alert-info" style="margin-bottom:0;">{{ __('system.no_record_found') }}</div>
 @else
+    @if(($staffId ?? 0) > 0)
+        <div class="text-right" style="margin-bottom:10px;">
+            <button type="button" class="btn btn-primary btn-xs print_teacher_timetable" data-staff_id="{{ $staffId }}" title="{{ __('system.print') }}">
+                <i class="fa fa-print"></i>
+            </button>
+        </div>
+    @endif
     <table class="table table-striped table-bordered">
         <thead>
         <tr>

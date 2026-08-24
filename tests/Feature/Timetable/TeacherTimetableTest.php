@@ -169,6 +169,8 @@ class TeacherTimetableTest extends TestCase
             'subjectName' => 'Physics-'.$suffix,
             'className' => 'TTC-'.$suffix,
             'teacherId' => $teacher->id,
+            'classId' => $class->id,
+            'sectionId' => $section->id,
         ];
     }
 
@@ -220,5 +222,56 @@ class TeacherTimetableTest extends TestCase
             ->assertJsonPath('status', '1')
             ->assertJsonStructure(['status', 'error', 'message'])
             ->assertSee($seed['subjectName'], false);
+    }
+
+    public function test_print_class_timetable_returns_html_page_json(): void
+    {
+        $superRoleId = (int) (DB::table('roles')->where('is_superadmin', 1)->value('id')
+            ?: DB::table('roles')->where('name', 'Super Admin')->value('id'));
+        $admin = $this->insertStaff(['name' => 'Print', 'surname' => 'Admin']);
+        $this->assignRole($admin, $superRoleId);
+
+        $teacherRoleId = (int) (DB::table('roles')->where('id', ClassTimetableService::TEACHER_ROLE_ID)->value('id')
+            ?: DB::table('roles')->where('name', 'Teacher')->value('id'));
+        $teacher = $this->insertStaff(['name' => 'Print', 'surname' => 'Teacher']);
+        $this->assignRole($teacher, $teacherRoleId);
+
+        $seed = $this->seedTimetablePeriod($teacher);
+        $this->actingAs($admin, 'staff');
+
+        $this->postJson('/admin/timetable/printclasstimetable', [
+            'class_id' => $seed['classId'],
+            'section_id' => $seed['sectionId'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('status', '1')
+            ->assertJsonStructure(['status', 'error', 'page'])
+            ->assertSee($seed['subjectName'], false)
+            ->assertSee($seed['className'], false);
+    }
+
+    public function test_print_teacher_timetable_returns_html_page_json(): void
+    {
+        $superRoleId = (int) (DB::table('roles')->where('is_superadmin', 1)->value('id')
+            ?: DB::table('roles')->where('name', 'Super Admin')->value('id'));
+        $admin = $this->insertStaff(['name' => 'Print2', 'surname' => 'Admin']);
+        $this->assignRole($admin, $superRoleId);
+
+        $teacherRoleId = (int) (DB::table('roles')->where('id', ClassTimetableService::TEACHER_ROLE_ID)->value('id')
+            ?: DB::table('roles')->where('name', 'Teacher')->value('id'));
+        $teacher = $this->insertStaff(['name' => 'Print2', 'surname' => 'Teacher', 'employee_id' => 'PRT-'.uniqid()]);
+        $this->assignRole($teacher, $teacherRoleId);
+
+        $seed = $this->seedTimetablePeriod($teacher);
+        $this->actingAs($admin, 'staff');
+
+        $this->postJson('/admin/timetable/printteachertimetable', [
+            'staff_id' => $seed['teacherId'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('status', '1')
+            ->assertJsonStructure(['status', 'error', 'page'])
+            ->assertSee($seed['subjectName'], false)
+            ->assertSee($seed['className'], false);
     }
 }

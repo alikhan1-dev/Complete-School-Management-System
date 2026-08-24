@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * CI Subjecttimetable_model + Timetable classreport/create/savegroup/mytimetable core.
- * Deferred: print HTML, duplicate-check AJAX, quick period generator.
+ * CI Subjecttimetable_model + Timetable classreport/create/savegroup/mytimetable/print core.
+ * Deferred: duplicate-check AJAX, quick period generator.
  */
 class ClassTimetableService
 {
@@ -215,6 +215,23 @@ class ClassTimetableService
         }
 
         return $week;
+    }
+
+    /**
+     * CI Section_model::getClassAndSectionNameByClassIDSectionID.
+     */
+    public function classSectionLabel(int $classId, int $sectionId): ?object
+    {
+        $class = DB::table('classes')->where('id', $classId)->first();
+        $section = DB::table('sections')->where('id', $sectionId)->first();
+        if (! $class || ! $section) {
+            return null;
+        }
+
+        return (object) [
+            'class' => $class->class,
+            'section' => $section->section,
+        ];
     }
 
     /**

@@ -28,4 +28,12 @@ Route::middleware(['staff.auth'])->group(function () {
     // CI admin/timetable/getteachertimetable — admin AJAX teacher picker
     Route::post('admin/timetable/getteachertimetable', [TimetableController::class, 'getTeacherTimetable'])
         ->name('timetable.get_teacher_timetable');
+
+    // CI admin/timetable/printclasstimetable — class print HTML (JSON page)
+    Route::post('admin/timetable/printclasstimetable', [TimetableController::class, 'printClassTimetable'])
+        ->name('timetable.print_class');
+
+    // CI admin/timetable/printteachertimetable — teacher print HTML (JSON page)
+    Route::post('admin/timetable/printteachertimetable', [TimetableController::class, 'printTeacherTimetable'])
+        ->name('timetable.print_teacher');
 });

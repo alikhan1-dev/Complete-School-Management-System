@@ -5,6 +5,7 @@ namespace App\Modules\Timetable\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Staff\Models\Staff;
 use App\Modules\Timetable\Services\ClassTimetableService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -15,8 +16,8 @@ use Illuminate\View\View;
 use InvalidArgumentException;
 
 /**
- * CI admin/Timetable — class timetable create/save + class report + teacher mytimetable.
- * Deferred: print endpoints, duplicate check, quick generator.
+ * CI admin/Timetable — class timetable create/save + class report + teacher mytimetable + print.
+ * Deferred: duplicate check, quick generator.
  */
 class TimetableController extends Controller
 {
@@ -270,6 +271,82 @@ class TimetableController extends Controller
             'message' => view('timetable::admin.partials.teachertimetable_grid', [
                 'week' => $week,
                 'staffId' => $staffId,
+            ])->render(),
+        ]);
+    }
+
+    /**
+     * CI admin/timetable/printclasstimetable — JSON {status, page} print HTML.
+     */
+    public function printClassTimetable(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('class_timetable', 'can_view'), 403);
+
+        $data = $request->validate([
+            'class_id' => ['required', 'integer', 'exists:classes,id'],
+            'section_id' => ['required', 'integer', 'exists:sections,id'],
+        ]);
+
+        $classSection = $this->timetable->classSectionLabel(
+            (int) $data['class_id'],
+            (int) $data['section_id']
+        );
+        if ($classSection === null) {
+            return response()->json([
+                'status' => '0',
+                'error' => 'Class or section not found.',
+                'page' => '',
+            ]);
+        }
+
+        try {
+            $week = $this->timetable->weekForClassSection((int) $data['class_id'], (int) $data['section_id']);
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'status' => '0',
+                'error' => $e->getMessage(),
+                'page' => '',
+            ]);
+        }
+
+        return response()->json([
+            'status' => '1',
+            'error' => '',
+            'page' => view('timetable::admin.print.class', [
+                'classSection' => $classSection,
+                'timetable' => $week,
+            ])->render(),
+        ]);
+    }
+
+    /**
+     * CI admin/timetable/printteachertimetable — JSON {status, page} print HTML.
+     */
+    public function printTeacherTimetable(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('teachers_time_table', 'can_view'), 403);
+
+        $data = $request->validate([
+            'staff_id' => ['required', 'integer', 'exists:staff,id'],
+        ]);
+
+        $staff = Staff::query()->find((int) $data['staff_id']);
+        if (! $staff) {
+            return response()->json([
+                'status' => '0',
+                'error' => 'Staff not found.',
+                'page' => '',
+            ]);
+        }
+
+        $week = $this->timetable->weekForStaff((int) $staff->id);
+
+        return response()->json([
+            'status' => '1',
+            'error' => '',
+            'page' => view('timetable::admin.print.teacher', [
+                'staff' => $staff,
+                'timetable' => $week,
             ])->render(),
         ]);
     }

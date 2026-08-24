@@ -58,6 +58,15 @@
     <div class="box box-primary">
         <div class="box-header with-border">
             <h3 class="box-title">Weekly Timetable</h3>
+            <div class="box-tools">
+                <button type="button"
+                        class="btn btn-primary btn-xs print_class_timetable"
+                        data-class_id="{{ $filters['class_id'] }}"
+                        data-section_id="{{ $filters['section_id'] }}"
+                        title="{{ __('system.print') }}">
+                    <i class="fa fa-print"></i>
+                </button>
+            </div>
         </div>
         <div class="box-body table-responsive">
             <table class="table table-bordered table-striped">
@@ -90,6 +99,8 @@
         </div>
     </div>
 @endif
+
+@include('timetable::admin.partials.print_popup_script')
 
 @push('scripts')
 <script>
