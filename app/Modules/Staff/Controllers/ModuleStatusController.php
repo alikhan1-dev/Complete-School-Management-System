@@ -12,12 +12,14 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Staff',
             'status' => 'in_progress',
-            'message' => 'Staff list/DataTables + staff create persist done. Deferred: edit/delete/profile, documents, timeline, import, SaaS quota, credential mail/SMS.',
+            'message' => 'Staff list/DataTables + create + edit + profile (core + attendance AJAX) + disable/enable done. Deferred: timeline, payroll, documents, import, SaaS quota, credential mail/SMS.',
             'slices' => [
                 'list_datatable' => 'done',
                 'create' => 'done',
-                'edit' => 'pending',
-                'profile' => 'pending',
+                'edit' => 'done',
+                'profile' => 'done',
+                'profile_attendance_ajax' => 'done',
+                'disable_enable' => 'done',
                 'documents' => 'pending',
             ],
         ]);

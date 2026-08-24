@@ -4,14 +4,15 @@ namespace App\Modules\Attendance\Services;
 
 use App\Modules\Attendance\Models\StaffAttendance;
 use App\Modules\Attendance\Models\StaffAttendanceType;
+use App\Modules\Reports\Services\AttendanceReportService;
 use App\Modules\Roles\Models\Role;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * CI Staffattendancemodel — staff day attendance search + addorUpdate.
- * SMS, biometric auto-mark, profile month view, and superadmin-visibility filter deferred.
+ * CI Staffattendancemodel — staff day attendance search + addorUpdate + profile month lookup.
+ * SMS, biometric auto-mark, and superadmin-visibility filter deferred.
  */
 class StaffAttendanceService
 {
@@ -214,5 +215,78 @@ class StaffAttendanceService
         }
 
         return date('H:i:s', $ts);
+    }
+
+    /**
+     * CI Staffattendancemodel::searchStaffattendance.
+     */
+    public function searchForStaffOnDate(string $date, int $staffId, bool $activeStaffOnly = true): ?object
+    {
+        if ($staffId <= 0 || $date === '') {
+            return null;
+        }
+
+        $query = DB::table('staff')
+            ->leftJoin('staff_attendance', function ($join) use ($date) {
+                $join->on('staff.id', '=', 'staff_attendance.staff_id')
+                    ->where('staff_attendance.date', '=', $date);
+            })
+            ->leftJoin('staff_roles', 'staff_roles.staff_id', '=', 'staff.id')
+            ->leftJoin('roles', 'roles.id', '=', 'staff_roles.role_id')
+            ->leftJoin('staff_attendance_type', 'staff_attendance_type.id', '=', 'staff_attendance.staff_attendance_type_id')
+            ->where('staff.id', $staffId)
+            ->select([
+                'staff_attendance.staff_attendance_type_id',
+                'staff_attendance_type.type as att_type',
+                'staff_attendance_type.key_value as att_key',
+                'staff_attendance.remark',
+                'staff.name',
+                'staff.surname',
+                'staff.contact_no',
+                'staff.email',
+                'roles.name as user_type',
+                DB::raw("IFNULL(staff_attendance.date, 'xxx') as date"),
+                DB::raw('IFNULL(staff_attendance.id, 0) as attendence_id'),
+                'staff.id as id',
+            ]);
+
+        if ($activeStaffOnly) {
+            $query->where('staff.is_active', 1);
+        }
+
+        return $query->first();
+    }
+
+    /**
+     * CI Staffattendancemodel::attendanceYearCount.
+     *
+     * @return list<object{year: int|string}>
+     */
+    public function attendanceYears(): array
+    {
+        return DB::table('staff_attendance')
+            ->selectRaw('DISTINCT YEAR(date) as year')
+            ->orderBy('year')
+            ->get()
+            ->all();
+    }
+
+    /**
+     * CI Staff_model::count_attendance + Staff::countAttendance for one staff/year.
+     *
+     * @return array<string, int>
+     */
+    public function yearlyTypeCounts(int $year, int $staffId): array
+    {
+        $counts = [];
+        foreach (AttendanceReportService::STAFF_ATTENDANCE_TYPE_MAP as $key => $typeId) {
+            $counts[$key] = (int) DB::table('staff_attendance')
+                ->where('staff_id', $staffId)
+                ->whereRaw('YEAR(date) = ?', [$year])
+                ->where('staff_attendance_type_id', $typeId)
+                ->count();
+        }
+
+        return $counts;
     }
 }

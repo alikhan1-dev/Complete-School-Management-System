@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * CI admin/Staff::create + Staff_model::batchInsert core persist.
+ * CI admin/Staff::create + edit + Staff_model batchInsert/add core persist.
  * Deferred: SaaS quota, mail/SMS credentials, document uploads.
  */
 class StaffAdmissionService
@@ -88,6 +88,201 @@ class StaffAdmissionService
                 'password' => $plainPassword,
             ];
         });
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function findForEdit(int $staffId): ?array
+    {
+        $row = DB::table('staff')
+            ->leftJoin('staff_roles', 'staff_roles.staff_id', '=', 'staff.id')
+            ->leftJoin('roles', 'roles.id', '=', 'staff_roles.role_id')
+            ->where('staff.id', $staffId)
+            ->select([
+                'staff.*',
+                'roles.id as role_id',
+                'roles.name as role_name',
+            ])
+            ->first();
+
+        return $row ? (array) $row : null;
+    }
+
+    /**
+     * CI Staff_model::getLeaveDetails for current session.
+     *
+     * @return list<object>
+     */
+    public function leaveDetailsForSession(int $staffId): array
+    {
+        $sessionId = $this->currentSession->id();
+        if ($sessionId <= 0 || $staffId <= 0) {
+            return [];
+        }
+
+        return DB::table('staff_leave_details')
+            ->join('leave_types', 'leave_types.id', '=', 'staff_leave_details.leave_type_id')
+            ->where('staff_leave_details.staff_id', $staffId)
+            ->where('staff_leave_details.session_id', $sessionId)
+            ->orderBy('leave_types.id')
+            ->select([
+                'staff_leave_details.alloted_leave',
+                'staff_leave_details.id as altid',
+                'leave_types.type',
+                'leave_types.id as leave_type_id',
+            ])
+            ->get()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @param  list<array{custom_field_id:int,field_value:string}>  $customFieldRows
+     */
+    public function update(int $staffId, array $input, array $customFieldRows = []): void
+    {
+        $staff = Staff::query()->find($staffId);
+        if ($staff === null) {
+            throw new \RuntimeException('Staff not found.');
+        }
+
+        $settings = SchSetting::query()->orderBy('id')->firstOrFail();
+        $sessionId = $this->currentSession->id();
+        if ($sessionId <= 0) {
+            throw new \RuntimeException('Current academic session is not configured in sch_settings.');
+        }
+
+        $previousEmployeeId = (string) $staff->employee_id;
+        $employeeId = $previousEmployeeId;
+        if ((int) $settings->staffid_auto_insert !== 1) {
+            $employeeId = trim((string) ($input['employee_id'] ?? ''));
+            if ($employeeId === '') {
+                throw new \InvalidArgumentException('Staff id is required.');
+            }
+            if ($employeeId !== $previousEmployeeId && $this->employeeIdExists($employeeId)) {
+                throw new \InvalidArgumentException('Employee id '.$employeeId.' already exists.');
+            }
+        }
+
+        $roleId = (int) ($input['role'] ?? 0);
+        if ($roleId <= 0) {
+            throw new \InvalidArgumentException('Role is required.');
+        }
+
+        $updateRow = $this->mapUpdateRow($input, $employeeId);
+
+        DB::transaction(function () use ($staffId, $updateRow, $roleId, $input, $customFieldRows, $sessionId, $settings, $employeeId, $previousEmployeeId) {
+            DB::table('staff')->where('id', $staffId)->update($updateRow);
+
+            DB::table('staff_roles')->where('staff_id', $staffId)->update([
+                'role_id' => $roleId,
+            ]);
+
+            $this->syncLeaveDetails($staffId, $sessionId, $input);
+
+            if ($customFieldRows !== []) {
+                $this->customFields->upsertFor($staffId, $customFieldRows);
+            }
+
+            if ((int) $settings->staffid_auto_insert !== 1 && $employeeId !== $previousEmployeeId) {
+                $scanType = (string) ($settings->scan_code_type ?? 'barcode');
+                $this->scanCodes->generate($employeeId, $staffId, $scanType !== '' ? $scanType : 'barcode');
+            }
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    protected function mapUpdateRow(array $input, string $employeeId): array
+    {
+        $joining = (string) ($input['date_of_joining'] ?? '');
+        $leaving = (string) ($input['date_of_leaving'] ?? '');
+
+        return [
+            'employee_id' => $employeeId,
+            'department' => $this->nullableInt($input['department'] ?? null),
+            'designation' => $this->nullableInt($input['designation'] ?? null),
+            'qualification' => (string) ($input['qualification'] ?? ''),
+            'work_exp' => (string) ($input['work_exp'] ?? ''),
+            'name' => (string) ($input['name'] ?? ''),
+            'surname' => (string) ($input['surname'] ?? ''),
+            'father_name' => (string) ($input['father_name'] ?? ''),
+            'mother_name' => (string) ($input['mother_name'] ?? ''),
+            'contact_no' => (string) ($input['contactno'] ?? $input['contact_no'] ?? ''),
+            'emergency_contact_no' => (string) ($input['emergency_no'] ?? ''),
+            'email' => (string) ($input['email'] ?? ''),
+            'dob' => (string) ($input['dob'] ?? ''),
+            'marital_status' => (string) ($input['marital_status'] ?? ''),
+            'date_of_joining' => $joining !== '' ? $joining : null,
+            'date_of_leaving' => $leaving !== '' ? $leaving : null,
+            'local_address' => (string) ($input['address'] ?? ''),
+            'permanent_address' => (string) ($input['permanent_address'] ?? ''),
+            'note' => (string) ($input['note'] ?? ''),
+            'gender' => (string) ($input['gender'] ?? ''),
+            'account_title' => (string) ($input['account_title'] ?? ''),
+            'bank_account_no' => (string) ($input['bank_account_no'] ?? ''),
+            'bank_name' => (string) ($input['bank_name'] ?? ''),
+            'ifsc_code' => (string) ($input['ifsc_code'] ?? ''),
+            'bank_branch' => (string) ($input['bank_branch'] ?? ''),
+            'payscale' => '',
+            'basic_salary' => isset($input['basic_salary']) && $input['basic_salary'] !== '' ? (int) $input['basic_salary'] : null,
+            'epf_no' => (string) ($input['epf_no'] ?? ''),
+            'contract_type' => (string) ($input['contract_type'] ?? ''),
+            'shift' => (string) ($input['shift'] ?? ''),
+            'location' => (string) ($input['location'] ?? ''),
+            'facebook' => (string) ($input['facebook'] ?? ''),
+            'twitter' => (string) ($input['twitter'] ?? ''),
+            'linkedin' => (string) ($input['linkedin'] ?? ''),
+            'instagram' => (string) ($input['instagram'] ?? ''),
+        ];
+    }
+
+    /**
+     * CI Staff_model::add_staff_leave_details on edit submit.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    protected function syncLeaveDetails(int $staffId, int $sessionId, array $input): void
+    {
+        $typeIds = $input['leave_type_id'] ?? [];
+        if (! is_array($typeIds) || $typeIds === []) {
+            return;
+        }
+
+        $alloted = $input['alloted_leave'] ?? [];
+        $altIds = $input['altid'] ?? [];
+
+        foreach ($typeIds as $index => $typeId) {
+            $typeId = (int) $typeId;
+            if ($typeId <= 0) {
+                continue;
+            }
+
+            $allotedValue = $alloted[$index] ?? 0;
+            $altId = isset($altIds[$index]) ? (int) $altIds[$index] : 0;
+            if ($altId <= 0 && (float) $allotedValue <= 0) {
+                continue;
+            }
+
+            $row = [
+                'staff_id' => $staffId,
+                'leave_type_id' => $typeId,
+                'alloted_leave' => $allotedValue,
+            ];
+
+            if ($altId > 0) {
+                DB::table('staff_leave_details')
+                    ->where('id', $altId)
+                    ->where('session_id', $sessionId)
+                    ->update($row);
+            } else {
+                $row['session_id'] = $sessionId;
+                DB::table('staff_leave_details')->insert($row);
+            }
+        }
     }
 
     /**

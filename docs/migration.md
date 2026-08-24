@@ -58,7 +58,7 @@ A module is complete when routes, validation, permissions, views, AJAX, reports,
 - [x] Shared: BaseModel, YesNoBoolean, SchoolContext, DataTableResponse, middleware, layouts
 - [x] Auth: staff + student/parent login, LegacyPasswordVerifier, choose-class flow
 - [x] Roles: permission service, role list, permission matrix
-- [x] Staff: list + DataTables endpoint + create persist (role, leave allotment, custom fields, ID card scan code)
+- [x] Staff: list + DataTables + create/edit + profile + attendance AJAX + disable/enable (superadmin disable date JSON; non-superadmin redirect)
 - [ ] Baseline migrations applied to `ssnodb_laravel`
 - [ ] Feature tests for auth and permissions
 - [ ] Language conversion (77 locales)
