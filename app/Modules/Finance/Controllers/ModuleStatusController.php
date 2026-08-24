@@ -15,14 +15,14 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Finance',
             'status' => 'in_progress',
-            'message' => 'Income/expense heads + income/expense CRUD with documents done. Deferred: search_income/search_expense date screens, finance reports.',
+            'message' => 'Income/expense heads + income/expense CRUD with documents + search_income/search_expense done. Deferred: finance reports owned by Reports module (already largely migrated).',
             'slices' => [
                 'income_heads' => 'done',
                 'expense_heads' => 'done',
                 'income' => 'done',
                 'expense' => 'done',
-                'search_screens' => 'deferred',
-                'reports' => 'deferred',
+                'search_screens' => 'done',
+                'reports' => 'moved_to_reports',
             ],
         ]);
     }

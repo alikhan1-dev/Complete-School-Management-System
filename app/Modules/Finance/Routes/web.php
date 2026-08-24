@@ -2,8 +2,10 @@
 
 use App\Modules\Finance\Controllers\ExpenseController;
 use App\Modules\Finance\Controllers\ExpenseHeadController;
+use App\Modules\Finance\Controllers\ExpenseSearchController;
 use App\Modules\Finance\Controllers\IncomeController;
 use App\Modules\Finance\Controllers\IncomeHeadController;
+use App\Modules\Finance\Controllers\IncomeSearchController;
 use App\Modules\Finance\Controllers\ModuleStatusController;
 use Illuminate\Support\Facades\Route;
 
@@ -38,6 +40,10 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/income/delete/{id}', [IncomeController::class, 'destroy'])->name('finance.income.destroy');
     Route::get('admin/income/download/{id}', [IncomeController::class, 'download'])->name('finance.income.download');
 
+    // CI admin/income/incomeSearch — search by date / keyword
+    Route::match(['get', 'post'], 'admin/income/incomesearch', [IncomeSearchController::class, 'index'])
+        ->name('finance.income.search');
+
     // Expense (CI admin/expense)
     Route::get('admin/expense', [ExpenseController::class, 'index'])->name('finance.expense.index');
     Route::get('admin/expense/index', [ExpenseController::class, 'index']);
@@ -47,4 +53,8 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::post('admin/expense/edit/{id}', [ExpenseController::class, 'update'])->name('finance.expense.update');
     Route::get('admin/expense/delete/{id}', [ExpenseController::class, 'destroy'])->name('finance.expense.destroy');
     Route::get('admin/expense/download/{id}', [ExpenseController::class, 'download'])->name('finance.expense.download');
+
+    // CI admin/expense/expenseSearch — search by date / keyword
+    Route::match(['get', 'post'], 'admin/expense/expensesearch', [ExpenseSearchController::class, 'index'])
+        ->name('finance.expense.search');
 });

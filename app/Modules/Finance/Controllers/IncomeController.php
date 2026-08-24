@@ -15,7 +15,6 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * CI admin/Income — income CRUD + document upload/download.
- * Search-by-date (search_income) deferred.
  */
 class IncomeController extends Controller
 {

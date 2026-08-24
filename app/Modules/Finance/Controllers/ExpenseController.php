@@ -15,7 +15,6 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * CI admin/Expense — expense CRUD + document upload/download.
- * Search-by-date (search_expense) deferred.
  */
 class ExpenseController extends Controller
 {
