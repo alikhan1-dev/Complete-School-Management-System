@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * CI Subjecttimetable_model + Timetable classreport/create/savegroup core.
- * Deferred: teacher mytimetable, print HTML, duplicate-check AJAX, quick period generator.
+ * CI Subjecttimetable_model + Timetable classreport/create/savegroup/mytimetable core.
+ * Deferred: print HTML, duplicate-check AJAX, quick period generator.
  */
 class ClassTimetableService
 {
@@ -165,6 +165,53 @@ class ClassTimetableService
         $week = [];
         foreach ($this->dayNames() as $day) {
             $week[$day] = $this->periodsForDay($subjectGroupId, $day, $classId, $sectionId);
+        }
+
+        return $week;
+    }
+
+    /**
+     * CI Subjecttimetable_model::getByStaffandDay.
+     *
+     * @return Collection<int, object>
+     */
+    public function periodsForStaffDay(int $staffId, string $day): Collection
+    {
+        $sessionId = $this->currentSession->id();
+        if ($sessionId <= 0) {
+            throw new InvalidArgumentException('Current academic session is not configured.');
+        }
+
+        return DB::table('subject_timetable')
+            ->join('classes', 'classes.id', '=', 'subject_timetable.class_id')
+            ->join('sections', 'sections.id', '=', 'subject_timetable.section_id')
+            ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'subject_timetable.subject_group_subject_id')
+            ->join('subjects as sub', 'sub.id', '=', 'subject_group_subjects.subject_id')
+            ->where('subject_timetable.staff_id', $staffId)
+            ->where('subject_timetable.session_id', $sessionId)
+            ->where('subject_timetable.day', $day)
+            ->orderBy('subject_timetable.start_time')
+            ->select([
+                'subject_timetable.*',
+                'classes.class',
+                'sections.section',
+                'subject_group_subjects.subject_id',
+                'sub.name as subject_name',
+                'sub.code as subject_code',
+            ])
+            ->get();
+    }
+
+    /**
+     * CI mytimetable / getteachertimetable — day => periods for a teacher.
+     *
+     * @return array<string, Collection<int, object>>
+     */
+    public function weekForStaff(int $staffId): array
+    {
+        $week = [];
+        foreach ($this->dayNames() as $day) {
+            $week[$day] = $this->periodsForStaffDay($staffId, $day);
         }
 
         return $week;

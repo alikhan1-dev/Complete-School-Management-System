@@ -20,4 +20,12 @@ Route::middleware(['staff.auth'])->group(function () {
     // CI admin/timetable/savegroup — save one day (form POST)
     Route::post('admin/timetable/saveday', [TimetableController::class, 'saveDay'])
         ->name('timetable.save_day');
+
+    // CI admin/timetable/mytimetable — teacher weekly timetable
+    Route::get('admin/timetable/mytimetable', [TimetableController::class, 'mytimetable'])
+        ->name('timetable.mytimetable');
+
+    // CI admin/timetable/getteachertimetable — admin AJAX teacher picker
+    Route::post('admin/timetable/getteachertimetable', [TimetableController::class, 'getTeacherTimetable'])
+        ->name('timetable.get_teacher_timetable');
 });

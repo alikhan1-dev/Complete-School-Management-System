@@ -15,11 +15,11 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Timetable',
             'status' => 'in_progress',
-            'message' => 'Class timetable create/save + class report done. Deferred: teacher mytimetable, print, duplicate-check AJAX, quick period generator.',
+            'message' => 'Class timetable create/save + class report + teacher mytimetable done. Deferred: print, duplicate-check AJAX, quick period generator.',
             'slices' => [
                 'class_create_save' => 'done',
                 'class_report' => 'done',
-                'teacher_timetable' => 'deferred',
+                'teacher_timetable' => 'done',
                 'print' => 'deferred',
             ],
         ]);

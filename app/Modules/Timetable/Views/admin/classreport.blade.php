@@ -14,11 +14,12 @@
 <div class="box box-primary">
     <div class="box-header with-border">
         <h3 class="box-title">Class Timetable</h3>
-        @if($canEdit)
-            <div class="box-tools">
+        <div class="box-tools">
+            <a href="{{ route('timetable.mytimetable') }}" class="btn btn-default btn-sm">{{ __('system.teacher_time_table') }}</a>
+            @if($canEdit)
                 <a href="{{ route('timetable.create') }}" class="btn btn-primary btn-sm"><i class="fa fa-plus"></i> Add</a>
-            </div>
-        @endif
+            @endif
+        </div>
     </div>
     <div class="box-body">
         <form method="post" action="{{ route('timetable.classreport') }}" class="row">

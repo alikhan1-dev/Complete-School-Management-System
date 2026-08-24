@@ -6,14 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Timetable\Services\ClassTimetableService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
 use InvalidArgumentException;
 
 /**
- * CI admin/Timetable — class timetable create/save + class report.
- * Deferred: mytimetable, print endpoints, duplicate check, quick generator.
+ * CI admin/Timetable — class timetable create/save + class report + teacher mytimetable.
+ * Deferred: print endpoints, duplicate check, quick generator.
  */
 class TimetableController extends Controller
 {
@@ -196,5 +199,78 @@ class TimetableController extends Controller
                 'subject_group_id' => $data['subject_group_id'],
             ])
             ->with('success', "Saved {$count} period(s) for {$data['day']}.");
+    }
+
+    /**
+     * CI admin/timetable/mytimetable — teacher weekly view; admin sees teacher picker.
+     * Privilege: teachers_time_table can_view.
+     */
+    public function mytimetable(): View
+    {
+        abort_unless($this->permissions->hasPrivilege('teachers_time_table', 'can_view'), 403);
+
+        $staff = Auth::guard('staff')->user();
+        abort_unless($staff !== null, 403);
+
+        $roleId = (int) ($staff->primaryRole()?->id ?? 0);
+        $isTeacher = $roleId === ClassTimetableService::TEACHER_ROLE_ID;
+
+        if ($isTeacher) {
+            $week = $this->timetable->weekForStaff((int) $staff->id);
+
+            return view('shared::layouts.admin', [
+                'title' => __('system.teacher_time_table'),
+                'contentView' => 'timetable::admin.mytimetable',
+                'isAdminPicker' => false,
+                'week' => $week,
+                'staffId' => (int) $staff->id,
+                'teachers' => collect(),
+            ]);
+        }
+
+        return view('shared::layouts.admin', [
+            'title' => __('system.teacher_time_table'),
+            'contentView' => 'timetable::admin.mytimetable',
+            'isAdminPicker' => true,
+            'week' => null,
+            'staffId' => 0,
+            'teachers' => $this->timetable->teachers(),
+        ]);
+    }
+
+    /**
+     * CI admin/timetable/getteachertimetable — AJAX HTML partial for admin teacher picker.
+     */
+    public function getTeacherTimetable(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('teachers_time_table', 'can_view'), 403);
+
+        $validator = Validator::make($request->all(), [
+            'teacher' => ['required', 'integer', 'exists:staff,id'],
+        ]);
+
+        if ($validator->fails()) {
+            $errors = [];
+            foreach ($validator->errors()->messages() as $field => $messages) {
+                $errors[$field] = $messages[0] ?? '';
+            }
+
+            return response()->json([
+                'status' => '0',
+                'error' => $errors,
+            ]);
+        }
+
+        $staffId = (int) $request->input('teacher');
+        $week = $this->timetable->weekForStaff($staffId);
+
+        return response()->json([
+            'status' => '1',
+            'error' => '',
+            'message' => view('timetable::admin.partials.teachertimetable_grid', [
+                'week' => $week,
+                'staffId' => $staffId,
+            ])->render(),
+        ]);
     }
 }
