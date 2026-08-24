@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Fees',
             'status' => 'in_progress',
-            'message' => 'Phase 3 Fees operational core complete: types/groups/master/assign/discounts/collect/multi/due-fees/carry-forward + transport collect (single+multi) + offline bank payments + student getfees portal ledger/print/processing-banner + online pay modal persist + printFeesByName/ByGroup/ByGroupArray (admin+portal) + cumulative fine + thermal print. Deferred: live gateway charge APIs, SMS, transport fees-master admin.',
+            'message' => 'Phase 3 Fees operational core complete: types/groups/master/assign/discounts/collect/multi/due-fees/carry-forward + transport collect (single+multi) + offline bank payments + student getfees portal ledger/print/processing-banner + online pay modal persist + printFeesByName/ByGroup/ByGroupArray (admin+portal) + cumulative fine + thermal print + fees reminder settings. Deferred: live gateway charge APIs, collect fee_submission live mail/SMS, fee-reminder cron send, transport fees-master admin.',
             'slices' => [
                 'fee_types' => 'done',
                 'fee_groups' => 'done',
@@ -36,6 +36,8 @@ class ModuleStatusController extends Controller
                 'print_fees_by_group' => 'done',
                 'print_fees_by_group_array' => 'done',
                 'thermal_print' => 'done',
+                'fees_reminder_settings' => 'done',
+                'fees_reminder_cron_send' => 'deferred',
                 'student_getfees_print' => 'done',
                 'student_getfees_processing_banner' => 'done',
                 'student_getfees_online_pay' => 'done',

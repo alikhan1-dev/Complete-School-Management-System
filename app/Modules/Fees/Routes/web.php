@@ -4,6 +4,7 @@ use App\Modules\Fees\Controllers\FeeAssignController;
 use App\Modules\Fees\Controllers\FeeDiscountController;
 use App\Modules\Fees\Controllers\FeeGroupController;
 use App\Modules\Fees\Controllers\FeeMasterController;
+use App\Modules\Fees\Controllers\FeeReminderController;
 use App\Modules\Fees\Controllers\FeeTypeController;
 use App\Modules\Fees\Controllers\FeesForwardController;
 use App\Modules\Fees\Controllers\ModuleStatusController;
@@ -93,6 +94,10 @@ Route::middleware(['staff.auth'])->group(function () {
     // Thermal print settings (CI System Setting > Thermal Print addon)
     Route::get('admin/thermalprint', [ThermalPrintController::class, 'index'])->name('fees.thermal_print.index');
     Route::post('admin/thermalprint', [ThermalPrintController::class, 'save'])->name('fees.thermal_print.save');
+
+    // Fees reminder settings (CI admin/feereminder/setting) — cron live send deferred
+    Route::match(['get', 'post'], 'admin/feereminder/setting', [FeeReminderController::class, 'setting'])
+        ->name('fees.feereminder.setting');
 });
 
 Route::middleware([
