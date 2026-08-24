@@ -12,13 +12,17 @@ use App\Modules\Staff\Models\Staff;
 use App\Modules\Staff\Requests\StoreStaffRequest;
 use App\Modules\Staff\Requests\UpdateStaffRequest;
 use App\Modules\Staff\Services\StaffAdmissionService;
+use App\Modules\Staff\Services\StaffDocumentService;
 use App\Modules\Staff\Services\StaffProfileService;
+use App\Modules\Staff\Services\StaffTimelineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StaffController extends Controller
 {
@@ -27,6 +31,8 @@ class StaffController extends Controller
         protected CustomFieldValueService $customFields,
         protected StaffAdmissionService $admission,
         protected StaffProfileService $profile,
+        protected StaffDocumentService $documents,
+        protected StaffTimelineService $timeline,
     ) {
     }
 
@@ -173,6 +179,7 @@ class StaffController extends Controller
         /** @var Staff $actor */
         $actor = Auth::guard('staff')->user();
         $enableDisable = (int) $actor->id !== $id;
+        $visibleTimelineOnly = (int) $actor->id === $id;
 
         return view('shared::layouts.admin', [
             'title' => 'Staff Details',
@@ -181,11 +188,58 @@ class StaffController extends Controller
             'enableDisable' => $enableDisable,
             'canDisableStaff' => $this->permissions->hasPrivilege('disable_staff', 'can_view'),
             'canEditStaff' => $this->permissions->hasPrivilege('staff', 'can_edit'),
+            'canAddTimeline' => $this->permissions->hasPrivilege('staff_timeline', 'can_add'),
+            'canEditTimeline' => $this->permissions->hasPrivilege('staff_timeline', 'can_edit'),
+            'canDeleteTimeline' => $this->permissions->hasPrivilege('staff_timeline', 'can_delete'),
             'customFieldValues' => $this->customFields->valuesMap('staff', $id),
             'customFields' => $this->customFields->fieldsFor('staff'),
             'attendanceYears' => $this->profile->attendanceYearOptions(),
             'defaultAttendanceYear' => (int) date('Y'),
+            'staffDocuments' => $this->documents->listForProfile($staffProfile),
+            'timelineList' => $this->timeline->listFor($id, $visibleTimelineOnly),
+            'editingTimeline' => request()->filled('edit_timeline')
+                ? $this->timeline->find((int) request()->query('edit_timeline'))
+                : null,
         ]);
+    }
+
+    public function downloadDocument(int $staffId, string $doc): BinaryFileResponse
+    {
+        $this->assertCanViewStaffProfile($staffId);
+
+        $staffProfile = $this->profile->profile($staffId);
+        abort_if($staffProfile === null, 404);
+
+        try {
+            $fileName = $this->documents->filename($staffProfile, $doc);
+        } catch (\InvalidArgumentException) {
+            abort(404);
+        }
+
+        abort_if($fileName === null, 404);
+
+        $path = $this->documents->absolutePath($staffId, $fileName);
+        abort_unless(File::isFile($path), 404);
+
+        return response()->download($path, basename($fileName));
+    }
+
+    public function deleteDocument(int $id, string $doc): RedirectResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('staff', 'can_edit'), 403);
+
+        $staff = Staff::query()->findOrFail($id);
+        $this->assertCanEditStaff($staff);
+
+        try {
+            $this->documents->delete($id, $doc);
+        } catch (\InvalidArgumentException) {
+            abort(404);
+        }
+
+        return redirect()
+            ->route('staff.profile', $id)
+            ->with('success', (string) __('system.delete_message'));
     }
 
     public function ajaxAttendance(Request $request): JsonResponse

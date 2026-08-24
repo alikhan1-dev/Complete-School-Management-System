@@ -102,6 +102,129 @@
 
 <div class="box box-primary">
     <div class="box-header with-border">
+        <h3 class="box-title">{{ __('system.documents') }}</h3>
+    </div>
+    <div class="box-body">
+        @if(($staffDocuments ?? []) === [])
+            <div class="alert alert-info">{{ __('system.no_record_found') }}</div>
+        @else
+            <div class="row">
+                @foreach($staffDocuments as $document)
+                    <div class="col-lg-3 col-md-4 col-sm-6" style="margin-bottom: 15px;">
+                        <div class="well well-sm">
+                            <h5>{{ $document['label'] }}</h5>
+                            <a href="{{ route('staff.download', [$staffProfile->id, $document['key']]) }}"
+                               class="btn btn-primary btn-xs" title="{{ __('system.download') }}">
+                                <i class="fa fa-download"></i>
+                            </a>
+                            @if($canEditStaff)
+                                <a href="{{ route('staff.doc_delete', [$staffProfile->id, $document['key']]) }}"
+                                   class="btn btn-danger btn-xs"
+                                   title="{{ __('system.delete') }}"
+                                   onclick="return confirm(@json(__('system.delete_confirm')));">
+                                    <i class="fa fa-remove"></i>
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+    </div>
+</div>
+
+<div class="box box-primary">
+    <div class="box-header with-border">
+        <h3 class="box-title">{{ __('system.timeline') }}</h3>
+    </div>
+    <div class="box-body">
+        @if($canEditTimeline && ($editingTimeline ?? null))
+            <form action="{{ route('staff.timeline.update') }}" method="post" enctype="multipart/form-data" class="well" style="margin-bottom: 15px;">
+                @csrf
+                <input type="hidden" name="id" value="{{ $editingTimeline->id }}">
+                <input type="hidden" name="edit_staff_id" value="{{ $staffProfile->id }}">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>{{ __('system.title') }}</label>
+                            <input type="text" name="timeline_title" class="form-control" value="{{ old('timeline_title', $editingTimeline->title) }}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>{{ __('system.date') }}</label>
+                            <input type="date" name="timeline_date" class="form-control" value="{{ old('timeline_date', $editingTimeline->timeline_date) }}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>{{ __('system.document') }}</label>
+                            <input type="file" name="timeline_doc" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>{{ __('system.description') }}</label>
+                    <textarea name="timeline_desc" class="form-control" rows="2">{{ old('timeline_desc', $editingTimeline->description) }}</textarea>
+                </div>
+                <label>
+                    <input type="checkbox" name="visible_check" value="yes" @checked(old('visible_check', $editingTimeline->status) === 'yes')>
+                    {{ __('system.visible_to_this_person') }}
+                </label>
+                <div style="margin-top: 10px;">
+                    <button type="submit" class="btn btn-primary btn-sm">{{ __('system.update') }}</button>
+                    <a href="{{ route('staff.profile', $staffProfile->id) }}" class="btn btn-default btn-sm">{{ __('system.cancel') }}</a>
+                </div>
+            </form>
+        @elseif($canAddTimeline)
+            <form action="{{ route('staff.timeline.store') }}" method="post" enctype="multipart/form-data" style="margin-bottom: 15px;">
+                @csrf
+                <input type="hidden" name="staff_id" value="{{ $staffProfile->id }}">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>{{ __('system.title') }}</label>
+                            <input type="text" name="timeline_title" class="form-control" value="{{ old('timeline_title') }}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>{{ __('system.date') }}</label>
+                            <input type="date" name="timeline_date" class="form-control" value="{{ old('timeline_date', date('Y-m-d')) }}" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>{{ __('system.document') }}</label>
+                            <input type="file" name="timeline_doc" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>{{ __('system.description') }}</label>
+                    <textarea name="timeline_desc" class="form-control" rows="2">{{ old('timeline_desc') }}</textarea>
+                </div>
+                <label>
+                    <input type="checkbox" name="visible_check" value="yes" @checked(old('visible_check') === 'yes')>
+                    {{ __('system.visible_to_this_person') }}
+                </label>
+                <div style="margin-top: 10px;">
+                    <button type="submit" class="btn btn-primary btn-sm">{{ __('system.add') }}</button>
+                </div>
+            </form>
+        @endif
+
+        @include('staff::admin.partials.timeline_list', [
+            'staffId' => $staffProfile->id,
+            'timelineList' => $timelineList ?? collect(),
+            'canEditTimeline' => $canEditTimeline ?? false,
+            'canDeleteTimeline' => $canDeleteTimeline ?? false,
+        ])
+    </div>
+</div>
+
+<div class="box box-primary">
+    <div class="box-header with-border">
         <h3 class="box-title">{{ __('system.attendance') }}</h3>
     </div>
     <div class="box-body">
