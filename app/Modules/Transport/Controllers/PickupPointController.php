@@ -5,13 +5,13 @@ namespace App\Modules\Transport\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Transport\Services\PickupPointService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI admin/pickuppoint — master list/create/edit/delete (form POST).
- * Deferred: assign to routes, student fees, map modal, reorder.
+ * CI admin/pickuppoint — master list/create/edit/delete + pointmap modal.
  */
 class PickupPointController extends Controller
 {
@@ -33,6 +33,7 @@ class PickupPointController extends Controller
             'canAdd' => $this->permissions->hasPrivilege('pickup_point', 'can_add'),
             'canEdit' => $this->permissions->hasPrivilege('pickup_point', 'can_edit'),
             'canDelete' => $this->permissions->hasPrivilege('pickup_point', 'can_delete'),
+            'googleMapsApiKey' => (string) config('services.google.maps_api_key', ''),
         ]);
     }
 
@@ -59,6 +60,7 @@ class PickupPointController extends Controller
             'canAdd' => $this->permissions->hasPrivilege('pickup_point', 'can_add'),
             'canEdit' => true,
             'canDelete' => $this->permissions->hasPrivilege('pickup_point', 'can_delete'),
+            'googleMapsApiKey' => (string) config('services.google.maps_api_key', ''),
         ]);
     }
 
@@ -83,6 +85,39 @@ class PickupPointController extends Controller
         return redirect()
             ->route('transport.pickup_points.index')
             ->with('success', 'Pickup point deleted successfully.');
+    }
+
+    /**
+     * CI admin/pickuppoint/pointmap — JSON {status, error, page:{location,page}}.
+     */
+    public function pointMap(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('pickup_point', 'can_view'), 403);
+
+        $validated = $request->validate([
+            'pick_location' => ['required', 'integer'],
+        ]);
+
+        $point = $this->points->find((int) $validated['pick_location']);
+        $location = [
+            'id' => (int) $point->id,
+            'name' => (string) $point->name,
+            'latitude' => (string) $point->latitude,
+            'longitude' => (string) $point->longitude,
+        ];
+
+        $pageHtml = view('transport::admin.pickup_points._pointmap', [
+            'location' => $point,
+        ])->render();
+
+        return response()->json([
+            'status' => '1',
+            'error' => '',
+            'page' => [
+                'location' => $location,
+                'page' => $pageHtml,
+            ],
+        ]);
     }
 
     /**

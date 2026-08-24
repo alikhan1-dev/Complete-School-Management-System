@@ -5,13 +5,14 @@ namespace App\Modules\Transport\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Transport\Services\RoutePickupPointService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI admin/pickuppoint/assign — assign pickup points to routes (form POST).
- * Deferred: drag-drop reorder, student transport fees.
+ * CI admin/pickuppoint/assign — assign pickup points to routes (form POST) + reorder.
+ * Deferred: maps.
  */
 class RoutePickupPointController extends Controller
 {
@@ -32,7 +33,48 @@ class RoutePickupPointController extends Controller
             'canAdd' => $this->permissions->hasPrivilege('route_pickup_point', 'can_add'),
             'canEdit' => $this->permissions->hasPrivilege('route_pickup_point', 'can_edit'),
             'canDelete' => $this->permissions->hasPrivilege('route_pickup_point', 'can_delete'),
+            'currencySymbol' => app(\App\Modules\Shared\Services\SchoolContext::class)->currencySymbol(),
         ]);
+    }
+
+    /**
+     * CI admin/pickuppoint/reorder — JSON-encoded HTML rows for sortable modal.
+     */
+    public function reorder(Request $request): JsonResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('route_pickup_point', 'can_view'), 403);
+
+        $validated = $request->validate([
+            'route_id' => ['required', 'integer'],
+        ]);
+
+        $points = $this->assignments->pointsForReorder((int) $validated['route_id']);
+        $html = view('transport::admin.route_pickup._reorder', [
+            'points' => $points,
+        ])->render();
+
+        return response()->json($html);
+    }
+
+    /**
+     * CI admin/pickuppoint/reorder_pointid — persist order; returns transport_route_id.
+     */
+    public function reorderPointId(Request $request): JsonResponse
+    {
+        abort_unless(
+            $this->permissions->hasPrivilege('route_pickup_point', 'can_edit')
+            || $this->permissions->hasPrivilege('route_pickup_point', 'can_add'),
+            403
+        );
+
+        $validated = $request->validate([
+            'position' => ['required', 'array', 'min:1'],
+            'position.*' => ['integer'],
+        ]);
+
+        $routeId = $this->assignments->reorder($validated['position']);
+
+        return response()->json($routeId);
     }
 
     public function create(Request $request): View|RedirectResponse

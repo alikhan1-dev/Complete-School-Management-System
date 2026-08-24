@@ -1,6 +1,7 @@
 @php
     $editing = $editing ?? null;
     $isEdit = $editing !== null;
+    $googleMapsApiKey = $googleMapsApiKey ?? '';
 @endphp
 
 @if(session('success'))
@@ -58,7 +59,7 @@
             </div>
             <p class="help-block">
                 <a href="https://www.google.com/maps" target="_blank" rel="noopener">
-                    Click here to get latitude and longitude
+                    {{ __('system.click_here_to_get_latitude_and_longitude') }}
                 </a>
             </p>
         </div>
@@ -95,6 +96,12 @@
                     <td class="text-right">{{ $point->latitude }}</td>
                     <td class="text-right">{{ $point->longitude }}</td>
                     <td class="text-right">
+                        <button type="button"
+                                class="btn btn-primary btn-xs pickup_map"
+                                data-pick-location="{{ $point->id }}"
+                                title="{{ __('system.map') }}">
+                            <i class="fa fa-map-marker"></i>
+                        </button>
                         @if(!empty($canEdit))
                             <a href="{{ route('transport.pickup_points.edit', $point->id) }}" class="btn btn-default btn-xs">
                                 <i class="fa fa-pencil"></i>
@@ -116,3 +123,80 @@
         </table>
     </div>
 </div>
+
+<div id="map_modal" class="modal fade" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-body pt0 minheight303 pr0 ps-0 pb0"></div>
+        </div>
+    </div>
+</div>
+
+@if($googleMapsApiKey !== '')
+    <script async defer
+            src="https://maps.googleapis.com/maps/api/js?key={{ urlencode($googleMapsApiKey) }}"></script>
+@endif
+<script>
+(function () {
+    var pointMapUrl = @json(route('transport.pickup_points.pointmap'));
+    var csrf = $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').first().val();
+    var mapsKeyConfigured = @json($googleMapsApiKey !== '');
+
+    function loadMap(lat, lng, name) {
+        var el = document.getElementById('sample');
+        if (!el) {
+            return;
+        }
+        if (!mapsKeyConfigured || typeof google === 'undefined' || !google.maps) {
+            el.innerHTML = '<div style="padding:16px;">'
+                + '<p><strong>' + (name || '') + '</strong></p>'
+                + '<p>Lat: ' + lat + ' / Lng: ' + lng + '</p>'
+                + '<p><a href="https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng)
+                + '" target="_blank" rel="noopener">Open in Google Maps</a></p>'
+                + (mapsKeyConfigured ? '' : '<p class="text-muted">Set GOOGLE_MAPS_API_KEY to enable interactive map.</p>')
+                + '</div>';
+            return;
+        }
+        var center = new google.maps.LatLng(lat, lng);
+        var map = new google.maps.Map(el, {center: center, zoom: 18});
+        new google.maps.Marker({
+            position: center,
+            map: map,
+            icon: {
+                url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
+                labelOrigin: new google.maps.Point(75, 32),
+                size: new google.maps.Size(32, 32),
+                anchor: new google.maps.Point(16, 32)
+            },
+            label: {
+                text: name || '',
+                color: '#ffffff',
+                fontWeight: 'bold'
+            }
+        });
+    }
+
+    $(document).on('click', '.pickup_map', function (e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var pickLocation = $btn.data('pick-location');
+        $.ajax({
+            url: pointMapUrl,
+            type: 'POST',
+            data: {_token: csrf, pick_location: pickLocation},
+            dataType: 'json',
+            success: function (res) {
+                var locationData = res.page.location;
+                $('#map_modal .modal-body').html(res.page.page);
+                $('#map_modal').modal('show');
+                setTimeout(function () {
+                    loadMap(locationData.latitude, locationData.longitude, locationData.name);
+                }, 200);
+            },
+            error: function () {
+                alert('Error occurred. Please try again.');
+            }
+        });
+    });
+})();
+</script>

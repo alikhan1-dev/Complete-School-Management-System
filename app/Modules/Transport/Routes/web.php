@@ -4,6 +4,7 @@ use App\Modules\Transport\Controllers\ModuleStatusController;
 use App\Modules\Transport\Controllers\PickupPointController;
 use App\Modules\Transport\Controllers\RouteController;
 use App\Modules\Transport\Controllers\RoutePickupPointController;
+use App\Modules\Transport\Controllers\StudentTransportFeeController;
 use App\Modules\Transport\Controllers\StudentTransportReportController;
 use App\Modules\Transport\Controllers\TransportFeeMasterController;
 use App\Modules\Transport\Controllers\VehicleController;
@@ -45,7 +46,7 @@ Route::middleware(['staff.auth'])->group(function () {
         ->whereNumber('id')
         ->name('transport.vehroute.destroy');
 
-    // CI admin/pickuppoint — master CRUD (route assign / student fees / map deferred)
+    // CI admin/pickuppoint — master CRUD + pointmap modal
     Route::get('admin/pickuppoint', [PickupPointController::class, 'index'])->name('transport.pickup_points.index');
     Route::get('admin/pickuppoint/index', [PickupPointController::class, 'index']);
     Route::post('admin/pickuppoint/add_point', [PickupPointController::class, 'store'])->name('transport.pickup_points.store');
@@ -54,8 +55,10 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/pickuppoint/delete_point/{id}', [PickupPointController::class, 'destroy'])
         ->whereNumber('id')
         ->name('transport.pickup_points.destroy');
+    Route::post('admin/pickuppoint/pointmap', [PickupPointController::class, 'pointMap'])
+        ->name('transport.pickup_points.pointmap');
 
-    // CI admin/pickuppoint/assign — route pickup points (reorder / student fees deferred)
+    // CI admin/pickuppoint/assign — route pickup points (+ reorder; maps deferred)
     Route::get('admin/pickuppoint/assign', [RoutePickupPointController::class, 'index'])
         ->name('transport.route_pickup.index');
     Route::match(['get', 'post'], 'admin/pickuppoint/assign/create', [RoutePickupPointController::class, 'create'])
@@ -66,6 +69,10 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::get('admin/pickuppoint/delete/{id}', [RoutePickupPointController::class, 'destroy'])
         ->whereNumber('id')
         ->name('transport.route_pickup.destroy');
+    Route::post('admin/pickuppoint/reorder', [RoutePickupPointController::class, 'reorder'])
+        ->name('transport.route_pickup.reorder');
+    Route::post('admin/pickuppoint/reorder_pointid', [RoutePickupPointController::class, 'reorderPointId'])
+        ->name('transport.route_pickup.reorder_pointid');
 
     // CI admin/pickuppoint/getpickuppointsbyroute — report / assign cascading dropdowns
     Route::post('admin/pickuppoint/getpickuppointsbyroute', [StudentTransportReportController::class, 'pickupPointsByRoute'])
@@ -74,4 +81,12 @@ Route::middleware(['staff.auth'])->group(function () {
     // CI admin/transport/feemaster — monthly transport fees master (current session)
     Route::match(['get', 'post'], 'admin/transport/feemaster', [TransportFeeMasterController::class, 'index'])
         ->name('transport.feemaster.index');
+
+    // CI admin/pickuppoint/student_fees — assign transport fee months to students
+    Route::match(['get', 'post'], 'admin/pickuppoint/student_fees', [StudentTransportFeeController::class, 'index'])
+        ->name('transport.student_fees.index');
+    Route::post('admin/pickuppoint/student_transport_months', [StudentTransportFeeController::class, 'months'])
+        ->name('transport.student_fees.months');
+    Route::post('admin/pickuppoint/add_student_fees', [StudentTransportFeeController::class, 'store'])
+        ->name('transport.student_fees.store');
 });

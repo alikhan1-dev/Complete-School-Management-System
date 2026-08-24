@@ -7,8 +7,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * CI admin/pickuppoint — master points CRUD.
- * Deferred: route assign, student fees, Google Maps modal, reorder.
+ * CI admin/pickuppoint — master points CRUD + pointmap payload.
  */
 class PickupPointService
 {

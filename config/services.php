@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    /*
+    | CI admin/pickuppoint hardcodes a Google Maps browser key in the view.
+    | Laravel reads GOOGLE_MAPS_API_KEY from the environment instead (never commit secrets).
+    */
+    'google' => [
+        'maps_api_key' => env('GOOGLE_MAPS_API_KEY'),
+    ],
+
 ];
