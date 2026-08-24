@@ -2,6 +2,7 @@
 
 use App\Modules\Staff\Controllers\ModuleStatusController;
 use App\Modules\Staff\Controllers\StaffController;
+use App\Modules\Staff\Controllers\StaffRatingController;
 use App\Modules\Staff\Controllers\StaffTimelineController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,12 +15,21 @@ Route::middleware(['staff.auth'])->prefix('admin')->group(function () {
     Route::post('staff/create', [StaffController::class, 'store'])->middleware('permission:staff,can_add')->name('staff.store');
     Route::get('staff/edit/{id}', [StaffController::class, 'edit'])->middleware('permission:staff,can_edit')->name('staff.edit');
     Route::post('staff/edit/{id}', [StaffController::class, 'update'])->middleware('permission:staff,can_edit')->name('staff.update');
+    Route::get('staff/delete/{id}', [StaffController::class, 'destroy'])->middleware('permission:staff,can_delete')->name('staff.destroy');
+    Route::match(['get', 'post'], 'staff/import', [StaffController::class, 'import'])->middleware('permission:staff,can_add')->name('staff.import');
+    Route::get('staff/exportformat', [StaffController::class, 'exportFormat'])->middleware('permission:staff,can_add')->name('staff.exportformat');
     Route::get('staff/profile/{id}', [StaffController::class, 'profile'])->name('staff.profile');
     Route::get('staff/download/{staff_id}/{doc}', [StaffController::class, 'downloadDocument'])->name('staff.download');
     Route::get('staff/doc_delete/{id}/{doc}', [StaffController::class, 'deleteDocument'])->middleware('permission:staff,can_edit')->name('staff.doc_delete');
     Route::post('staff/ajax_attendance', [StaffController::class, 'ajaxAttendance'])->name('staff.ajax_attendance');
     Route::post('staff/disablestaff/{id}', [StaffController::class, 'disableStaff'])->middleware('permission:disable_staff,can_view')->name('staff.disable');
     Route::get('staff/enablestaff/{id}', [StaffController::class, 'enableStaff'])->name('staff.enable');
+
+    Route::get('staff/rating', [StaffRatingController::class, 'index'])->middleware('permission:teachers_rating,can_view')->name('staff.rating.index');
+    Route::get('staff/ratingapr/{id}', [StaffRatingController::class, 'approve'])->middleware('permission:teachers_rating,can_edit')->name('staff.rating.approve');
+    Route::get('staff/delete_rateing/{id}', [StaffRatingController::class, 'destroy'])->middleware('permission:teachers_rating,can_delete')->name('staff.rating.destroy');
+    Route::get('Staff/ratingapr/{id}', [StaffRatingController::class, 'approve'])->middleware('permission:teachers_rating,can_edit');
+    Route::get('Staff/delete_rateing/{id}', [StaffRatingController::class, 'destroy'])->middleware('permission:teachers_rating,can_delete');
 
     Route::post('timeline/add_staff_timeline', [StaffTimelineController::class, 'store'])->name('staff.timeline.store');
     Route::post('timeline/editstafftimeline', [StaffTimelineController::class, 'update'])->name('staff.timeline.update');

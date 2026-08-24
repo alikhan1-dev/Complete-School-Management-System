@@ -2,7 +2,10 @@
     <div class="box-header with-border">
         <h3 class="box-title">Staff</h3>
         <div class="box-tools">
-            <a href="{{ route('staff.create') }}" class="btn btn-primary btn-sm">{{ __('system.add_staff') }}</a>
+            @if($canAdd ?? false)
+                <a href="{{ route('staff.import') }}" class="btn btn-info btn-sm">{{ __('system.staff_import') }}</a>
+                <a href="{{ route('staff.create') }}" class="btn btn-primary btn-sm">{{ __('system.add_staff') }}</a>
+            @endif
         </div>
     </div>
     <div class="box-body">

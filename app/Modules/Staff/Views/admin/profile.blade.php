@@ -14,6 +14,19 @@
     </div>
     <div class="box-body">
         <div class="row">
+            @if(!empty($staffPhotoUrl))
+                <div class="col-md-12" style="margin-bottom: 15px;">
+                    <img src="{{ $staffPhotoUrl }}" alt="{{ __('system.photo') }}"
+                         class="img-thumbnail"
+                         style="max-height: 120px;"
+                         onerror="this.style.display='none'">
+                </div>
+            @endif
+            @if(($isTeacherProfile ?? false) && ($staffRatingSummary['can_view_average'] ?? false) && ($staffRatingSummary['average'] ?? null) !== null)
+                <div class="col-md-12">
+                    @include('staff::admin.partials.profile_rating_summary')
+                </div>
+            @endif
             <div class="col-md-6">
                 <table class="table table-bordered">
                     <tr>
@@ -132,6 +145,12 @@
         @endif
     </div>
 </div>
+
+@include('staff::admin.partials.profile_payroll')
+
+@include('staff::admin.partials.profile_leave')
+
+@include('staff::admin.partials.profile_rating')
 
 <div class="box box-primary">
     <div class="box-header with-border">

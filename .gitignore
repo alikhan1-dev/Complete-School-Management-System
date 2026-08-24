@@ -21,3 +21,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+/.cursor/
+/public/backend/captcha_images/*.png
+/public/uploads/**
+!/public/uploads/.gitkeep

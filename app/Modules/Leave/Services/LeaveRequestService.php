@@ -170,6 +170,64 @@ class LeaveRequestService
     }
 
     /**
+     * CI admin/Staff::profile leave summary cards — types with alloted_leave > 0.
+     *
+     * @return list<array{type: string, alloted_leave: float, approve_leave: float, available: float}>
+     */
+    public function profileLeaveDetails(int $staffId): array
+    {
+        $sessionId = $this->currentSessionId();
+        $alloted = DB::table('staff_leave_details')
+            ->join('leave_types', 'staff_leave_details.leave_type_id', '=', 'leave_types.id')
+            ->where('staff_leave_details.staff_id', $staffId)
+            ->where('staff_leave_details.session_id', $sessionId)
+            ->select([
+                'staff_leave_details.alloted_leave',
+                'leave_types.type',
+                'leave_types.id as leave_type_id',
+            ])
+            ->orderBy('leave_types.id')
+            ->get();
+
+        $out = [];
+        foreach ($alloted as $value) {
+            $allotedLeave = (float) ($value->alloted_leave ?? 0);
+            if ($allotedLeave <= 0) {
+                continue;
+            }
+            $approveLeave = (float) (DB::table('staff_leave_request')
+                ->where('staff_id', $staffId)
+                ->where('leave_type_id', $value->leave_type_id)
+                ->where('session_id', $sessionId)
+                ->where('status', '!=', 'disapprove')
+                ->sum('leave_days') ?: 0);
+
+            $out[] = [
+                'type' => (string) $value->type,
+                'alloted_leave' => $allotedLeave,
+                'approve_leave' => $approveLeave,
+                'available' => $allotedLeave - $approveLeave,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Normalize CI legacy status values for profile display.
+     */
+    public static function normalizeStatus(string $status): string
+    {
+        $status = strtolower(trim($status));
+
+        return match ($status) {
+            'approved', 'approve' => 'approve',
+            'disapproved', 'disapprove' => 'disapprove',
+            default => 'pending',
+        };
+    }
+
+    /**
      * CI allotedLeaveType + available balance for dropdown.
      *
      * @return list<array{id: int, type: string, alloted_leave: float|int|string, approve_leave: float|int|string, available: float}>

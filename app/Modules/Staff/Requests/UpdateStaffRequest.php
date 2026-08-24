@@ -4,6 +4,8 @@ namespace App\Modules\Staff\Requests;
 
 use App\Modules\Academics\Services\CustomFieldValueService;
 use App\Modules\Settings\Models\SchSetting;
+use App\Modules\Staff\Services\StaffDocumentService;
+use App\Modules\Staff\Services\StaffPhotoService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -21,6 +23,7 @@ class UpdateStaffRequest extends FormRequest
     {
         $settings = SchSetting::query()->orderBy('id')->first();
         $autoStaffId = $settings && (int) $settings->staffid_auto_insert === 1;
+        $staffPhotoEnabled = $settings && (int) $settings->staff_photo === 1;
         $staffId = (int) $this->route('id');
 
         $rules = [
@@ -78,7 +81,11 @@ class UpdateStaffRequest extends FormRequest
             ];
         }
 
-        return $rules;
+        return array_merge(
+            $rules,
+            app(StaffDocumentService::class)->documentValidationRules(true),
+            app(StaffPhotoService::class)->photoValidationRules($staffPhotoEnabled),
+        );
     }
 
     /**

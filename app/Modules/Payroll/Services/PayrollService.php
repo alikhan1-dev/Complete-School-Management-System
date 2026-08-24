@@ -420,6 +420,50 @@ class PayrollService
         return $query->get()->map(fn ($row) => (array) $row)->all();
     }
 
+    /**
+     * CI Staff_model::getStaffPayroll.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function staffPayrollForProfile(int $staffId): array
+    {
+        return DB::table('staff_payslip')
+            ->where('staff_id', $staffId)
+            ->orderByDesc('year')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn ($row) => (array) $row)
+            ->all();
+    }
+
+    /**
+     * CI Payroll_model::getSalaryDetails — paid slips only.
+     *
+     * @return array{net_salary: float, earnings: float, deduction: float, basic_salary: float, tax: float}
+     */
+    public function paidSalarySummary(int $staffId): array
+    {
+        $row = DB::table('staff_payslip')
+            ->where('staff_id', $staffId)
+            ->where('status', 'paid')
+            ->select([
+                DB::raw('COALESCE(SUM(net_salary), 0) as net_salary'),
+                DB::raw('COALESCE(SUM(total_allowance), 0) as earnings'),
+                DB::raw('COALESCE(SUM(total_deduction), 0) as deduction'),
+                DB::raw('COALESCE(SUM(basic), 0) as basic_salary'),
+                DB::raw('COALESCE(SUM(tax), 0) as tax'),
+            ])
+            ->first();
+
+        return [
+            'net_salary' => $this->toAmount($row->net_salary ?? 0),
+            'earnings' => $this->toAmount($row->earnings ?? 0),
+            'deduction' => $this->toAmount($row->deduction ?? 0),
+            'basic_salary' => $this->toAmount($row->basic_salary ?? 0),
+            'tax' => $this->toAmount($row->tax ?? 0),
+        ];
+    }
+
     public function toAmount(mixed $value): float
     {
         if ($value === null || $value === '') {

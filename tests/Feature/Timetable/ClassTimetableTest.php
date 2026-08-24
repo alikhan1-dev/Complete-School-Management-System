@@ -198,7 +198,9 @@ class ClassTimetableTest extends TestCase
             'class_id' => $class->id,
             'section_id' => $section->id,
             'subject_group_id' => $group->id,
-        ])->assertOk()->assertSee('Monday', false)->assertSee($subject->name, false);
+        ])->assertOk()->assertSee('Monday', false)->assertSee($subject->name, false)
+            ->assertSee(__('system.select_parameter_to_generate_time_table_quickly'), false)
+            ->assertSee('apply-quick-periods', false);
 
         $this->post('/admin/timetable/saveday', [
             'class_id' => $class->id,

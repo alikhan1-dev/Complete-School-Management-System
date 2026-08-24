@@ -59,11 +59,13 @@
 @if($week !== null)
     @foreach($days as $day)
         @php $periods = $week[$day] ?? collect(); @endphp
-        <div class="box box-primary">
+        <div class="box box-primary day-timetable-box">
             <div class="box-header with-border">
                 <h3 class="box-title">{{ $day }}</h3>
             </div>
             <div class="box-body">
+                @include('timetable::admin.partials.quick_period_generator')
+
                 <form method="post" action="{{ route('timetable.save_day') }}" class="day-form" data-day="{{ $day }}">
                     @csrf
                     <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
@@ -116,7 +118,7 @@
                                         </select>
                                     </td>
                                     <td>
-                                        <input type="text" name="periods[{{ $i }}][room_no]" class="form-control"
+                                        <input type="text" name="periods[{{ $i }}][room_no]" class="form-control room_no"
                                                value="{{ $period->room_no }}" maxlength="100" required>
                                     </td>
                                     <td>
@@ -144,7 +146,7 @@
                                             @endforeach
                                         </select>
                                     </td>
-                                    <td><input type="text" name="periods[0][room_no]" class="form-control" maxlength="100"></td>
+                                    <td><input type="text" name="periods[0][room_no]" class="form-control room_no" maxlength="100"></td>
                                     <td>
                                         <button type="button" class="btn btn-danger btn-sm remove-row"><i class="fa fa-trash"></i></button>
                                     </td>
@@ -187,7 +189,7 @@
                     @endforeach
                 </select>
             </td>
-            <td><input type="text" name="periods[__INDEX__][room_no]" class="form-control" maxlength="100"></td>
+            <td><input type="text" name="periods[__INDEX__][room_no]" class="form-control room_no" maxlength="100"></td>
             <td>
                 <button type="button" class="btn btn-danger btn-sm remove-row"><i class="fa fa-trash"></i></button>
             </td>
@@ -295,6 +297,57 @@ $(function () {
 
     $(document).on('change', '.staff', function () {
         checkDuplicateStaffSlot($(this).closest('tr'));
+    });
+
+    function parseTimeToMinutes(value) {
+        var parts = String(value || '').split(':');
+        if (parts.length < 2) {
+            return null;
+        }
+        var hours = parseInt(parts[0], 10);
+        var minutes = parseInt(parts[1], 10);
+        if (isNaN(hours) || isNaN(minutes)) {
+            return null;
+        }
+        return (hours * 60) + minutes;
+    }
+
+    function formatMinutesToTime(totalMinutes) {
+        totalMinutes = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+        var hours = Math.floor(totalMinutes / 60);
+        var minutes = totalMinutes % 60;
+        return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+    }
+
+    $(document).on('click', '.apply-quick-periods', function () {
+        var $box = $(this).closest('.day-timetable-box');
+        var startTime = $box.find('.quick-start-time').val();
+        var duration = parseInt($box.find('.quick-duration').val(), 10);
+        var interval = parseInt($box.find('.quick-interval').val(), 10);
+        var roomNo = $box.find('.quick-room-no').val();
+
+        if (!startTime || !duration || duration <= 0) {
+            alert('{{ __('system.required') }}');
+            return;
+        }
+        if (isNaN(interval) || interval < 0) {
+            interval = 0;
+        }
+
+        var cursor = parseTimeToMinutes(startTime);
+        if (cursor === null) {
+            alert('{{ __('system.required') }}');
+            return;
+        }
+
+        $box.find('tbody tr').each(function () {
+            var from = cursor;
+            var to = from + duration;
+            $(this).find('.time_from').val(formatMinutesToTime(from));
+            $(this).find('.time_to').val(formatMinutesToTime(to));
+            $(this).find('.room_no').val(roomNo);
+            cursor = to + interval;
+        });
     });
 });
 </script>

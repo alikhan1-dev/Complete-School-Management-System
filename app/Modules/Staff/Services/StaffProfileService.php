@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI admin/Staff::profile (core read) + disablestaff/enablestaff + ajax_attendance.
- * Deferred: timeline, payroll, leave summary, rating.
  */
 class StaffProfileService
 {

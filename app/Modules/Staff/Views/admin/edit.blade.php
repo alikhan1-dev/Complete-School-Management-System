@@ -22,7 +22,7 @@
             <a href="{{ route('staff.index') }}" class="btn btn-default btn-sm">{{ __('system.back') }}</a>
         </div>
     </div>
-    <form method="post" action="{{ route('staff.update', $staff->id) }}">
+    <form method="post" action="{{ route('staff.update', $staff->id) }}" enctype="multipart/form-data">
         @csrf
         <div class="box-body">
             <div class="row">
@@ -131,6 +131,7 @@
                         </select>
                     </div>
                 </div>
+                @include('staff::admin.partials.photo_field', ['staff' => $staff])
                 <div class="col-md-3">
                     <div class="form-group">
                         <label>{{ __('system.date_of_joining') }}</label>
@@ -193,6 +194,8 @@
                     @endforeach
                 </div>
             @endif
+
+            @include('staff::admin.partials.document_fields', ['staff' => $staff])
 
             @if($customFields->isNotEmpty())
                 @include('academics::partials.custom_fields_form', [

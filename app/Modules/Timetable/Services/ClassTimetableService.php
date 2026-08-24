@@ -10,7 +10,6 @@ use InvalidArgumentException;
 
 /**
  * CI Subjecttimetable_model + Timetable classreport/create/savegroup/mytimetable/print core.
- * Deferred: quick period generator.
  */
 class ClassTimetableService
 {
@@ -376,6 +375,42 @@ class ClassTimetableService
 
             return $saved;
         });
+    }
+
+    /**
+     * CI timetableCreate.php universal_from — auto-fill period times for N rows.
+     *
+     * @return list<array{time_from:string,time_to:string}>
+     */
+    public function generatePeriodSlots(string $startTime, int $durationMinutes, int $intervalMinutes, int $rowCount): array
+    {
+        if ($rowCount <= 0) {
+            return [];
+        }
+        if ($durationMinutes <= 0) {
+            throw new InvalidArgumentException('Duration must be greater than zero.');
+        }
+        if ($intervalMinutes < 0) {
+            throw new InvalidArgumentException('Interval cannot be negative.');
+        }
+
+        $cursor = strtotime($startTime);
+        if ($cursor === false) {
+            throw new InvalidArgumentException('Invalid start time.');
+        }
+
+        $slots = [];
+        for ($i = 0; $i < $rowCount; $i++) {
+            $fromTs = $cursor;
+            $toTs = $fromTs + ($durationMinutes * 60);
+            $slots[] = [
+                'time_from' => date('H:i', $fromTs),
+                'time_to' => date('H:i', $toTs),
+            ];
+            $cursor = $toTs + ($intervalMinutes * 60);
+        }
+
+        return $slots;
     }
 
     /**

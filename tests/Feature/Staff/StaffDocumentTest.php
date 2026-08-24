@@ -3,6 +3,7 @@
 namespace Tests\Feature\Staff;
 
 use App\Modules\Staff\Models\Staff;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
@@ -37,7 +38,7 @@ class StaffDocumentTest extends TestCase
         parent::tearDown();
     }
 
-    private function actingAsSuperAdmin(): void
+    private function actingAsSuperAdmin(): int
     {
         $roleId = (int) (DB::table('roles')->where('is_superadmin', 1)->value('id')
             ?: DB::table('roles')->where('name', 'Super Admin')->value('id'));
@@ -95,6 +96,33 @@ class StaffDocumentTest extends TestCase
         ]);
         $this->createdStaffIds[] = $staffId;
         $this->actingAs(Staff::query()->findOrFail($staffId), 'staff');
+
+        return $roleId;
+    }
+
+    private function teacherRoleId(): int
+    {
+        $roleId = (int) (DB::table('roles')->where('name', 'Teacher')->value('id')
+            ?: DB::table('roles')->where('id', '!=', DB::table('roles')->where('is_superadmin', 1)->value('id'))->value('id'));
+        $this->assertGreaterThan(0, $roleId);
+
+        return $roleId;
+    }
+
+    private function baseStaffPayload(string $suffix, int $roleId): array
+    {
+        return [
+            'employee_id' => 'DOCUP-'.$suffix,
+            'role' => $roleId,
+            'name' => 'Upload',
+            'surname' => 'Staff',
+            'gender' => 'Male',
+            'dob' => '1990-04-10',
+            'email' => 'docup'.$suffix.'@example.test',
+            'contactno' => '03009998877',
+            'date_of_joining' => '2026-01-01',
+            'contract_type' => 'permanent',
+        ];
     }
 
     private function createTeacherStaff(string $suffix): Staff
@@ -206,5 +234,61 @@ class StaffDocumentTest extends TestCase
         $this->get('/admin/staff/profile/'.$target->id)
             ->assertOk()
             ->assertSee(route('staff.download', [$target->id, 'resume']), false);
+    }
+
+    public function test_staff_create_persists_uploaded_resume(): void
+    {
+        $roleId = $this->actingAsSuperAdmin();
+        $suffix = uniqid();
+        DB::table('sch_settings')->limit(1)->update(['staffid_auto_insert' => 0]);
+
+        $file = UploadedFile::fake()->create('resume-'.$suffix.'.pdf', 20, 'application/pdf');
+
+        $this->post('/admin/staff/create', array_merge($this->baseStaffPayload($suffix, $roleId), [
+            'first_doc' => $file,
+        ]))
+            ->assertRedirect(route('staff.index'))
+            ->assertSessionHas('success');
+
+        $staff = Staff::query()->where('email', 'docup'.$suffix.'@example.test')->first();
+        $this->assertNotNull($staff);
+        $this->createdStaffIds[] = (int) $staff->id;
+
+        $this->assertNotSame('', (string) $staff->resume);
+        $path = public_path('uploads/staff_documents/'.$staff->id.DIRECTORY_SEPARATOR.$staff->resume);
+        $this->assertFileExists($path);
+        $this->createdPaths[] = $path;
+    }
+
+    public function test_staff_edit_replaces_resume_document(): void
+    {
+        $this->actingAsSuperAdmin();
+        $target = $this->createTeacherStaff(uniqid());
+        $oldFile = $this->seedResumeFile($target);
+        $oldPath = public_path('uploads/staff_documents/'.$target->id.DIRECTORY_SEPARATOR.$oldFile);
+
+        $teacherRoleId = $this->teacherRoleId();
+        $newFile = UploadedFile::fake()->create('updated-resume.pdf', 20, 'application/pdf');
+
+        $this->post('/admin/staff/edit/'.$target->id, [
+            'employee_id' => $target->employee_id,
+            'role' => $teacherRoleId,
+            'name' => $target->name,
+            'gender' => $target->gender,
+            'dob' => $target->dob,
+            'email' => $target->email,
+            'resume' => $oldFile,
+            'first_doc' => $newFile,
+        ])
+            ->assertRedirect(route('staff.index'))
+            ->assertSessionHas('success');
+
+        $fresh = Staff::query()->findOrFail($target->id);
+        $this->assertNotSame($oldFile, (string) $fresh->resume);
+        $this->assertFileDoesNotExist($oldPath);
+
+        $newPath = public_path('uploads/staff_documents/'.$target->id.DIRECTORY_SEPARATOR.$fresh->resume);
+        $this->assertFileExists($newPath);
+        $this->createdPaths[] = $newPath;
     }
 }

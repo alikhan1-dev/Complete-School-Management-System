@@ -17,7 +17,6 @@ use InvalidArgumentException;
 
 /**
  * CI admin/Timetable — class timetable create/save + class report + teacher mytimetable + print.
- * Deferred: quick period generator.
  */
 class TimetableController extends Controller
 {

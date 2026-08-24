@@ -7,13 +7,14 @@ use App\Modules\Academics\Services\CustomFieldValueService;
 use App\Modules\Auth\Services\LegacyPasswordVerifier;
 use App\Modules\Certificates\Services\StaffIdCardScanCodeService;
 use App\Modules\Settings\Models\SchSetting;
+use App\Modules\Shared\Services\SaasValidationService;
 use App\Modules\Staff\Models\Staff;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
  * CI admin/Staff::create + edit + Staff_model batchInsert/add core persist.
- * Deferred: SaaS quota, mail/SMS credentials, document uploads.
  */
 class StaffAdmissionService
 {
@@ -22,15 +23,20 @@ class StaffAdmissionService
         protected CustomFieldValueService $customFields,
         protected CurrentSessionResolver $currentSession,
         protected StaffIdCardScanCodeService $scanCodes,
+        protected StaffDocumentService $documents,
+        protected StaffPhotoService $photos,
+        protected SaasValidationService $saas,
+        protected StaffCredentialNotificationService $credentials,
     ) {
     }
 
     /**
      * @param  array<string, mixed>  $input  Validated request payload
      * @param  list<array{custom_field_id:int,field_value:string}>  $customFieldRows
+     * @param  array<string, mixed>  $uploads  Document upload payload for StaffDocumentService
      * @return array{staff_id:int,employee_id:string,password:string}
      */
-    public function create(array $input, array $customFieldRows = []): array
+    public function create(array $input, array $customFieldRows = [], array $uploads = [], ?UploadedFile $photo = null): array
     {
         $settings = SchSetting::query()->orderBy('id')->firstOrFail();
         $sessionId = $this->currentSession->id();
@@ -52,7 +58,16 @@ class StaffAdmissionService
 
         $leaveRows = $this->mapLeaveRows($input);
 
-        return DB::transaction(function () use ($staffRow, $roleId, $leaveRows, $settings, $sessionId, $customFieldRows, $employeeId, $plainPassword) {
+        $this->saas->assertCanAddStaff(1);
+        $this->saas->assertCanUploadFiles(array_filter([
+            'file' => $photo,
+            'first_doc' => $uploads['first_doc'] ?? null,
+            'second_doc' => $uploads['second_doc'] ?? null,
+            'third_doc' => $uploads['third_doc'] ?? null,
+            'fourth_doc' => $uploads['fourth_doc'] ?? null,
+        ], fn ($file) => $file instanceof UploadedFile));
+
+        $result = DB::transaction(function () use ($staffRow, $roleId, $leaveRows, $settings, $sessionId, $customFieldRows, $employeeId, $plainPassword, $uploads, $photo, $input) {
             $staffId = (int) DB::table('staff')->insertGetId($staffRow);
 
             DB::table('staff_roles')->insert([
@@ -79,6 +94,18 @@ class StaffAdmissionService
                 $this->customFields->insertFor($staffId, $customFieldRows);
             }
 
+            if ($this->documents->shouldSyncUploads($uploads)) {
+                $docPayload = $this->documents->syncFromUploads($staffId, $uploads);
+                DB::table('staff')->where('id', $staffId)->update($docPayload);
+            }
+
+            if ($this->photos->shouldSync($photo)) {
+                $this->photos->assertReadableImage($photo);
+                DB::table('staff')->where('id', $staffId)->update([
+                    'image' => $this->photos->store($photo),
+                ]);
+            }
+
             $scanType = (string) ($settings->scan_code_type ?? 'barcode');
             $this->scanCodes->generate($employeeId, $staffId, $scanType !== '' ? $scanType : 'barcode');
 
@@ -86,8 +113,101 @@ class StaffAdmissionService
                 'staff_id' => $staffId,
                 'employee_id' => $employeeId,
                 'password' => $plainPassword,
+                'email' => trim((string) ($input['email'] ?? '')),
+                'first_name' => trim((string) ($input['name'] ?? '')),
+                'last_name' => trim((string) ($input['surname'] ?? '')),
+                'contact_no' => trim((string) ($input['contactno'] ?? $input['contact_no'] ?? '')),
             ];
         });
+
+        $this->saas->incrementStaffQuota(1);
+        $this->saas->recordStaffUploadStorage(array_filter([
+            'file' => $photo,
+            'first_doc' => $uploads['first_doc'] ?? null,
+            'second_doc' => $uploads['second_doc'] ?? null,
+            'third_doc' => $uploads['third_doc'] ?? null,
+            'fourth_doc' => $uploads['fourth_doc'] ?? null,
+        ], fn ($file) => $file instanceof UploadedFile));
+
+        $this->credentials->queueStaffCreateCredential([
+            'staff_id' => $result['staff_id'],
+            'first_name' => $result['first_name'],
+            'last_name' => $result['last_name'],
+            'username' => $result['email'],
+            'password' => $result['password'],
+            'contact_no' => $result['contact_no'],
+            'email' => $result['email'],
+            'employee_id' => $result['employee_id'],
+        ]);
+
+        return [
+            'staff_id' => $result['staff_id'],
+            'employee_id' => $result['employee_id'],
+            'password' => $result['password'],
+        ];
+    }
+
+    /**
+     * CI admin/Staff::import row persist — CSV employee_id, no auto-id, no leave/custom fields.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{staff_id:int,employee_id:string,password:string}
+     */
+    public function importRow(array $input, int $roleId): array
+    {
+        $settings = SchSetting::query()->orderBy('id')->firstOrFail();
+
+        $employeeId = trim((string) ($input['employee_id'] ?? ''));
+        if ($employeeId === '') {
+            throw new \InvalidArgumentException('Employee id is required.');
+        }
+        if ($this->employeeIdExists($employeeId)) {
+            throw new \InvalidArgumentException('Employee id '.$employeeId.' already exists.');
+        }
+
+        $email = trim((string) ($input['email'] ?? ''));
+        if ($email !== '' && Staff::query()->where('email', $email)->exists()) {
+            throw new \InvalidArgumentException('Email already exists.');
+        }
+
+        $plainPassword = $this->randomPassword();
+        $staffRow = $this->mapImportStaffRow($input, $employeeId, $plainPassword, $settings);
+
+        $result = DB::transaction(function () use ($staffRow, $roleId, $settings, $employeeId, $plainPassword, $input, $email) {
+            $staffId = (int) DB::table('staff')->insertGetId($staffRow);
+
+            DB::table('staff_roles')->insert([
+                'staff_id' => $staffId,
+                'role_id' => $roleId,
+                'is_active' => 1,
+            ]);
+
+            $scanType = (string) ($settings->scan_code_type ?? 'barcode');
+            $this->scanCodes->generate($employeeId, $staffId, $scanType !== '' ? $scanType : 'barcode');
+
+            return [
+                'staff_id' => $staffId,
+                'employee_id' => $employeeId,
+                'password' => $plainPassword,
+                'email' => $email,
+                'contact_no' => trim((string) ($input['contactno'] ?? $input['contact_no'] ?? '')),
+            ];
+        });
+
+        $this->saas->incrementStaffQuota(1);
+        $this->credentials->queueImportCredential([
+            'staff_id' => $result['staff_id'],
+            'username' => $result['email'],
+            'password' => $result['password'],
+            'contact_no' => $result['contact_no'],
+            'email' => $result['email'],
+        ]);
+
+        return [
+            'staff_id' => $result['staff_id'],
+            'employee_id' => $result['employee_id'],
+            'password' => $result['password'],
+        ];
     }
 
     /**
@@ -139,8 +259,9 @@ class StaffAdmissionService
     /**
      * @param  array<string, mixed>  $input
      * @param  list<array{custom_field_id:int,field_value:string}>  $customFieldRows
+     * @param  array<string, mixed>  $uploads
      */
-    public function update(int $staffId, array $input, array $customFieldRows = []): void
+    public function update(int $staffId, array $input, array $customFieldRows = [], array $uploads = [], ?UploadedFile $photo = null): void
     {
         $staff = Staff::query()->find($staffId);
         if ($staff === null) {
@@ -171,6 +292,19 @@ class StaffAdmissionService
         }
 
         $updateRow = $this->mapUpdateRow($input, $employeeId);
+        if ($this->documents->shouldSyncUploads($uploads)) {
+            $updateRow = array_merge($updateRow, $this->documents->syncFromUploads($staffId, $uploads, [
+                'resume' => (string) $staff->resume,
+                'joining_letter' => (string) $staff->joining_letter,
+                'resignation_letter' => (string) $staff->resignation_letter,
+                'other_document_name' => (string) $staff->other_document_name,
+                'other_document_file' => (string) $staff->other_document_file,
+            ]));
+        }
+        if ($this->photos->shouldSync($photo)) {
+            $this->photos->assertReadableImage($photo);
+            $updateRow['image'] = $this->photos->replace((string) $staff->image, $photo);
+        }
 
         DB::transaction(function () use ($staffId, $updateRow, $roleId, $input, $customFieldRows, $sessionId, $settings, $employeeId, $previousEmployeeId) {
             DB::table('staff')->where('id', $staffId)->update($updateRow);
@@ -370,6 +504,22 @@ class StaffAdmissionService
             'is_active' => 1,
             'verification_code' => '',
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    protected function mapImportStaffRow(array $input, string $employeeId, string $plainPassword, SchSetting $settings): array
+    {
+        $row = $this->mapStaffRow($input, $employeeId, $plainPassword, $settings);
+        $leaving = (string) ($input['date_of_leaving'] ?? '');
+        $row['date_of_leaving'] = $leaving !== '' ? $leaving : null;
+        $row['resume'] = (string) ($input['resume'] ?? '');
+        $row['joining_letter'] = (string) ($input['joining_letter'] ?? '');
+        $row['resignation_letter'] = (string) ($input['resignation_letter'] ?? '');
+
+        return $row;
     }
 
     /**

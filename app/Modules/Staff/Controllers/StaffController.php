@@ -4,16 +4,23 @@ namespace App\Modules\Staff\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Academics\Services\CustomFieldValueService;
+use App\Modules\Leave\Services\LeaveRequestService;
+use App\Modules\Payroll\Services\PayrollService;
 use App\Modules\Roles\Models\Role;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Settings\Models\SchSetting;
 use App\Modules\Shared\Services\DataTableResponse;
+use App\Modules\Shared\Services\SchoolContext;
 use App\Modules\Staff\Models\Staff;
 use App\Modules\Staff\Requests\StoreStaffRequest;
 use App\Modules\Staff\Requests\UpdateStaffRequest;
 use App\Modules\Staff\Services\StaffAdmissionService;
+use App\Modules\Staff\Services\StaffDeleteService;
 use App\Modules\Staff\Services\StaffDocumentService;
+use App\Modules\Staff\Services\StaffImportService;
+use App\Modules\Staff\Services\StaffPhotoService;
 use App\Modules\Staff\Services\StaffProfileService;
+use App\Modules\Staff\Services\StaffRatingService;
 use App\Modules\Staff\Services\StaffTimelineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -23,6 +30,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StaffController extends Controller
 {
@@ -32,7 +40,14 @@ class StaffController extends Controller
         protected StaffAdmissionService $admission,
         protected StaffProfileService $profile,
         protected StaffDocumentService $documents,
+        protected StaffPhotoService $photos,
+        protected StaffDeleteService $deletion,
+        protected StaffImportService $importer,
+        protected PayrollService $payroll,
+        protected SchoolContext $school,
         protected StaffTimelineService $timeline,
+        protected LeaveRequestService $leaveRequests,
+        protected StaffRatingService $ratings,
     ) {
     }
 
@@ -43,6 +58,7 @@ class StaffController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Staff',
             'contentView' => 'staff::admin.index',
+            'canAdd' => $this->permissions->hasPrivilege('staff', 'can_add'),
         ]);
     }
 
@@ -51,9 +67,25 @@ class StaffController extends Controller
         abort_unless($this->permissions->hasPrivilege('staff', 'can_view'), 403);
 
         $draw = (int) $request->input('draw', 1);
-        $rows = Staff::query()->orderBy('id')->limit(500)->get()->map(function (Staff $staff) {
+        $canDelete = $this->permissions->hasPrivilege('staff', 'can_delete');
+        /** @var Staff|null $actor */
+        $actor = Auth::guard('staff')->user();
+
+        $rows = Staff::query()->orderBy('id')->limit(500)->get()->map(function (Staff $staff) use ($canDelete, $actor) {
             $profileUrl = route('staff.profile', $staff->id);
             $editUrl = route('staff.edit', $staff->id);
+
+            $actions = '<a href="'.$profileUrl.'" class="btn btn-default btn-xs">View</a> '
+                .'<a href="'.$editUrl.'" class="btn btn-default btn-xs">Edit</a>';
+
+            if ($canDelete && $actor !== null) {
+                $roleId = (int) DB::table('staff_roles')->where('staff_id', $staff->id)->value('role_id');
+                if ((int) $actor->id !== (int) $staff->id && $roleId !== 7) {
+                    $deleteUrl = route('staff.destroy', $staff->id);
+                    $actions .= ' <a href="'.$deleteUrl.'" class="btn btn-danger btn-xs" '
+                        .'onclick="return confirm('.json_encode((string) __('system.delete_confirm')).');">Delete</a>';
+                }
+            }
 
             return [
                 $staff->id,
@@ -61,8 +93,7 @@ class StaffController extends Controller
                 trim($staff->name.' '.$staff->surname),
                 $staff->email,
                 ((int) $staff->is_active === 1) ? 'Active' : 'Inactive',
-                '<a href="'.$profileUrl.'" class="btn btn-default btn-xs">View</a> '
-                .'<a href="'.$editUrl.'" class="btn btn-default btn-xs">Edit</a>',
+                $actions,
             ];
         })->all();
 
@@ -99,7 +130,12 @@ class StaffController extends Controller
         );
 
         try {
-            $result = $this->admission->create($request->validated(), $customRows);
+            $result = $this->admission->create(
+                $request->validated(),
+                $customRows,
+                $this->documents->uploadsFromRequest($request),
+                $this->photos->photoFromRequest($request),
+            );
         } catch (\InvalidArgumentException $e) {
             return redirect()
                 ->back()
@@ -156,7 +192,13 @@ class StaffController extends Controller
         );
 
         try {
-            $this->admission->update($id, $request->validated(), $customRows);
+            $this->admission->update(
+                $id,
+                $request->validated(),
+                $customRows,
+                $this->documents->uploadsFromRequest($request),
+                $this->photos->photoFromRequest($request),
+            );
         } catch (\InvalidArgumentException $e) {
             return redirect()
                 ->back()
@@ -180,6 +222,8 @@ class StaffController extends Controller
         $actor = Auth::guard('staff')->user();
         $enableDisable = (int) $actor->id !== $id;
         $visibleTimelineOnly = (int) $actor->id === $id;
+        $salarySummary = $this->payroll->paidSalarySummary($id);
+        $isTeacherProfile = $this->ratings->isTeacherProfile($staffProfile);
 
         return view('shared::layouts.admin', [
             'title' => 'Staff Details',
@@ -188,6 +232,7 @@ class StaffController extends Controller
             'enableDisable' => $enableDisable,
             'canDisableStaff' => $this->permissions->hasPrivilege('disable_staff', 'can_view'),
             'canEditStaff' => $this->permissions->hasPrivilege('staff', 'can_edit'),
+            'canViewPayroll' => $this->permissions->hasPrivilege('staff_payroll', 'can_view'),
             'canAddTimeline' => $this->permissions->hasPrivilege('staff_timeline', 'can_add'),
             'canEditTimeline' => $this->permissions->hasPrivilege('staff_timeline', 'can_edit'),
             'canDeleteTimeline' => $this->permissions->hasPrivilege('staff_timeline', 'can_delete'),
@@ -196,7 +241,21 @@ class StaffController extends Controller
             'attendanceYears' => $this->profile->attendanceYearOptions(),
             'defaultAttendanceYear' => (int) date('Y'),
             'staffDocuments' => $this->documents->listForProfile($staffProfile),
+            'staffPhotoUrl' => $this->photos->publicUrl((string) ($staffProfile->image ?? '')),
             'timelineList' => $this->timeline->listFor($id, $visibleTimelineOnly),
+            'staffPayroll' => $this->payroll->staffPayrollForProfile($id),
+            'salarySummary' => $salarySummary,
+            'payrollStatusLabels' => PayrollService::PAYROLL_STATUS,
+            'paymentModeLabels' => PayrollService::PAYMENT_MODE,
+            'leaveDetails' => $this->leaveRequests->profileLeaveDetails($id),
+            'staffLeaves' => $this->leaveRequests->listRequests($id),
+            'leaveStatusLabels' => LeaveRequestService::STATUS_LABELS,
+            'canViewLeaveRequest' => $this->permissions->hasPrivilege('approve_leave_request', 'can_view'),
+            'isTeacherProfile' => $isTeacherProfile,
+            'staffRatingSummary' => $isTeacherProfile ? $this->ratings->summaryForProfile($id) : null,
+            'staffReviews' => $isTeacherProfile ? $this->ratings->approvedReviews($id) : [],
+            'currencySymbol' => $this->school->currencySymbol(),
+            'schoolDateFormat' => $this->school->dateFormat(),
             'editingTimeline' => request()->filled('edit_timeline')
                 ? $this->timeline->find((int) request()->query('edit_timeline'))
                 : null,
@@ -240,6 +299,78 @@ class StaffController extends Controller
         return redirect()
             ->route('staff.profile', $id)
             ->with('success', (string) __('system.delete_message'));
+    }
+
+    public function destroy(int $id): RedirectResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('staff', 'can_delete'), 403);
+
+        $target = Staff::query()->findOrFail($id);
+        /** @var Staff $actor */
+        $actor = Auth::guard('staff')->user();
+        $this->deletion->assertCanDelete($target, $actor);
+        $this->deletion->delete($id);
+
+        return redirect()
+            ->route('staff.index')
+            ->with('success', (string) __('system.delete_message'));
+    }
+
+    public function import(Request $request): View|RedirectResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('staff', 'can_add'), 403);
+
+        if ($request->isMethod('post')) {
+            $validated = $request->validate([
+                'role' => ['required', 'integer', 'min:1'],
+                'designation' => ['nullable'],
+                'department' => ['nullable'],
+                'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+            ]);
+
+            $uploaded = $request->file('file');
+            abort_unless($uploaded !== null, 422);
+
+            if (strtolower($uploaded->getClientOriginalExtension()) !== 'csv') {
+                return redirect()
+                    ->route('staff.import')
+                    ->withErrors(['file' => (string) __('system.extension_not_allowed')]);
+            }
+
+            $result = $this->importer->importFromCsv(
+                $uploaded->getRealPath(),
+                (int) $validated['role'],
+                StaffImportService::normalizeOptionalId($validated['department'] ?? null),
+                StaffImportService::normalizeOptionalId($validated['designation'] ?? null),
+            );
+
+            return redirect()
+                ->route('staff.import')
+                ->with('success', __('system.total').' '.$result['total'].' '
+                    .__('system.records_found_in_CSV_file_total').' '.$result['imported'].' '
+                    .__('system.records_imported_successfully'));
+        }
+
+        return view('shared::layouts.admin', [
+            'title' => __('system.staff_import'),
+            'contentView' => 'staff::admin.import',
+            'fields' => StaffImportService::DISPLAY_FIELDS,
+            'roles' => Role::query()->orderBy('id')->get(),
+            'departments' => DB::table('department')->where('is_active', 'yes')->orderBy('id')->get(),
+            'designations' => DB::table('staff_designation')->where('is_active', 'yes')->orderBy('id')->get(),
+        ]);
+    }
+
+    public function exportFormat(): StreamedResponse|BinaryFileResponse
+    {
+        abort_unless($this->permissions->hasPrivilege('staff', 'can_add'), 403);
+
+        $path = $this->importer->sampleCsvPath();
+        abort_unless(File::isFile($path), 404);
+
+        return response()->download($path, 'staff_csvfile.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
     }
 
     public function ajaxAttendance(Request $request): JsonResponse
