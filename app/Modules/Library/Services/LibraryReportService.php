@@ -3,17 +3,21 @@
 namespace App\Modules\Library\Services;
 
 use App\Modules\Shared\Services\ClassTeacherScopeService;
+use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Staff\Models\Staff;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
  * CI Report library hub + book issue / due / inventory / issue-return reports.
- * Deferred: superadmin_visible staff filtering, DataTables AJAX endpoints.
+ * Deferred: DataTables AJAX endpoints.
  */
 class LibraryReportService
 {
     public function __construct(
         protected ClassTeacherScopeService $classTeacherScope,
+        protected SchoolContext $school,
     ) {
     }
 
@@ -253,6 +257,8 @@ class LibraryReportService
                 'staff.name as staff_name',
                 'staff.surname as staff_surname',
                 'staff.employee_id',
+                'staff.id as staff_id',
+                DB::raw('(SELECT role_id FROM staff_roles WHERE staff_id = staff.id AND is_active = 1 LIMIT 1) as staff_role_id'),
             ])
             ->get();
 
@@ -306,10 +312,14 @@ class LibraryReportService
                 'staff.name as staff_name',
                 'staff.surname as staff_surname',
                 'staff.employee_id',
+                'staff.id as staff_id',
+                DB::raw('(SELECT role_id FROM staff_roles WHERE staff_id = staff.id AND is_active = 1 LIMIT 1) as staff_role_id'),
             ]);
     }
 
     /**
+     * CI Report::dtbookissuereportlist / dtbookduereportlist — blank staff name when member is superadmin.
+     *
      * @param  Collection<int, object>  $rows
      * @return Collection<int, object>
      */
@@ -332,8 +342,15 @@ class LibraryReportService
                     (string) ($row->staff_surname ?? ''),
                 ])));
                 $employeeId = (string) ($row->employee_id ?? '');
-                $row->issue_by = $name.($employeeId !== '' ? ' ('.$employeeId.')' : '');
-                $row->admission_display = $employeeId;
+
+                if ($this->shouldMaskStaffMember((int) ($row->staff_role_id ?? 0))) {
+                    $row->issue_by = '';
+                    $row->admission_display = '';
+                } else {
+                    $row->issue_by = $name.($employeeId !== '' ? ' ('.$employeeId.')' : '');
+                    $row->admission_display = $employeeId;
+                }
+
                 $row->member_type_label = 'Staff';
             }
 
@@ -343,5 +360,32 @@ class LibraryReportService
 
             return $row;
         });
+    }
+
+    /**
+     * CI customlib::superadmin_visible + getStaffRole when restriction is disabled.
+     */
+    protected function shouldMaskStaffMember(int $memberStaffRoleId): bool
+    {
+        if ($memberStaffRoleId !== 7) {
+            return false;
+        }
+
+        if ($this->school->superadminRestriction() !== 'disabled') {
+            return false;
+        }
+
+        return $this->viewerRoleId() !== 7;
+    }
+
+    protected function viewerRoleId(): int
+    {
+        /** @var Staff|null $staff */
+        $staff = Auth::guard('staff')->user();
+        if (! $staff) {
+            return 0;
+        }
+
+        return (int) ($staff->roles()->value('roles.id') ?? 0);
     }
 }

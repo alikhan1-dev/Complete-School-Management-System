@@ -15,12 +15,13 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Hostel',
             'status' => 'done',
-            'message' => 'Hostel admin core + student hostel report done.',
+            'message' => 'Hostel admin core + student hostel report incl. class-teacher scope done.',
             'slices' => [
                 'room_types' => 'done',
                 'hostels' => 'done',
                 'hostel_rooms' => 'done',
                 'student_hostel_report' => 'done',
+                'student_hostel_report_class_teacher' => 'done',
             ],
         ]);
     }

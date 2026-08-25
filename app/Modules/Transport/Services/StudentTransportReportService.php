@@ -3,22 +3,33 @@
 namespace App\Modules\Transport\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
  * CI admin/route/studenttransportdetails — student transport report.
- * Deferred: class-teacher class_section scope filtering.
  */
 class StudentTransportReportService
 {
     public function __construct(
         protected CurrentSessionResolver $currentSession,
+        protected ClassTeacherScopeService $classTeacherScope,
         protected TransportRouteService $routes,
         protected RoutePickupPointService $routePickups,
         protected VehicleRouteService $vehicleRoutes,
     ) {
+    }
+
+    /**
+     * CI Class_model::get() teacher-restricted class list for report filters.
+     *
+     * @return Collection<int, object>
+     */
+    public function classes(): Collection
+    {
+        return $this->classTeacherScope->classesForDropdown();
     }
 
     public function sessionId(): int
@@ -83,6 +94,17 @@ class StudentTransportReportService
     public function search(array $filters): Collection
     {
         $sessionId = $this->sessionId();
+        $map = $this->classTeacherScope->myClassSectionMap();
+
+        if ($this->classTeacherScope->isRestricted() && $map === []) {
+            return collect();
+        }
+
+        $classId = (int) ($filters['class_id'] ?? 0);
+        $sectionId = (int) ($filters['section_id'] ?? 0);
+        if ($classId > 0 && ! $this->allowsClassSection($classId, $sectionId)) {
+            return collect();
+        }
 
         $query = DB::table('students')
             ->join('student_session', 'students.id', '=', 'student_session.student_id')
@@ -94,8 +116,13 @@ class StudentTransportReportService
             ->join('vehicle_routes', 'student_session.vehroute_id', '=', 'vehicle_routes.id')
             ->join('vehicles', 'vehicle_routes.vehicle_id', '=', 'vehicles.id')
             ->where('students.is_active', 'yes')
-            ->where('student_session.session_id', $sessionId)
-            ->select([
+            ->where('student_session.session_id', $sessionId);
+
+        if ($map !== []) {
+            $this->classTeacherScope->applyStudentSessionScope($query, $map);
+        }
+
+        $query->select([
                 'students.firstname',
                 'students.middlename',
                 'students.id',
@@ -122,12 +149,10 @@ class StudentTransportReportService
             ->orderBy('classes.class')
             ->orderBy('sections.section');
 
-        $classId = (int) ($filters['class_id'] ?? 0);
         if ($classId > 0) {
             $query->where('student_session.class_id', $classId);
         }
 
-        $sectionId = (int) ($filters['section_id'] ?? 0);
         if ($sectionId > 0) {
             $query->where('student_session.section_id', $sectionId);
         }
@@ -148,5 +173,18 @@ class StudentTransportReportService
         }
 
         return $query->get();
+    }
+
+    protected function allowsClassSection(int $classId, int $sectionId): bool
+    {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return true;
+        }
+
+        if ($sectionId > 0) {
+            return $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union');
+        }
+
+        return in_array($classId, $this->classTeacherScope->restrictedClassIds(), true);
     }
 }

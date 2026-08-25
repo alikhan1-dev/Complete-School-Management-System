@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Library',
             'status' => 'done',
-            'message' => 'Library admin + reports + student portal done (incl. book issue report class-teacher empty-matrix deny). Deferred: admin issue_report list, superadmin_visible filtering.',
+            'message' => 'Library admin + reports + student portal done (incl. book issue report class-teacher empty-matrix deny + library reports superadmin_visible staff masking). Deferred: admin issue_report list, member list superadmin filter.',
             'slices' => [
                 'books_crud' => 'done',
                 'books_import' => 'done',
@@ -23,6 +23,7 @@ class ModuleStatusController extends Controller
                 'issue_return' => 'done',
                 'reports' => 'done',
                 'book_issue_report_class_teacher' => 'done',
+                'library_reports_superadmin_visible' => 'done',
                 'student_portal' => 'done',
             ],
         ]);

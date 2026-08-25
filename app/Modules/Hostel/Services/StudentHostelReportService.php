@@ -3,16 +3,31 @@
 namespace App\Modules\Hostel\Services;
 
 use App\Modules\Hostel\Models\Hostel;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
  * CI admin/hostelroom/studenthosteldetails — student hostel report.
  * Form POST search replaces CI DataTables AJAX (searchvalidation/dthostellist).
- * Deferred: class-teacher class_section scope filtering.
  */
 class StudentHostelReportService
 {
+    public function __construct(
+        protected ClassTeacherScopeService $classTeacherScope,
+    ) {
+    }
+
+    /**
+     * CI Class_model::get() teacher-restricted class list for report filters.
+     *
+     * @return Collection<int, object>
+     */
+    public function classes(): Collection
+    {
+        return $this->classTeacherScope->classesForDropdown();
+    }
+
     /**
      * @return Collection<int, Hostel>
      */
@@ -30,6 +45,19 @@ class StudentHostelReportService
      */
     public function search(array $filters): Collection
     {
+        $classId = (int) ($filters['class_id'] ?? 0);
+        $sectionId = (int) ($filters['section_id'] ?? 0);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $allowedClasses = $this->classTeacherScope->restrictedClassIds();
+            if ($allowedClasses === [] || ! in_array($classId, $allowedClasses, true)) {
+                return collect();
+            }
+            if (! $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union')) {
+                return collect();
+            }
+        }
+
         $query = DB::table('students')
             ->join('student_session', 'students.id', '=', 'student_session.student_id')
             ->join('sections', 'sections.id', '=', 'student_session.section_id')
@@ -38,8 +66,8 @@ class StudentHostelReportService
             ->join('hostel', 'hostel.id', '=', 'hostel_rooms.hostel_id')
             ->join('room_types', 'room_types.id', '=', 'hostel_rooms.room_type_id')
             ->where('students.is_active', 'yes')
-            ->where('student_session.class_id', (int) $filters['class_id'])
-            ->where('student_session.section_id', (int) $filters['section_id'])
+            ->where('student_session.class_id', $classId)
+            ->where('student_session.section_id', $sectionId)
             ->select([
                 'students.id',
                 'students.firstname',

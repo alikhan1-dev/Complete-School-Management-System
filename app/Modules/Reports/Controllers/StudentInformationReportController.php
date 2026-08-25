@@ -679,6 +679,7 @@ class StudentInformationReportController extends Controller
             'rows' => $rows,
             'searched' => $searched,
             'alumniMap' => $this->alumniReports->alumniDetailsByStudentId(),
+            'customFields' => $this->alumniReports->studentTableCustomFields(),
             'reports' => $this->alumniReports,
         ], $this->navFlags()));
     }

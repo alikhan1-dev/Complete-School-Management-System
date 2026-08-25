@@ -2,6 +2,7 @@
 
 namespace App\Modules\Reports\Services;
 
+use App\Modules\Academics\Services\CustomFieldValueService;
 use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
 use Carbon\Carbon;
@@ -10,13 +11,14 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI Report::alumnireport + Student_model::search_alumniStudentReport.
- * Requires alumni_students row (inner join). Deferred: custom fields, add-details modal.
+ * Requires alumni_students row (inner join).
  */
 class AlumniReportService
 {
     public function __construct(
         protected SchoolContext $school,
         protected ClassTeacherScopeService $classTeacherScope,
+        protected CustomFieldValueService $customFields,
     ) {
     }
 
@@ -64,6 +66,34 @@ class AlumniReportService
     public function classes(): Collection
     {
         return $this->classTeacherScope->classesForDropdown();
+    }
+
+    /**
+     * CI customfield_model::get_custom_fields('students', 1) — visible_on_table columns.
+     *
+     * @return Collection<int, object>
+     */
+    public function studentTableCustomFields(): Collection
+    {
+        return $this->customFields->fieldsForTable('students');
+    }
+
+    /**
+     * CI student custom-field cell (link type opens in new tab).
+     */
+    public function customFieldDisplay(object $student, object $field): string
+    {
+        $values = (array) ($student->table_custom ?? []);
+        $value = (string) ($values[(int) $field->id] ?? '');
+        if ($value === '') {
+            return '';
+        }
+
+        if ((string) ($field->type ?? '') === 'link') {
+            return '<a href="'.e($value).'" target="_blank">'.e($value).'</a>';
+        }
+
+        return e($value);
     }
 
     /**
@@ -156,9 +186,13 @@ class AlumniReportService
             ->groupBy('student_session.student_id')
             ->pluck('class', 'student_id');
 
-        return $students->map(function ($student) use ($labels, $sessionId) {
+        $studentIds = $students->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $customMaps = $this->customFields->tableValuesByBelongIds('students', $studentIds);
+
+        return $students->map(function ($student) use ($labels, $sessionId, $customMaps) {
             $student->class = (string) ($labels[$student->id] ?? '');
             $student->session_id = $sessionId;
+            $student->table_custom = $customMaps[(int) $student->id] ?? [];
 
             return $student;
         });

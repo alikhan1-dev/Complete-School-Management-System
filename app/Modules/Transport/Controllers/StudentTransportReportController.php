@@ -3,7 +3,6 @@
 namespace App\Modules\Transport\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Shared\Services\SchoolContext;
 use App\Modules\Transport\Services\StudentTransportReportService;
@@ -44,7 +43,7 @@ class StudentTransportReportController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Student Transport Report',
             'contentView' => 'transport::admin.reports.student_transport',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->reports->classes(),
             'routes' => $this->reports->listRoutes(),
             'filters' => $filters,
             'rows' => $rows,

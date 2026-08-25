@@ -3,7 +3,6 @@
 namespace App\Modules\OnlineExam\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\OnlineExam\Services\OnlineExamReportService;
 use App\Modules\Roles\Services\PermissionService;
 use Illuminate\Http\Request;
@@ -11,7 +10,7 @@ use Illuminate\View\View;
 
 /**
  * CI Report online examinations hub + onlineexams + onlineexamattend + result + rank.
- * Deferred: ranking generation UI, DataTables AJAX / modal print, class-teacher scope.
+ * Deferred: DataTables AJAX / modal print.
  */
 class OnlineExamReportController extends Controller
 {
@@ -151,7 +150,7 @@ class OnlineExamReportController extends Controller
             'searched' => $searched,
             'errors' => $errors,
             'examList' => $this->reports->examsForCurrentSession(),
-            'classlist' => SchoolClass::query()->orderBy('class')->get(),
+            'classlist' => $this->reports->classes(),
             'sectionOptions' => $this->reports->sectionsForClass((int) ($filters['class_id'] ?: 0)),
             'reports' => $this->reports,
         ], $this->navFlags()));
@@ -200,7 +199,7 @@ class OnlineExamReportController extends Controller
             'searched' => $searched,
             'errors' => $errors,
             'examList' => $this->reports->examsForCurrentSession(),
-            'classlist' => SchoolClass::query()->orderBy('class')->get(),
+            'classlist' => $this->reports->classes(),
             'sectionOptions' => $this->reports->sectionsForClass((int) ($filters['class_id'] ?: 0)),
             'reports' => $this->reports,
         ], $this->navFlags()));

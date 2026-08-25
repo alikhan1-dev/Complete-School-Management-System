@@ -3,7 +3,6 @@
 namespace App\Modules\Hostel\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Hostel\Services\StudentHostelReportService;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Shared\Services\SchoolContext;
@@ -41,7 +40,7 @@ class StudentHostelReportController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Student Hostel Report',
             'contentView' => 'hostel::admin.reports.student_hostel',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->reports->classes(),
             'hostels' => $this->reports->listHostels(),
             'filters' => $filters,
             'rows' => $rows,

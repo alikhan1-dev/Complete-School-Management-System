@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Transport',
             'status' => 'operational_core_done',
-            'message' => 'Transport operational core complete: vehicles, routes, vehroute, pickup points, route assign, reorder, student transport report, fees-master, student transport fees assign, pointmap. Deferred polish only if discovered later.',
+            'message' => 'Transport operational core complete: vehicles, routes, vehroute, pickup points, route assign, reorder, student transport report incl. class-teacher scope, fees-master, student transport fees assign, pointmap. Deferred polish only if discovered later.',
             'slices' => [
                 'vehicles_crud' => 'done',
                 'routes' => 'done',
@@ -25,6 +25,7 @@ class ModuleStatusController extends Controller
                 'pickup_reorder' => 'done',
                 'pickup_pointmap' => 'done',
                 'student_transport_report' => 'done',
+                'student_transport_report_class_teacher' => 'done',
                 'transport_fees_master' => 'done',
                 'student_transport_fees' => 'done',
             ],

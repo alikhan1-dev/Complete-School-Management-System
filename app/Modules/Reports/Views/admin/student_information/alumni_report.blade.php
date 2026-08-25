@@ -79,6 +79,9 @@
                         <th>{{ __('system.current_address') }}</th>
                         <th>{{ __('system.occupation') }}</th>
                         <th>{{ __('system.current_phone') }}</th>
+                        @foreach($customFields as $field)
+                            <th>{{ $field->name }}</th>
+                        @endforeach
                     </tr>
                 </thead>
                 <tbody>
@@ -100,10 +103,13 @@
                             <td>{{ $reports->displayAddress($student, $alumni) }}</td>
                             <td>{{ $alumni->occupation ?? '' }}</td>
                             <td>{{ $alumni->current_phone ?? '' }}</td>
+                            @foreach($customFields as $field)
+                                <td>{!! $reports->customFieldDisplay($student, $field) !!}</td>
+                            @endforeach
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9">{{ __('system.no_record_found') }}</td>
+                            <td colspan="{{ 9 + $customFields->count() }}">{{ __('system.no_record_found') }}</td>
                         </tr>
                     @endforelse
                 </tbody>

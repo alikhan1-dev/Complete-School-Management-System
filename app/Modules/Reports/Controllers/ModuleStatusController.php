@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Reports',
             'status' => 'in_progress',
-            'message' => 'Student information (incl. alumni report + class-teacher scope + student_profile table custom fields + class-section view-students modal) + Attendencereports full (incl. class-teacher scope) + Financereports (incl. class-teacher scope + transport fee lines) + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js.',
+            'message' => 'Student information (incl. alumni report + class-teacher scope + student_profile table custom fields + alumni report table custom fields + class-section view-students modal) + Attendencereports full (incl. class-teacher scope) + Financereports (incl. class-teacher scope + transport fee lines) + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js.',
             'slices' => [
                 'student_information_hub' => 'done',
                 'student_report' => 'done',
@@ -33,6 +33,7 @@ class ModuleStatusController extends Controller
                 'student_profile_table_custom_fields' => 'done',
                 'online_admission_report' => 'done',
                 'alumni_report' => 'done',
+                'alumni_report_table_custom_fields' => 'done',
                 'student_information_class_teacher' => 'done',
                 'attendance_reports_hub_daywise_daily_type' => 'done',
                 'attendance_reports_monthly_calendars' => 'done',

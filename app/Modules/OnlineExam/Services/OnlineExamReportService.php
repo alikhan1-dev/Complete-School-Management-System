@@ -4,25 +4,38 @@ namespace App\Modules\OnlineExam\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\OnlineExam\Models\OnlineExam;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
  * CI Report online examinations hub + exams + attempt + result + rank reports.
- * Deferred: ranking generation UI, class-teacher scope, DataTables AJAX / modal print.
+ * Deferred: DataTables AJAX / modal print.
  */
 class OnlineExamReportService
 {
     public function __construct(
         protected SchoolContext $school,
         protected CurrentSessionResolver $currentSession,
+        protected ClassTeacherScopeService $classTeacherScope,
         protected OnlineExamResultService $results,
     ) {
     }
 
     /**
-     * CI Onlineexam_model::get() list for current session (report dropdown).
+     * CI Class_model::get() teacher-restricted class list for report filters.
+     *
+     * @return Collection<int, object>
+     */
+    public function classes(): Collection
+    {
+        return $this->classTeacherScope->classesForDropdown();
+    }
+
+    /**
+     * CI Onlineexam_model::get() / get_myexam — exams for current session dropdown.
      *
      * @return list<object>
      */
@@ -33,8 +46,41 @@ class OnlineExamReportService
             return [];
         }
 
-        return DB::table('onlineexam')
-            ->where('session_id', $sessionId)
+        $query = DB::table('onlineexam')
+            ->where('session_id', $sessionId);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $map = $this->classTeacherScope->myClassSectionMap();
+            if ($map === []) {
+                return [];
+            }
+
+            $scopedExamQuery = DB::table('onlineexam_students')
+                ->join('student_session', 'student_session.id', '=', 'onlineexam_students.student_session_id')
+                ->where('student_session.session_id', $sessionId);
+            $this->classTeacherScope->applyStudentSessionScope($scopedExamQuery, $map);
+            $scopedIds = $scopedExamQuery->distinct()->pluck('onlineexam_students.onlineexam_id')->all();
+
+            $unassignedIds = DB::table('onlineexam')
+                ->leftJoin('onlineexam_students', 'onlineexam_students.onlineexam_id', '=', 'onlineexam.id')
+                ->where('onlineexam.session_id', $sessionId)
+                ->whereNull('onlineexam_students.id')
+                ->pluck('onlineexam.id')
+                ->all();
+
+            $examIds = array_values(array_unique(array_filter(array_map(
+                'intval',
+                array_merge($scopedIds, $unassignedIds)
+            ), fn (int $id) => $id > 0)));
+
+            if ($examIds === []) {
+                return [];
+            }
+
+            $query->whereIn('id', $examIds);
+        }
+
+        return $query
             ->orderByDesc('id')
             ->select(['id', 'exam', 'attempt'])
             ->get()
@@ -42,7 +88,7 @@ class OnlineExamReportService
     }
 
     /**
-     * Sections linked to a class (for result-report filter restore).
+     * Sections linked to a class (for result/rank report filter restore).
      *
      * @return list<object{section_id:int,section:string}>
      */
@@ -50,6 +96,10 @@ class OnlineExamReportService
     {
         if ($classId <= 0) {
             return [];
+        }
+
+        if ($this->classTeacherScope->isRestricted()) {
+            return $this->classTeacherScope->sectionsForClass($classId);
         }
 
         return DB::table('class_sections')
@@ -201,20 +251,27 @@ class OnlineExamReportService
 
     /**
      * CI Onlineexam_model::dtonlineexamReport (+ Report::dtexamreportlist display fields).
-     * Class-teacher scope deferred. No onlineexam.session_id filter (CI parity).
      *
      * @return list<object>
      */
     public function examsReport(string $searchType, string $dateType, ?string $dateFrom = null, ?string $dateTo = null): array
     {
+        if ($this->shouldReturnEmptyForRestricted()) {
+            return [];
+        }
+
         $range = $this->dateRange($searchType, $dateFrom, $dateTo);
+        $map = $this->classTeacherScope->myClassSectionMap();
 
         $query = DB::table('onlineexam')
-            ->whereExists(function ($sub) {
+            ->whereExists(function ($sub) use ($map) {
                 $sub->select(DB::raw(1))
                     ->from('onlineexam_students')
                     ->join('student_session', 'student_session.id', '=', 'onlineexam_students.student_session_id')
                     ->whereColumn('onlineexam_students.onlineexam_id', 'onlineexam.id');
+                if ($map !== []) {
+                    $this->classTeacherScope->applyStudentSessionScope($sub, $map);
+                }
             })
             ->select([
                 'onlineexam.id',
@@ -240,7 +297,6 @@ class OnlineExamReportService
 
     /**
      * CI Onlineexam_model::onlineexamatteptreport + Report::dtexamattemptreport display.
-     * Class-teacher empty-result trap deferred. Current session + active students required.
      *
      * @return list<array{
      *     student_id: int,
@@ -256,11 +312,12 @@ class OnlineExamReportService
     public function attemptReport(string $searchType, string $dateType, ?string $dateFrom = null, ?string $dateTo = null): array
     {
         $sessionId = $this->currentSession->id();
-        if ($sessionId <= 0) {
+        if ($sessionId <= 0 || $this->shouldReturnEmptyForRestricted()) {
             return [];
         }
 
         $range = $this->dateRange($searchType, $dateFrom, $dateTo);
+        $map = $this->classTeacherScope->myClassSectionMap();
 
         $query = DB::table('student_session')
             ->join('onlineexam_students', 'onlineexam_students.student_session_id', '=', 'student_session.id')
@@ -269,8 +326,13 @@ class OnlineExamReportService
             ->join('sections', 'sections.id', '=', 'student_session.section_id')
             ->join('onlineexam', 'onlineexam.id', '=', 'onlineexam_students.onlineexam_id')
             ->where('student_session.session_id', $sessionId)
-            ->where('students.is_active', 'yes')
-            ->orderBy('students.firstname')
+            ->where('students.is_active', 'yes');
+
+        if ($map !== []) {
+            $this->classTeacherScope->applyStudentSessionScope($query, $map);
+        }
+
+        $query->orderBy('students.firstname')
             ->orderBy('students.id')
             ->orderBy('onlineexam.id')
             ->select([
@@ -333,7 +395,11 @@ class OnlineExamReportService
             return [];
         }
 
-        return DB::table('student_session')
+        if ($this->shouldReturnEmptyForRestricted() || ! $this->allowsClassSection($classId, $sectionId)) {
+            return [];
+        }
+
+        $query = DB::table('student_session')
             ->join('onlineexam_students', 'onlineexam_students.student_session_id', '=', 'student_session.id')
             ->join('students', 'students.id', '=', 'student_session.student_id')
             ->join('classes', 'classes.id', '=', 'student_session.class_id')
@@ -359,9 +425,14 @@ class OnlineExamReportService
                 'onlineexam_students.student_session_id',
                 'onlineexam_students.is_attempted',
                 DB::raw('(SELECT COUNT(*) FROM onlineexam_attempts WHERE onlineexam_attempts.onlineexam_student_id = onlineexam_students.id) as total_counter'),
-            ])
-            ->get()
-            ->all();
+            ]);
+
+        $map = $this->classTeacherScope->myClassSectionMap();
+        if ($map !== []) {
+            $this->classTeacherScope->applyStudentSessionScope($query, $map);
+        }
+
+        return $query->get()->all();
     }
 
     /**
@@ -373,7 +444,11 @@ class OnlineExamReportService
     public function rankReport(int $examId, ?int $classId = null, ?int $sectionId = null): array
     {
         $sessionId = $this->currentSession->id();
-        if ($sessionId <= 0 || $examId <= 0) {
+        if ($sessionId <= 0 || $examId <= 0 || $this->shouldReturnEmptyForRestricted()) {
+            return ['exam' => null, 'rows' => []];
+        }
+
+        if ($classId !== null && $classId > 0 && ! $this->allowsClassSection($classId, (int) ($sectionId ?? 0))) {
             return ['exam' => null, 'rows' => []];
         }
 
@@ -424,6 +499,11 @@ class OnlineExamReportService
             $query->where('student_session.section_id', $sectionId);
         }
 
+        $map = $this->classTeacherScope->myClassSectionMap();
+        if ($map !== []) {
+            $this->classTeacherScope->applyStudentSessionScope($query, $map);
+        }
+
         $rows = [];
         foreach ($query->get() as $student) {
             $questionRows = $this->results->resultRows((int) $student->onlineexam_student_id, $examId);
@@ -434,6 +514,29 @@ class OnlineExamReportService
         }
 
         return ['exam' => $exam, 'rows' => $rows];
+    }
+
+    protected function shouldReturnEmptyForRestricted(): bool
+    {
+        return $this->classTeacherScope->isRestricted()
+            && $this->classTeacherScope->myClassSectionMap() === [];
+    }
+
+    protected function allowsClassSection(int $classId, int $sectionId): bool
+    {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return true;
+        }
+
+        if ($classId <= 0) {
+            return true;
+        }
+
+        if ($sectionId > 0) {
+            return $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union');
+        }
+
+        return in_array($classId, $this->classTeacherScope->restrictedClassIds(), true);
     }
 
     /**
