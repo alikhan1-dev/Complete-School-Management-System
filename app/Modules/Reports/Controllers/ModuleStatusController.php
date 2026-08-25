@@ -15,11 +15,12 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Reports',
             'status' => 'in_progress',
-            'message' => 'Student information (incl. alumni report + class-teacher scope + student_profile table custom fields) + Attendencereports full (incl. class-teacher scope) + Financereports (incl. class-teacher scope + transport fee lines) + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js.',
+            'message' => 'Student information (incl. alumni report + class-teacher scope + student_profile table custom fields + class-section view-students modal) + Attendencereports full (incl. class-teacher scope) + Financereports (incl. class-teacher scope + transport fee lines) + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js.',
             'slices' => [
                 'student_information_hub' => 'done',
                 'student_report' => 'done',
                 'class_section_report' => 'done',
+                'class_section_view_students_modal' => 'done',
                 'gender_ratio' => 'done',
                 'teacher_ratio' => 'done',
                 'guardian_report' => 'done',

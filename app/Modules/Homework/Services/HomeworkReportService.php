@@ -3,18 +3,19 @@
 namespace App\Modules\Homework\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * CI homework reports — homework / evaluation / marks.
- * Deferred: daily assignment report (DataTables + date-range AJAX).
+ * CI homework reports — homework / evaluation / marks / daily assignment.
  */
 class HomeworkReportService
 {
     public function __construct(
         protected CurrentSessionResolver $currentSession,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -31,7 +32,27 @@ class HomeworkReportService
     }
 
     /**
-     * CI search_dthomeworkreport (without class-teacher matrix filter).
+     * CI Class_model::get() teacher-restricted class list for report filters.
+     *
+     * @return Collection<int, object>
+     */
+    public function classes(): Collection
+    {
+        return $this->classTeacherScope->classesForDropdown();
+    }
+
+    /**
+     * CI Homework::homeworkreport access_denied when restricted teacher has no matrix.
+     */
+    public function assertHasClassSectionMatrix(): void
+    {
+        if ($this->classTeacherScope->isRestricted() && $this->classTeacherScope->myClassSectionMap() === []) {
+            abort(403);
+        }
+    }
+
+    /**
+     * CI search_dthomeworkreport (+ getTeacherClassSectionMatrix row filter).
      *
      * @param  array{class_id?:mixed,section_id?:mixed,subject_group_id?:mixed,subject_id?:mixed}  $filters
      * @return Collection<int, object>
@@ -51,7 +72,7 @@ class HomeworkReportService
 
         $this->applyHomeworkFilters($q, $filters);
 
-        return $q->orderByDesc('homework.homework_date')
+        $rows = $q->orderByDesc('homework.homework_date')
             ->select([
                 'homework.*',
                 'classes.class',
@@ -68,6 +89,29 @@ class HomeworkReportService
                 'staff.employee_id as staff_employee_id',
             ])
             ->get();
+
+        return $this->filterCollectionByMatrix($rows);
+    }
+
+    /**
+     * @return Collection<int, object>
+     */
+    protected function filterCollectionByMatrix(Collection $rows): Collection
+    {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return $rows;
+        }
+
+        $matrix = $this->classTeacherScope->myClassSectionMap();
+        if ($matrix === []) {
+            return collect();
+        }
+
+        $filtered = $this->classTeacherScope->filterRowsByMatrix(
+            $rows->map(fn ($r) => (array) $r)->all()
+        );
+
+        return collect($filtered)->map(fn (array $r) => (object) $r);
     }
 
     /**

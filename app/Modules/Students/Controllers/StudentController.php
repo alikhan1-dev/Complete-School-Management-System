@@ -7,6 +7,7 @@ use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Academics\Services\CustomFieldValueService;
 use App\Modules\Parents\Services\ParentAccountService;
+use App\Modules\Reports\Services\StudentInformationReportService;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Settings\Models\SchSetting;
 use App\Modules\Students\Models\Category;
@@ -44,6 +45,7 @@ class StudentController extends Controller
         protected ParentAccountService $parents,
         protected CurrentSessionResolver $currentSession,
         protected MultiClassStudentService $multiClass,
+        protected StudentInformationReportService $studentInfoReports,
     ) {
     }
 
@@ -579,6 +581,34 @@ class StudentController extends Controller
         })->values();
 
         return response()->json($rows);
+    }
+
+    /**
+     * CI Student::getStudentByClassSection — class section report view-students modal.
+     */
+    public function getStudentByClassSection(Request $request): JsonResponse
+    {
+        abort_unless(
+            $this->permissions->hasPrivilege('student', 'can_view')
+            || $this->permissions->hasPrivilege('student_report', 'can_view')
+            || $this->permissions->hasPrivilege('class_section_report', 'can_view'),
+            403
+        );
+
+        $classSectionId = (int) $request->input('cls_section_id', 0);
+        $customFields = $this->studentInfoReports->studentTableCustomFields();
+        $studentList = $this->studentInfoReports->studentsByClassSectionId($classSectionId);
+
+        $page = view('reports::admin.student_information._get_student_by_class_section', [
+            'student_list' => $studentList,
+            'customFields' => $customFields,
+            'reports' => $this->studentInfoReports,
+        ])->render();
+
+        return response()->json([
+            'status' => 1,
+            'page' => $page,
+        ]);
     }
 
     public function getStudentRecordByID(Request $request): JsonResponse

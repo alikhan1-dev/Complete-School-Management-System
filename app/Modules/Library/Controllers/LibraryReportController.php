@@ -32,6 +32,7 @@ class LibraryReportController extends Controller
     public function bookIssue(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('book_issue_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = $this->filterInput($request);
         $rows = collect();

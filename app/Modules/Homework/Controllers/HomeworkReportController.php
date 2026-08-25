@@ -3,7 +3,6 @@
 namespace App\Modules\Homework\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Academics\Models\Section;
 use App\Modules\Homework\Services\HomeworkReportService;
 use App\Modules\Roles\Services\PermissionService;
@@ -34,6 +33,7 @@ class HomeworkReportController extends Controller
     public function homeworkReport(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('homework', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = $this->filterInput($request);
         $rows = collect();
@@ -44,7 +44,7 @@ class HomeworkReportController extends Controller
         return view('shared::layouts.admin', array_merge([
             'title' => 'Homework Report',
             'contentView' => 'homework::admin.reports.homework',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->reports->classes(),
             'sections' => Section::query()->orderBy('section')->get(),
             'filters' => $filters,
             'rows' => $rows,
@@ -54,6 +54,7 @@ class HomeworkReportController extends Controller
     public function homeworkReportStudents(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('homework', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $data = $request->validate([
             'homework_id' => ['required', 'integer'],
@@ -108,7 +109,7 @@ class HomeworkReportController extends Controller
         return view('shared::layouts.admin', array_merge([
             'title' => 'Homework Evaluation Report',
             'contentView' => 'homework::admin.reports.evaluation',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->reports->classes(),
             'sections' => Section::query()->orderBy('section')->get(),
             'filters' => $filters,
             'rows' => $rows,
@@ -137,7 +138,7 @@ class HomeworkReportController extends Controller
         return view('shared::layouts.admin', array_merge([
             'title' => 'Homework Marks Report',
             'contentView' => 'homework::admin.reports.marks',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->reports->classes(),
             'sections' => Section::query()->orderBy('section')->get(),
             'filters' => $filters,
             'rows' => $rows,
@@ -180,7 +181,7 @@ class HomeworkReportController extends Controller
         return view('shared::layouts.admin', array_merge([
             'title' => 'Daily Assignment Report',
             'contentView' => 'homework::admin.reports.daily',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->reports->classes(),
             'sections' => Section::query()->orderBy('section')->get(),
             'filters' => $filters,
             'rows' => $rows,

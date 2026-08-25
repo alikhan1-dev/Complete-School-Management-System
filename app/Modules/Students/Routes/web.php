@@ -62,6 +62,8 @@ Route::middleware(['staff.auth'])->group(function () {
     Route::post('student/searchvalidation', [StudentController::class, 'searchValidation'])->name('students.search_validation');
     Route::post('student/dtstudentlist', [StudentController::class, 'datatable'])->name('students.datatable');
     Route::get('student/getByClassAndSection', [StudentController::class, 'getByClassAndSection'])->name('students.by_class_section');
+    Route::post('student/getStudentByClassSection', [StudentController::class, 'getStudentByClassSection'])
+        ->name('students.by_class_section_id');
     Route::get('student/getStudentRecordByID', [StudentController::class, 'getStudentRecordByID'])->name('students.record_by_id');
 
     Route::get('student/create', [StudentController::class, 'create'])->name('students.create');

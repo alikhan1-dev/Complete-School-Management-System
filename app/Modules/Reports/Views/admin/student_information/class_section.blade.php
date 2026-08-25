@@ -14,6 +14,7 @@
                         <th>{{ __('system.s_no') }}</th>
                         <th>{{ __('system.class') }}</th>
                         <th>{{ __('system.students') }}</th>
+                        <th class="text-right">{{ __('system.action') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -22,6 +23,14 @@
                             <td>{{ $index + 1 }}</td>
                             <td>{{ $row->class }} ({{ $row->section }})</td>
                             <td>{{ $row->student_count }}</td>
+                            <td class="text-right">
+                                <button type="button"
+                                    class="btn btn-primary btn-xs studentlist"
+                                    data-clssection-id="{{ $row->id }}"
+                                    title="{{ __('system.view_students') }}">
+                                    <i class="fa fa-eye"></i>
+                                </button>
+                            </td>
                         </tr>
                     @endforeach
                 </tbody>
@@ -29,3 +38,49 @@
         @endif
     </div>
 </div>
+
+<div id="studentModal" class="modal fade" role="dialog">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">{{ __('system.student_list') }}</h4>
+            </div>
+            <div class="modal-body"></div>
+        </div>
+    </div>
+</div>
+
+@push('scripts')
+<script>
+$(function () {
+    $('#studentModal').modal({ backdrop: 'static', keyboard: false, show: false });
+
+    $(document).on('click', '.studentlist', function () {
+        var $this = $(this);
+        $.ajax({
+            type: 'POST',
+            url: '{{ url('student/getStudentByClassSection') }}',
+            data: {
+                _token: '{{ csrf_token() }}',
+                cls_section_id: $this.data('clssection-id')
+            },
+            dataType: 'JSON',
+            beforeSend: function () {
+                $this.prop('disabled', true);
+            },
+            success: function (data) {
+                $('#studentModal .modal-body').html(data.page);
+                $('#studentModal').modal('show');
+            },
+            error: function () {
+                alert(@json(__('system.error_occurred_please_try_again')));
+            },
+            complete: function () {
+                $this.prop('disabled', false);
+            }
+        });
+    });
+});
+</script>
+@endpush

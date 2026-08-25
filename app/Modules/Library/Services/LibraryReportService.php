@@ -2,6 +2,7 @@
 
 namespace App\Modules\Library\Services;
 
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -11,6 +12,21 @@ use Illuminate\Support\Facades\DB;
  */
 class LibraryReportService
 {
+    public function __construct(
+        protected ClassTeacherScopeService $classTeacherScope,
+    ) {
+    }
+
+    /**
+     * CI Report::studentbookissuereport access_denied when restricted teacher has no matrix.
+     */
+    public function assertHasClassSectionMatrix(): void
+    {
+        if ($this->classTeacherScope->isRestricted() && $this->classTeacherScope->myClassSectionMap() === []) {
+            abort(403);
+        }
+    }
+
     /**
      * @return array<string, string>
      */

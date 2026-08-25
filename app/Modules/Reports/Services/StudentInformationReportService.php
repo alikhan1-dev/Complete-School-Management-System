@@ -141,6 +141,77 @@ class StudentInformationReportService
     }
 
     /**
+     * CI Student_model::getStudentBy_class_section_id (class-section report modal).
+     * Merges visible-on-table custom fields post-query (CI left-joins by field name).
+     *
+     * @return Collection<int, object>
+     */
+    public function studentsByClassSectionId(int $classSectionId): Collection
+    {
+        if ($classSectionId <= 0) {
+            return collect();
+        }
+
+        $classSection = DB::table('class_sections')->where('id', $classSectionId)->first();
+        if (! $classSection) {
+            return collect();
+        }
+
+        $classId = (int) $classSection->class_id;
+        $sectionId = (int) $classSection->section_id;
+        if (! $this->canAccessClass($classId, $sectionId)) {
+            return collect();
+        }
+
+        $sessionId = (int) $this->currentSession->id();
+        $rows = DB::table('students')
+            ->join('student_session', 'student_session.student_id', '=', 'students.id')
+            ->join('classes', 'student_session.class_id', '=', 'classes.id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('class_sections', function ($join) {
+                $join->on('class_sections.class_id', '=', 'classes.id')
+                    ->on('class_sections.section_id', '=', 'sections.id');
+            })
+            ->leftJoin('categories', 'students.category_id', '=', 'categories.id')
+            ->leftJoin('users', function ($join) {
+                $join->on('users.user_id', '=', 'students.id')
+                    ->where('users.role', '=', 'student');
+            })
+            ->where('student_session.session_id', $sessionId)
+            ->where('class_sections.id', $classSectionId)
+            ->where('students.is_active', 'yes')
+            ->whereNotNull('users.id')
+            ->select([
+                'students.id',
+                'students.admission_no',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.father_name',
+                'students.dob',
+                'students.gender',
+                'students.mobileno',
+                'classes.class',
+                'sections.section',
+                'class_sections.id as class_section_id',
+                DB::raw("IFNULL(categories.category, '') as category"),
+            ])
+            ->orderBy('students.id')
+            ->get();
+
+        $customMaps = $this->customFields->tableValuesByBelongIds(
+            'students',
+            $rows->pluck('id')->map(fn ($id) => (int) $id)->all()
+        );
+
+        return $rows->map(function ($student) use ($customMaps) {
+            $student->table_custom = $customMaps[(int) $student->id] ?? [];
+
+            return $student;
+        });
+    }
+
+    /**
      * CI Student_model::student_ratio (without unused custom-field joins).
      *
      * @return Collection<int, object>
