@@ -3,9 +3,9 @@
 namespace App\Modules\Attendance\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Attendance\Services\SubjectPeriodAttendanceService;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,13 +14,14 @@ use InvalidArgumentException;
 
 /**
  * CI admin/Subjectattendence — period / subject attendance mark + save.
- * SMS / class-teacher subject filter deferred.
+ * SMS deferred (Communication).
  */
 class SubjectAttendenceController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
-        protected SubjectPeriodAttendanceService $attendance
+        protected SubjectPeriodAttendanceService $attendance,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -92,7 +93,12 @@ class SubjectAttendenceController extends Controller
                 }
 
                 try {
-                    $count = $this->attendance->addOrUpdate($rows);
+                    $count = $this->attendance->addOrUpdate(
+                        $rows,
+                        (int) $data['class_id'],
+                        (int) $data['section_id'],
+                        $data['date'],
+                    );
                 } catch (InvalidArgumentException $e) {
                     return back()->withInput()->withErrors(['search' => $e->getMessage()]);
                 }
@@ -124,7 +130,8 @@ class SubjectAttendenceController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Period Attendance',
             'contentView' => 'attendance::admin.subjectattendence.index',
-            'classes' => SchoolClass::query()->orderBy('id')->get(),
+            // CI Class_model::get — union timetable ∪ class_teacher when restricted
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'types' => $types,
             'periodOptions' => $periodOptions,
             'resultList' => $resultList,
@@ -209,7 +216,7 @@ class SubjectAttendenceController extends Controller
         return view('shared::layouts.admin', [
             'title' => __('system.period_attendance_by_date'),
             'contentView' => 'attendance::admin.subjectattendence.reportbydate',
-            'classes' => SchoolClass::query()->orderBy('id')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'types' => $types,
             'report' => $report,
             'searched' => $searched,

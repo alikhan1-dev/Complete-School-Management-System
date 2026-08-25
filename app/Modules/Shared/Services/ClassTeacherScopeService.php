@@ -173,16 +173,66 @@ class ClassTeacherScopeService
             ->pluck('section_id')
             ->all();
 
-        $fromClassTeacher = DB::table('class_teacher')
-            ->where('staff_id', $staffId)
-            ->where('session_id', $sessionId)
-            ->where('class_id', $classId)
-            ->pluck('section_id')
-            ->all();
+        $fromClassTeacher = $this->classTeacherOnlySectionIdsForClass($classId);
 
         $ids = array_values(array_unique(array_filter(array_map(
             'intval',
             array_merge($fromTimetable, $fromClassTeacher)
+        ), fn (int $id) => $id > 0)));
+
+        sort($ids);
+
+        return $ids;
+    }
+
+    /**
+     * CI Teacher_model::get_daywiseattendanceclass — class_teacher table only.
+     *
+     * @return list<int>
+     */
+    public function classTeacherOnlyClassIds(): array
+    {
+        $staffId = $this->staffId();
+        $sessionId = (int) $this->currentSession->id();
+        if ($staffId <= 0 || $sessionId <= 0) {
+            return [];
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map(
+            'intval',
+            DB::table('class_teacher')
+                ->where('staff_id', $staffId)
+                ->where('session_id', $sessionId)
+                ->pluck('class_id')
+                ->all()
+        ), fn (int $id) => $id > 0)));
+
+        sort($ids);
+
+        return $ids;
+    }
+
+    /**
+     * CI Teacher_model::get_teacherrestricted_modesections day_wise branch.
+     *
+     * @return list<int>
+     */
+    public function classTeacherOnlySectionIdsForClass(int $classId): array
+    {
+        $staffId = $this->staffId();
+        $sessionId = (int) $this->currentSession->id();
+        if ($staffId <= 0 || $sessionId <= 0 || $classId <= 0) {
+            return [];
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map(
+            'intval',
+            DB::table('class_teacher')
+                ->where('staff_id', $staffId)
+                ->where('session_id', $sessionId)
+                ->where('class_id', $classId)
+                ->pluck('section_id')
+                ->all()
         ), fn (int $id) => $id > 0)));
 
         sort($ids);
@@ -201,30 +251,39 @@ class ClassTeacherScopeService
             return DB::table('classes')->orderBy('id')->get(['id', 'class']);
         }
 
-        $ids = $this->restrictedClassIds();
-        if ($ids === []) {
-            return collect();
+        return $this->classesByIds($this->restrictedClassIds());
+    }
+
+    /**
+     * Classes for Attendance By Date — CI get_daywiseattendanceclass.
+     *
+     * @return Collection<int, object>
+     */
+    public function classesForDayWiseAttendanceDropdown(): Collection
+    {
+        if (! $this->isRestricted()) {
+            return DB::table('classes')->orderBy('id')->get(['id', 'class']);
         }
 
-        return DB::table('classes')
-            ->whereIn('id', $ids)
-            ->orderBy('id')
-            ->get(['id', 'class']);
+        return $this->classesByIds($this->classTeacherOnlyClassIds());
     }
 
     /**
      * Sections for a class — CI Section_model::getClassBySection.
+     * When $dayWise is true and restricted, use class_teacher sections only.
      *
      * @return list<object{section_id:int|string,section:string,id?:int|string}>
      */
-    public function sectionsForClass(int $classId): array
+    public function sectionsForClass(int $classId, bool $dayWise = false): array
     {
         if ($classId <= 0) {
             return [];
         }
 
         if ($this->isRestricted()) {
-            $sectionIds = $this->restrictedSectionIdsForClass($classId);
+            $sectionIds = $dayWise
+                ? $this->classTeacherOnlySectionIdsForClass($classId)
+                : $this->restrictedSectionIdsForClass($classId);
             if ($sectionIds === []) {
                 return [];
             }
@@ -254,6 +313,112 @@ class ClassTeacherScopeService
             ])
             ->get()
             ->all();
+    }
+
+    /**
+     * Whether the restricted teacher may use this class/section pair.
+     *
+     * Modes (CI parity):
+     * - union     — timetable ∪ class_teacher (subject/period attendance)
+     * - day_mark  — union classes + class_teacher-only sections (day mark day_wise)
+     * - day_wise  — class_teacher-only classes + sections (attendance by date)
+     */
+    public function allowsClassSection(int $classId, int $sectionId, string $mode = 'union'): bool
+    {
+        if (! $this->isRestricted()) {
+            return $classId > 0 && $sectionId > 0;
+        }
+
+        if ($classId <= 0 || $sectionId <= 0) {
+            return false;
+        }
+
+        if ($mode === 'day_wise') {
+            if (! in_array($classId, $this->classTeacherOnlyClassIds(), true)) {
+                return false;
+            }
+
+            return in_array($sectionId, $this->classTeacherOnlySectionIdsForClass($classId), true);
+        }
+
+        if (! in_array($classId, $this->restrictedClassIds(), true)) {
+            return false;
+        }
+
+        if ($mode === 'day_mark') {
+            return in_array($sectionId, $this->classTeacherOnlySectionIdsForClass($classId), true);
+        }
+
+        // union (default)
+        return in_array($sectionId, $this->restrictedSectionIdsForClass($classId), true);
+    }
+
+    /**
+     * CI Teacher_model::my_classes — class_ids from class_teacher only.
+     *
+     * @return list<int>
+     */
+    public function myClassTeacherClassIds(): array
+    {
+        return $this->classTeacherOnlyClassIds();
+    }
+
+    /**
+     * CI Teacher_model::get_subjectby_classid — subject_group_subject ids taught by staff.
+     *
+     * @return list<int>
+     */
+    public function subjectGroupSubjectIdsForClassSection(int $classId, int $sectionId): array
+    {
+        $staffId = $this->staffId();
+        $sessionId = (int) $this->currentSession->id();
+        if ($staffId <= 0 || $sessionId <= 0 || $classId <= 0 || $sectionId <= 0) {
+            return [];
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map(
+            'intval',
+            DB::table('subject_timetable')
+                ->where('staff_id', $staffId)
+                ->where('session_id', $sessionId)
+                ->where('class_id', $classId)
+                ->where('section_id', $sectionId)
+                ->pluck('subject_group_subject_id')
+                ->all()
+        ), fn (int $id) => $id > 0)));
+
+        sort($ids);
+
+        return $ids;
+    }
+
+    /**
+     * CI Subjecttimetable_model::getSubjectByClassandSectionDay teacher branch.
+     * Class teacher for the class → all periods; otherwise → own subject_group_subjects only.
+     */
+    public function shouldFilterPeriodsToOwnSubjects(int $classId): bool
+    {
+        if (! $this->isRestricted()) {
+            return false;
+        }
+
+        return ! in_array($classId, $this->myClassTeacherClassIds(), true);
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return Collection<int, object>
+     */
+    protected function classesByIds(array $ids): Collection
+    {
+        if ($ids === []) {
+            return collect();
+        }
+
+        return DB::table('classes')
+            ->whereIn('id', $ids)
+            ->orderBy('id')
+            ->get(['id', 'class']);
     }
 
     /**

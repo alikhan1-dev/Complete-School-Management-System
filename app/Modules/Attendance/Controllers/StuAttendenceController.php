@@ -3,9 +3,9 @@
 namespace App\Modules\Attendance\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Attendance\Services\StudentDayAttendanceService;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -18,7 +18,8 @@ class StuAttendenceController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
-        protected StudentDayAttendanceService $attendance
+        protected StudentDayAttendanceService $attendance,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -77,7 +78,11 @@ class StuAttendenceController extends Controller
                 }
 
                 try {
-                    $count = $this->attendance->addOrUpdate($rows);
+                    $count = $this->attendance->addOrUpdate(
+                        $rows,
+                        (int) $data['class_id'],
+                        (int) $data['section_id'],
+                    );
                 } catch (InvalidArgumentException $e) {
                     return back()->withInput()->withErrors(['search' => $e->getMessage()]);
                 }
@@ -109,7 +114,8 @@ class StuAttendenceController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Student Attendance',
             'contentView' => 'attendance::admin.stuattendence.index',
-            'classes' => SchoolClass::query()->orderBy('id')->get(),
+            // CI Class_model::get — union timetable ∪ class_teacher when restricted
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'types' => $types,
             'resultList' => $resultList,
             'filters' => $filters,
@@ -121,7 +127,7 @@ class StuAttendenceController extends Controller
     /**
      * CI admin/stuattendence/attendencereport — Attendance By Date (read-only prepared list).
      * Privilege: attendance_by_date can_view.
-     * Class-teacher restricted class list deferred.
+     * Class list: CI Teacher_model::get_daywiseattendanceclass (class_teacher only).
      */
     public function attendencereport(Request $request): View|RedirectResponse
     {
@@ -165,7 +171,7 @@ class StuAttendenceController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Attendance By Date',
             'contentView' => 'attendance::admin.stuattendence.attendencereport',
-            'classes' => SchoolClass::query()->orderBy('id')->get(),
+            'classes' => $this->classTeacherScope->classesForDayWiseAttendanceDropdown(),
             'types' => $types,
             'resultList' => $resultList,
             'filters' => $filters,

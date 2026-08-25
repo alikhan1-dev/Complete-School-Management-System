@@ -94,8 +94,10 @@ class SectionController extends Controller
     public function getByClass(Request $request): JsonResponse
     {
         $classId = (int) $request->query('class_id', 0);
+        // CI Teacher_model::get_teacherrestricted_modesections honors ?day_wise=
+        $dayWise = filled($request->query('day_wise'));
 
-        $rows = collect($this->classTeacherScope->sectionsForClass($classId))
+        $rows = collect($this->classTeacherScope->sectionsForClass($classId, $dayWise))
             ->map(function ($row) {
                 return [
                     'id' => (string) $row->id,

@@ -5,6 +5,7 @@ namespace App\Modules\Attendance\Services;
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Attendance\Models\AttendenceType;
 use App\Modules\Attendance\Models\StudentAttendence;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -25,8 +26,10 @@ class StudentDayAttendanceService
 
     public const TYPE_HALF_DAY = 6;
 
-    public function __construct(protected CurrentSessionResolver $currentSession)
-    {
+    public function __construct(
+        protected CurrentSessionResolver $currentSession,
+        protected ClassTeacherScopeService $classTeacherScope,
+    ) {
     }
 
     /**
@@ -49,6 +52,11 @@ class StudentDayAttendanceService
         $sessionId = $this->currentSession->id();
         if ($sessionId <= 0) {
             throw new InvalidArgumentException('Current academic session is not configured.');
+        }
+
+        // Day mark: class = union; section = class_teacher-only (CI day_wise)
+        if (! $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'day_mark')) {
+            return collect();
         }
 
         return DB::table('student_session')
@@ -86,7 +94,7 @@ class StudentDayAttendanceService
     /**
      * CI searchAttendenceClassSectionPrepare — Attendance By Date.
      * Only students who already have an attendance row for that date (RIGHT JOIN semantics).
-     * Class-teacher class filter deferred (CI teacher role_id=2 path).
+     * Class-teacher filter: class_teacher table only (CI get_daywiseattendanceclass).
      *
      * @return Collection<int, object>
      */
@@ -95,6 +103,10 @@ class StudentDayAttendanceService
         $sessionId = $this->currentSession->id();
         if ($sessionId <= 0) {
             throw new InvalidArgumentException('Current academic session is not configured.');
+        }
+
+        if (! $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'day_wise')) {
+            return collect();
         }
 
         return DB::table('student_attendences')
@@ -136,15 +148,20 @@ class StudentDayAttendanceService
      *     out_time?:string|null
      * }>  $rows
      */
-    public function addOrUpdate(array $rows): int
+    public function addOrUpdate(array $rows, ?int $classId = null, ?int $sectionId = null): int
     {
         if ($rows === []) {
             throw new InvalidArgumentException('No attendance rows to save.');
         }
 
+        if ($classId !== null && $sectionId !== null
+            && ! $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'day_mark')) {
+            throw new InvalidArgumentException('You are not allowed to mark attendance for this class/section.');
+        }
+
         $activeTypeIds = AttendenceType::query()->active()->pluck('id')->map(fn ($id) => (int) $id)->all();
 
-        return (int) DB::transaction(function () use ($rows, $activeTypeIds) {
+        return (int) DB::transaction(function () use ($rows, $activeTypeIds, $classId, $sectionId) {
             $saved = 0;
 
             foreach ($rows as $row) {
@@ -157,6 +174,17 @@ class StudentDayAttendanceService
                 }
                 if (! in_array($typeId, $activeTypeIds, true)) {
                     throw new InvalidArgumentException('Invalid attendance type.');
+                }
+
+                if ($classId !== null && $sectionId !== null) {
+                    $belongs = DB::table('student_session')
+                        ->where('id', $studentSessionId)
+                        ->where('class_id', $classId)
+                        ->where('section_id', $sectionId)
+                        ->exists();
+                    if (! $belongs) {
+                        throw new InvalidArgumentException('Student session does not belong to the selected class/section.');
+                    }
                 }
 
                 $inTime = $row['in_time'] ?? null;

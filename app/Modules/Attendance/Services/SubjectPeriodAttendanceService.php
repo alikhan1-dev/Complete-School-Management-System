@@ -5,18 +5,21 @@ namespace App\Modules\Attendance\Services;
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Attendance\Models\AttendenceType;
 use App\Modules\Attendance\Models\StudentSubjectAttendance;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
  * CI Studentsubjectattendence_model + subjecttimetable day lookup for period attendance.
- * SMS and class-teacher subject filter deferred.
+ * SMS deferred (Communication).
  */
 class SubjectPeriodAttendanceService
 {
-    public function __construct(protected CurrentSessionResolver $currentSession)
-    {
+    public function __construct(
+        protected CurrentSessionResolver $currentSession,
+        protected ClassTeacherScopeService $classTeacherScope,
+    ) {
     }
 
     /**
@@ -28,7 +31,8 @@ class SubjectPeriodAttendanceService
     }
 
     /**
-     * CI Subjecttimetable_model::getSubjectByClassandSectionDay (admin path, no teacher filter).
+     * CI Subjecttimetable_model::getSubjectByClassandSectionDay.
+     * Restricted teachers: class teacher for class → all periods; else own subjects only.
      *
      * @return Collection<int, object>
      */
@@ -44,7 +48,11 @@ class SubjectPeriodAttendanceService
             throw new InvalidArgumentException('Invalid date.');
         }
 
-        return DB::table('subject_timetable')
+        if (! $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union')) {
+            return collect();
+        }
+
+        $query = DB::table('subject_timetable')
             ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'subject_timetable.subject_group_subject_id')
             ->join('subjects', 'subjects.id', '=', 'subject_group_subjects.subject_id')
             ->join('staff', 'staff.id', '=', 'subject_timetable.staff_id')
@@ -52,7 +60,18 @@ class SubjectPeriodAttendanceService
             ->where('subject_timetable.section_id', $sectionId)
             ->where('subject_timetable.day', $day)
             ->where('subject_timetable.session_id', $sessionId)
-            ->where('staff.is_active', 1)
+            ->where('staff.is_active', 1);
+
+        if ($this->classTeacherScope->shouldFilterPeriodsToOwnSubjects($classId)) {
+            $subjectGroupSubjectIds = $this->classTeacherScope
+                ->subjectGroupSubjectIdsForClassSection($classId, $sectionId);
+            if ($subjectGroupSubjectIds === []) {
+                return collect();
+            }
+            $query->whereIn('subject_group_subjects.id', $subjectGroupSubjectIds);
+        }
+
+        return $query
             ->orderBy('subject_timetable.start_time')
             ->select([
                 'subject_timetable.*',
@@ -79,8 +98,16 @@ class SubjectPeriodAttendanceService
             throw new InvalidArgumentException('Current academic session is not configured.');
         }
 
+        if (! $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union')) {
+            return collect();
+        }
+
         if (! $this->timetableBelongsToClassSection($subjectTimetableId, $classId, $sectionId, $sessionId)) {
             throw new InvalidArgumentException('Selected subject period is invalid for this class/section/session.');
+        }
+
+        if (! $this->timetableAllowedForTeacher($subjectTimetableId, $classId, $sectionId, $date)) {
+            throw new InvalidArgumentException('Selected subject period is not available for your account.');
         }
 
         return DB::table('student_session')
@@ -123,42 +150,67 @@ class SubjectPeriodAttendanceService
      *     remark?:string|null
      * }>  $rows
      */
-    public function addOrUpdate(array $rows): int
-    {
+    public function addOrUpdate(
+        array $rows,
+        ?int $classId = null,
+        ?int $sectionId = null,
+        ?string $date = null,
+    ): int {
         if ($rows === []) {
             throw new InvalidArgumentException('No attendance rows to save.');
         }
 
+        if ($classId !== null && $sectionId !== null
+            && ! $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union')) {
+            throw new InvalidArgumentException('You are not allowed to mark period attendance for this class/section.');
+        }
+
         $activeTypeIds = AttendenceType::query()->active()->pluck('id')->map(fn ($id) => (int) $id)->all();
 
-        return (int) DB::transaction(function () use ($rows, $activeTypeIds) {
+        return (int) DB::transaction(function () use ($rows, $activeTypeIds, $classId, $sectionId, $date) {
             $saved = 0;
 
             foreach ($rows as $row) {
                 $studentSessionId = (int) ($row['student_session_id'] ?? 0);
                 $timetableId = (int) ($row['subject_timetable_id'] ?? 0);
                 $typeId = (int) ($row['attendence_type_id'] ?? 0);
-                $date = (string) ($row['date'] ?? '');
+                $rowDate = (string) ($row['date'] ?? '');
 
-                if ($studentSessionId <= 0 || $timetableId <= 0 || $date === '' || $typeId <= 0) {
+                if ($studentSessionId <= 0 || $timetableId <= 0 || $rowDate === '' || $typeId <= 0) {
                     throw new InvalidArgumentException('Invalid attendance row.');
                 }
                 if (! in_array($typeId, $activeTypeIds, true)) {
                     throw new InvalidArgumentException('Invalid attendance type.');
                 }
 
+                if ($classId !== null && $sectionId !== null) {
+                    $belongs = DB::table('student_session')
+                        ->where('id', $studentSessionId)
+                        ->where('class_id', $classId)
+                        ->where('section_id', $sectionId)
+                        ->exists();
+                    if (! $belongs) {
+                        throw new InvalidArgumentException('Student session does not belong to the selected class/section.');
+                    }
+
+                    $checkDate = $date ?? $rowDate;
+                    if (! $this->timetableAllowedForTeacher($timetableId, $classId, $sectionId, $checkDate)) {
+                        throw new InvalidArgumentException('You are not allowed to mark this subject period.');
+                    }
+                }
+
                 $payload = [
                     'student_session_id' => $studentSessionId,
                     'subject_timetable_id' => $timetableId,
                     'attendence_type_id' => $typeId,
-                    'date' => $date,
+                    'date' => $rowDate,
                     'remark' => (string) ($row['remark'] ?? ''),
                 ];
 
                 $existing = StudentSubjectAttendance::query()
                     ->where('student_session_id', $studentSessionId)
                     ->where('subject_timetable_id', $timetableId)
-                    ->where('date', $date)
+                    ->where('date', $rowDate)
                     ->lockForUpdate()
                     ->first();
 
@@ -178,6 +230,7 @@ class SubjectPeriodAttendanceService
     /**
      * CI Studentsubjectattendence_model::searchByStudentsAttendanceByDate.
      * Matrix of students × subject periods for a class/section on a date.
+     * Class/section scope applied; subject columns remain unfiltered (CI parity).
      *
      * @return object{subjects: Collection<int, object>, student_record: Collection<int, object>}|null
      */
@@ -186,6 +239,10 @@ class SubjectPeriodAttendanceService
         $sessionId = $this->currentSession->id();
         if ($sessionId <= 0) {
             throw new InvalidArgumentException('Current academic session is not configured.');
+        }
+
+        if (! $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union')) {
+            return null;
         }
 
         $day = date('l', strtotime($date));
@@ -262,5 +319,22 @@ class SubjectPeriodAttendanceService
             ->where('section_id', $sectionId)
             ->where('session_id', $sessionId)
             ->exists();
+    }
+
+    /**
+     * Period must appear in the same filtered set as periodsForDate for this teacher.
+     */
+    protected function timetableAllowedForTeacher(
+        int $timetableId,
+        int $classId,
+        int $sectionId,
+        string $date
+    ): bool {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return true;
+        }
+
+        return $this->periodsForDate($classId, $sectionId, $date)
+            ->contains(fn ($period) => (int) $period->id === $timetableId);
     }
 }

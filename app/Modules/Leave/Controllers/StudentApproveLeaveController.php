@@ -3,25 +3,27 @@
 namespace App\Modules\Leave\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\Leave\Services\StudentApplyLeaveService;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Settings\Models\SchSetting;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\View\View;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * CI admin/approve_leave — student leave list / add / edit / status / delete.
- * Form pages instead of CI AJAX modals. Deferred: class-teacher authorization scope.
+ * Form pages instead of CI AJAX modals.
  */
 class StudentApproveLeaveController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
         protected StudentApplyLeaveService $leaves,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -41,6 +43,7 @@ class StudentApproveLeaveController extends Controller
             ]);
             $classId = (int) $request->input('class_id');
             $sectionId = (int) $request->input('section_id');
+            abort_unless($this->leaves->canApproveLeave($classId, $sectionId), 403);
             $results = $this->leaves->get(null, $classId, $sectionId);
             $searched = true;
         }
@@ -48,7 +51,7 @@ class StudentApproveLeaveController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Approve Leave',
             'contentView' => 'leave::admin.student_approve.index',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'class_id' => $classId,
             'section_id' => $sectionId,
             'results' => $results,
@@ -67,12 +70,15 @@ class StudentApproveLeaveController extends Controller
 
         $classId = (int) $request->input('class_id', 0);
         $sectionId = (int) $request->input('section_id', 0);
+        if ($classId > 0 && $sectionId > 0) {
+            abort_unless($this->leaves->canApproveLeave($classId, $sectionId), 403);
+        }
 
         return view('shared::layouts.admin', [
             'title' => 'Add Student Leave',
             'contentView' => 'leave::admin.student_approve.form',
             'editing' => null,
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'class_id' => $classId,
             'section_id' => $sectionId,
             'students' => ($classId > 0 && $sectionId > 0)
@@ -87,7 +93,16 @@ class StudentApproveLeaveController extends Controller
         abort_unless($this->permissions->hasPrivilege('approve_leave', 'can_add'), 403);
 
         $validated = $this->validated($request);
-        $this->leaves->save($validated, $request->file('userfile'));
+        abort_unless(
+            $this->leaves->canApproveLeave((int) $validated['class'], (int) $validated['section']),
+            403
+        );
+
+        try {
+            $this->leaves->save($validated, $request->file('userfile'));
+        } catch (RuntimeException $e) {
+            return back()->withInput()->withErrors(['class' => $e->getMessage()]);
+        }
 
         return redirect()
             ->to($this->listUrl((int) $validated['class'], (int) $validated['section']))
@@ -103,12 +118,13 @@ class StudentApproveLeaveController extends Controller
 
         $classId = (int) $row['class_id'];
         $sectionId = (int) $row['section_id'];
+        abort_unless($this->leaves->canApproveLeave($classId, $sectionId), 403);
 
         return view('shared::layouts.admin', [
             'title' => 'Edit Student Leave',
             'contentView' => 'leave::admin.student_approve.form',
             'editing' => $row,
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'class_id' => $classId,
             'section_id' => $sectionId,
             'students' => $this->leaves->studentsByClassSection($classId, $sectionId),
@@ -120,8 +136,20 @@ class StudentApproveLeaveController extends Controller
     {
         abort_unless($this->permissions->hasPrivilege('approve_leave', 'can_edit'), 403);
 
+        $existing = $this->leaves->get($id);
+        abort_if($existing === null, 404);
+
         $validated = $this->validated($request);
-        $this->leaves->save($validated, $request->file('userfile'), $id);
+        abort_unless(
+            $this->leaves->canApproveLeave((int) $validated['class'], (int) $validated['section']),
+            403
+        );
+
+        try {
+            $this->leaves->save($validated, $request->file('userfile'), $id);
+        } catch (RuntimeException $e) {
+            return back()->withInput()->withErrors(['class' => $e->getMessage()]);
+        }
 
         return redirect()
             ->to($this->listUrl((int) $validated['class'], (int) $validated['section']))
@@ -138,10 +166,21 @@ class StudentApproveLeaveController extends Controller
             'section_id' => ['nullable', 'integer'],
         ]);
 
-        $this->leaves->updateStatus($id, (int) $validated['status']);
+        $row = $this->leaves->get($id);
+        abort_if($row === null, 404);
+        abort_unless(
+            $this->leaves->canApproveLeave((int) $row['class_id'], (int) $row['section_id']),
+            403
+        );
+
+        try {
+            $this->leaves->updateStatus($id, (int) $validated['status']);
+        } catch (RuntimeException $e) {
+            abort(403, $e->getMessage());
+        }
 
         return redirect()
-            ->to($this->listUrl((int) ($validated['class_id'] ?? 0), (int) ($validated['section_id'] ?? 0)))
+            ->to($this->listUrl((int) ($validated['class_id'] ?? $row['class_id']), (int) ($validated['section_id'] ?? $row['section_id'])))
             ->with('success', 'Leave status updated successfully.');
     }
 
@@ -149,10 +188,21 @@ class StudentApproveLeaveController extends Controller
     {
         abort_unless($this->permissions->hasPrivilege('approve_leave', 'can_delete'), 403);
 
-        $this->leaves->delete($id);
+        $row = $this->leaves->get($id);
+        abort_if($row === null, 404);
+        abort_unless(
+            $this->leaves->canApproveLeave((int) $row['class_id'], (int) $row['section_id']),
+            403
+        );
+
+        try {
+            $this->leaves->delete($id);
+        } catch (RuntimeException $e) {
+            abort(403, $e->getMessage());
+        }
 
         return redirect()
-            ->to($this->listUrl((int) $request->input('class_id', 0), (int) $request->input('section_id', 0)))
+            ->to($this->listUrl((int) $request->input('class_id', $row['class_id']), (int) $request->input('section_id', $row['section_id'])))
             ->with('success', 'Leave deleted successfully.');
     }
 
@@ -162,6 +212,10 @@ class StudentApproveLeaveController extends Controller
 
         $row = $this->leaves->get($id);
         abort_if($row === null || empty($row['docs']), 404);
+        abort_unless(
+            $this->leaves->canApproveLeave((int) $row['class_id'], (int) $row['section_id']),
+            403
+        );
 
         $path = $this->leaves->documentPath((string) $row['docs']);
         abort_unless(is_file($path), 404);

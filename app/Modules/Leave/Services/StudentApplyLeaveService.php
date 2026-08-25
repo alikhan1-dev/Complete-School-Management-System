@@ -4,13 +4,14 @@ namespace App\Modules\Leave\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Leave\Models\StudentApplyLeave;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
  * CI apply_leave_model + admin/approve_leave — student leave applications.
- * Deferred: class-teacher scope (get_myClassSection / canApproveLeave), SaaS quota, mail/SMS.
+ * Deferred: SaaS quota, mail/SMS.
  */
 class StudentApplyLeaveService
 {
@@ -22,6 +23,7 @@ class StudentApplyLeaveService
 
     public function __construct(
         protected CurrentSessionResolver $currentSession,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -36,12 +38,32 @@ class StudentApplyLeaveService
     }
 
     /**
+     * CI apply_leave_model::canApproveLeave — union class_teacher ∪ subject_timetable.
+     */
+    public function canApproveLeave(int $classId, int $sectionId): bool
+    {
+        return $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union');
+    }
+
+    /**
      * CI apply_leave_model::get — list or single row for current session.
+     * Class-teacher matrix via Customlib::get_myClassSection.
      *
      * @return list<array<string, mixed>>|array<string, mixed>|null
      */
     public function get(?int $id = null, ?int $classId = null, ?int $sectionId = null): array|null
     {
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return $id !== null ? null : [];
+            }
+            if ($classId !== null && $classId > 0 && $sectionId !== null && $sectionId > 0
+                && ! $this->canApproveLeave($classId, $sectionId)) {
+                return $id !== null ? null : [];
+            }
+        }
+
         $query = DB::table('student_applyleave')
             ->join('student_session', 'student_session.id', '=', 'student_applyleave.student_session_id')
             ->join('students', 'students.id', '=', 'student_session.student_id')
@@ -66,6 +88,10 @@ class StudentApplyLeaveService
                 'classes.class',
                 'sections.section',
             ]);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $this->classTeacherScope->applyStudentSessionScope($query);
+        }
 
         if ($classId !== null && $classId > 0) {
             $query->where('classes.id', $classId);
@@ -93,6 +119,10 @@ class StudentApplyLeaveService
      */
     public function studentsByClassSection(int $classId, int $sectionId): array
     {
+        if (! $this->canApproveLeave($classId, $sectionId)) {
+            return [];
+        }
+
         return DB::table('student_session')
             ->join('students', 'students.id', '=', 'student_session.student_id')
             ->where('student_session.class_id', $classId)
@@ -119,12 +149,29 @@ class StudentApplyLeaveService
      */
     public function save(array $input, $file = null, ?int $leaveId = null): StudentApplyLeave
     {
+        $classId = (int) ($input['class'] ?? 0);
+        $sectionId = (int) ($input['section'] ?? 0);
+        if (! $this->canApproveLeave($classId, $sectionId)) {
+            throw new RuntimeException('You are not authorized for this class/section.');
+        }
+
+        $studentSessionId = (int) $input['student'];
+        $belongs = DB::table('student_session')
+            ->where('id', $studentSessionId)
+            ->where('class_id', $classId)
+            ->where('section_id', $sectionId)
+            ->where('session_id', $this->currentSessionId())
+            ->exists();
+        if (! $belongs) {
+            throw new RuntimeException('Student session does not belong to the selected class/section.');
+        }
+
         $status = (int) $input['leave_status'];
         $payload = [
             'apply_date' => (string) $input['apply_date'],
             'from_date' => (string) $input['from_date'],
             'to_date' => (string) $input['to_date'],
-            'student_session_id' => (int) $input['student'],
+            'student_session_id' => $studentSessionId,
             'reason' => (string) ($input['message'] ?? ''),
             'request_type' => 1,
             'status' => $status,
@@ -170,6 +217,11 @@ class StudentApplyLeaveService
 
     public function updateStatus(int $id, int $status): void
     {
+        $row = $this->get($id);
+        if ($row === null) {
+            throw new RuntimeException('Leave request not found or not authorized.');
+        }
+
         $payload = ['status' => $status];
         if ($status === self::STATUS_APPROVED) {
             $payload['approve_by'] = (int) (Auth::guard('staff')->id() ?? 0) ?: null;
@@ -183,6 +235,11 @@ class StudentApplyLeaveService
 
     public function delete(int $id): void
     {
+        $scoped = $this->get($id);
+        if ($scoped === null) {
+            throw new RuntimeException('Leave request not found or not authorized.');
+        }
+
         $row = StudentApplyLeave::query()->findOrFail($id);
         if (! empty($row->docs)) {
             $path = public_path('uploads/student_leavedocuments/'.$row->docs);

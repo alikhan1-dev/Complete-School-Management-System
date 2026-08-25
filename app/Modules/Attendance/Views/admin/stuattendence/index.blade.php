@@ -182,7 +182,8 @@ $(function () {
     function loadSections(classId, selected) {
         $('#section_id').html('<option value="">Select</option>');
         if (!classId) return;
-        $.getJSON('{{ url('sections/getByClass') }}', {class_id: classId}, function (data) {
+        {{-- CI attendenceList: getByClass + day_wise=yes for class-teacher sections --}}
+        $.getJSON('{{ url('sections/getByClass') }}', {class_id: classId, day_wise: 'yes'}, function (data) {
             $.each(data, function (i, row) {
                 var opt = $('<option>', {value: row.section_id, text: row.section});
                 if (String(selected) === String(row.section_id)) opt.prop('selected', true);
