@@ -6,6 +6,7 @@ use App\Modules\Academics\Models\CustomField;
 use App\Modules\Leave\Models\LeaveType;
 use App\Modules\Roles\Models\Role;
 use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Shared\Services\SuperadminRoleFilterService;
 use App\Modules\Staff\Models\Staff;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -19,6 +20,7 @@ class HumanResourceReportService
 {
     public function __construct(
         protected SchoolContext $school,
+        protected SuperadminRoleFilterService $superadminRoleFilter,
     ) {
     }
 
@@ -143,7 +145,10 @@ class HumanResourceReportService
      */
     public function roles(): Collection
     {
-        return Role::query()->orderBy('id')->get(['id', 'name']);
+        $query = Role::query()->orderBy('id');
+        $this->superadminRoleFilter->applyRoleDropdownFilter($query);
+
+        return $query->get(['id', 'name']);
     }
 
     /**

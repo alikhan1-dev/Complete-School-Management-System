@@ -7,6 +7,7 @@ use App\Modules\Payroll\Models\PayslipAllowance;
 use App\Modules\Payroll\Models\StaffPayslip;
 use App\Modules\Roles\Models\Role;
 use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Shared\Services\SuperadminRoleFilterService;
 use App\Modules\Staff\Models\Staff;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -47,6 +48,7 @@ class PayrollService
 
     public function __construct(
         protected SchoolContext $school,
+        protected SuperadminRoleFilterService $superadminRoleFilter,
     ) {
     }
 
@@ -73,10 +75,13 @@ class PayrollService
      */
     public function staffRoles(): Collection
     {
-        return Role::query()
+        $query = Role::query()
             ->where('is_active', 'yes')
-            ->orderBy('id')
-            ->get(['id', 'name'])
+            ->orderBy('id');
+
+        $this->superadminRoleFilter->applyRoleDropdownFilter($query);
+
+        return $query->get(['id', 'name'])
             ->map(fn (Role $role) => (object) [
                 'id' => (int) $role->id,
                 'type' => (string) $role->name,

@@ -164,7 +164,27 @@
     <div class="col-md-7">
         <div class="box box-primary">
             <div class="box-header with-border"><h3 class="box-title">Question List</h3></div>
-            <div class="box-body table-responsive">
+            <div class="box-body">
+                <form method="get" action="{{ route('onlineexam.questions.index') }}" class="form-inline" style="margin-bottom: 15px;">
+                    <div class="form-group">
+                        <label for="created_by">Created By</label>
+                        <select name="created_by" id="created_by" class="form-control" style="min-width: 220px;">
+                            <option value="">All</option>
+                            @foreach($formData['creators'] as $creator)
+                                <option value="{{ $creator->id }}"
+                                    @selected((string) ($filters['created_by'] ?? '') === (string) $creator->id)>
+                                    {{ trim($creator->name.' '.$creator->surname) }} ({{ $creator->employee_id }})
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="margin-left: 8px;">Filter</button>
+                    @if(($filters['created_by'] ?? '') !== '')
+                        <a href="{{ route('onlineexam.questions.index') }}" class="btn btn-default" style="margin-left: 4px;">Reset</a>
+                    @endif
+                </form>
+            </div>
+            <div class="box-body table-responsive" style="padding-top: 0;">
                 <table class="table table-striped table-bordered">
                     <thead>
                     <tr>
@@ -173,6 +193,7 @@
                         <th>Type</th>
                         <th>Level</th>
                         <th>Class / Section</th>
+                        <th>Created By</th>
                         <th class="text-right">Action</th>
                     </tr>
                     </thead>
@@ -187,6 +208,7 @@
                                 {{ $row->class_name }}
                                 @if($row->section_name) / {{ $row->section_name }}@endif
                             </td>
+                            <td>{{ $row->creator_label ?? '' }}</td>
                             <td class="text-right">
                                 @can('privilege', ['question_bank', 'can_view'])
                                     <a href="{{ route('onlineexam.questions.read', $row->id) }}" class="btn btn-default btn-xs">View</a>
@@ -201,7 +223,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="text-center text-danger">No Record Found</td></tr>
+                        <tr><td colspan="7" class="text-center text-danger">No Record Found</td></tr>
                     @endforelse
                     </tbody>
                 </table>

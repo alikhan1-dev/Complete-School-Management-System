@@ -6,6 +6,7 @@ use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Fees\Services\FeeCollectService;
 use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Shared\Services\SuperadminRoleFilterService;
 use App\Modules\Staff\Models\Staff;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
@@ -25,6 +26,7 @@ class FinanceReportService
         protected SchoolContext $school,
         protected FeeCollectService $fees,
         protected ClassTeacherScopeService $classTeacherScope,
+        protected SuperadminRoleFilterService $superadminRoleFilter,
     ) {
     }
 
@@ -928,13 +930,13 @@ class FinanceReportService
     }
 
     /**
-     * CI Studentfeemaster_model::get_feesreceived_by (superadmin hide deferred).
+     * CI Studentfeemaster_model::get_feesreceived_by.
      *
      * @return array<int, string>
      */
     public function feesCollectors(): array
     {
-        $rows = DB::table('staff')
+        $query = DB::table('staff')
             ->join('staff_roles', 'staff.id', '=', 'staff_roles.staff_id')
             ->where('staff.is_active', 1)
             ->select([
@@ -943,8 +945,11 @@ class FinanceReportService
                 'staff.surname',
                 'staff.employee_id',
             ])
-            ->orderBy('staff.name')
-            ->get();
+            ->orderBy('staff.name');
+
+        $this->superadminRoleFilter->applyStaffRoleIdFilter($query);
+
+        $rows = $query->get();
 
         $data = [];
         foreach ($rows as $row) {

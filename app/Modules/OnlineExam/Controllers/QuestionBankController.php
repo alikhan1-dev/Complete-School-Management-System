@@ -23,17 +23,22 @@ class QuestionBankController extends Controller
     ) {
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('question_bank', 'can_view'), 403);
+
+        $createdBy = $request->filled('created_by') ? (int) $request->input('created_by') : null;
 
         return view('shared::layouts.admin', [
             'title' => 'Question Bank',
             'contentView' => 'onlineexam::admin.question.index',
-            'questions' => $this->questions->listQuestions(),
+            'questions' => $this->questions->listQuestions($createdBy),
             'editing' => null,
             'formData' => $this->formSharedData(),
             'canAdd' => $this->permissions->hasPrivilege('question_bank', 'can_add'),
+            'filters' => [
+                'created_by' => $createdBy ?? '',
+            ],
         ]);
     }
 
@@ -61,6 +66,7 @@ class QuestionBankController extends Controller
             'selectedAnswers' => $this->questions->decodedMultichoiceAnswers($editing->correct),
             'formData' => $this->formSharedData(),
             'canAdd' => false,
+            'filters' => ['created_by' => ''],
         ]);
     }
 
@@ -124,6 +130,7 @@ class QuestionBankController extends Controller
         return [
             'subjects' => Subject::query()->orderBy('name')->get(),
             'classes' => SchoolClass::query()->orderBy('id')->get(),
+            'creators' => $this->questions->creatorsForFilter(),
             'questionTypes' => $this->questions->questionTypes(),
             'questionLevels' => $this->questions->questionLevels(),
             'optionKeys' => $this->questions->optionKeys(),

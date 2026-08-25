@@ -8,6 +8,7 @@ use App\Modules\Roles\Models\Role;
 use App\Modules\Roles\Models\RolePermission;
 use App\Modules\Roles\Requests\UpdateRolePermissionsRequest;
 use App\Modules\Shared\Services\DataTableResponse;
+use App\Modules\Shared\Services\SuperadminRoleFilterService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,11 @@ use Illuminate\View\View;
 
 class RoleController extends Controller
 {
+    public function __construct(
+        protected SuperadminRoleFilterService $superadminRoleFilter,
+    ) {
+    }
+
     public function index(): View
     {
         return view('shared::layouts.admin', [
@@ -26,7 +32,9 @@ class RoleController extends Controller
     public function datatable(Request $request): JsonResponse
     {
         $draw = (int) $request->input('draw', 1);
-        $roles = Role::query()->orderBy('id')->get()->map(function (Role $role) {
+        $query = Role::query()->orderBy('id');
+        $this->superadminRoleFilter->applyRoleDropdownFilter($query);
+        $roles = $query->get()->map(function (Role $role) {
             return [
                 $role->id,
                 $role->name,

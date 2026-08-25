@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Reports',
             'status' => 'in_progress',
-            'message' => 'Student information (incl. alumni report + class-teacher scope + student_profile table custom fields + alumni report table custom fields + class-section view-students modal) + Attendencereports full (incl. class-teacher scope + staff attendance superadmin_visible) + Financereports (incl. class-teacher scope + transport fee lines) + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js.',
+            'message' => 'Student information (incl. alumni report + class-teacher scope + student_profile table custom fields + alumni report table custom fields + class-section view-students modal) + Attendencereports full (incl. class-teacher scope + staff attendance superadmin_visible) + Financereports (incl. class-teacher scope + transport fee lines + fees collectors superadmin_visible) + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js.',
             'slices' => [
                 'student_information_hub' => 'done',
                 'student_report' => 'done',
@@ -49,6 +49,7 @@ class ModuleStatusController extends Controller
                 'balance_fees' => 'done',
                 'finance_reports_class_teacher' => 'done',
                 'finance_reports_transport_fee_lines' => 'done',
+                'finance_reports_fees_collectors_superadmin_visible' => 'done',
                 'human_resource_hub_staff_report' => 'done',
                 'lesson_plan_syllabus_teacher_reports' => 'done',
                 'online_exam_hub_exams_report' => 'done',

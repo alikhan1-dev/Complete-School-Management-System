@@ -3,8 +3,11 @@
 namespace App\Modules\OnlineExam\Services;
 
 use App\Modules\OnlineExam\Models\Question;
+use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Staff\Models\Staff;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -15,6 +18,10 @@ use Illuminate\Validation\ValidationException;
  */
 class QuestionBankService
 {
+    public function __construct(
+        protected SchoolContext $school,
+    ) {
+    }
     /**
      * @return array<string, string>
      */
@@ -67,12 +74,15 @@ class QuestionBankService
         ];
     }
 
-    public function listQuestions(int $perPage = 25): LengthAwarePaginator
+    public function listQuestions(?int $createdBy = null, int $perPage = 25): LengthAwarePaginator
     {
-        return DB::table('questions')
+        $query = DB::table('questions')
             ->leftJoin('subjects', 'subjects.id', '=', 'questions.subject_id')
             ->leftJoin('classes', 'classes.id', '=', 'questions.class_id')
             ->leftJoin('sections', 'sections.id', '=', 'questions.section_id')
+            ->leftJoin('staff', 'staff.id', '=', 'questions.staff_id')
+            ->leftJoin('staff_roles', 'staff_roles.staff_id', '=', 'staff.id')
+            ->leftJoin('roles', 'roles.id', '=', 'staff_roles.role_id')
             ->orderByDesc('questions.id')
             ->select([
                 'questions.id',
@@ -82,12 +92,103 @@ class QuestionBankService
                 'questions.class_id',
                 'questions.section_id',
                 'questions.subject_id',
+                'questions.staff_id',
                 'subjects.name as subject_name',
                 'subjects.code as subject_code',
                 'classes.class as class_name',
                 'sections.section as section_name',
+                'staff.name as staff_name',
+                'staff.surname as staff_surname',
+                'staff.employee_id',
+                'staff_roles.role_id as created_role',
+            ]);
+
+        if ($createdBy !== null && $createdBy > 0) {
+            $query->where('questions.staff_id', $createdBy);
+        }
+
+        $paginator = $query->paginate($perPage);
+
+        return $paginator->through(fn ($row) => $this->decorateListRow($row));
+    }
+
+    /**
+     * CI Question_model::getquestioncreatedstaff — staff who have created questions.
+     *
+     * @return Collection<int, object>
+     */
+    public function creatorsForFilter(): Collection
+    {
+        $query = DB::table('questions')
+            ->join('staff', 'staff.id', '=', 'questions.staff_id')
+            ->leftJoin('staff_roles', 'staff_roles.staff_id', '=', 'staff.id')
+            ->leftJoin('roles', 'roles.id', '=', 'staff_roles.role_id')
+            ->select([
+                'staff.id',
+                'staff.name',
+                'staff.surname',
+                'staff.employee_id',
             ])
-            ->paginate($perPage);
+            ->groupBy('staff.id', 'staff.name', 'staff.surname', 'staff.employee_id')
+            ->orderBy('staff.id');
+
+        if ($this->shouldMaskCreator(7)) {
+            $query->where(function ($q) {
+                $q->whereNull('roles.id')->orWhere('roles.id', '!=', 7);
+            });
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * CI Question::getDatatable created_by column — mask superadmin creator for non-superadmin viewers.
+     */
+    public function formatCreatorLabel(object $row): string
+    {
+        $createdRole = (int) ($row->created_role ?? 0);
+        if ($this->shouldMaskCreator($createdRole)) {
+            return '';
+        }
+
+        $name = trim(((string) ($row->staff_name ?? '')).' '.((string) ($row->staff_surname ?? '')));
+        $employeeId = (string) ($row->employee_id ?? '');
+        if ($name === '' && $employeeId === '') {
+            return '';
+        }
+
+        return $employeeId !== '' ? $name.' ('.$employeeId.')' : $name;
+    }
+
+    protected function decorateListRow(object $row): object
+    {
+        $row->creator_label = $this->formatCreatorLabel($row);
+
+        return $row;
+    }
+
+    protected function shouldMaskCreator(int $createdRoleId): bool
+    {
+        if ($createdRoleId !== 7) {
+            return false;
+        }
+
+        if ($this->school->superadminRestriction() !== 'disabled') {
+            return false;
+        }
+
+        return $this->viewerRoleId() !== 7;
+    }
+
+    protected function viewerRoleId(): int
+    {
+        /** @var Staff|null $staff */
+        $staff = Auth::guard('staff')->user();
+        if (! $staff) {
+            return 0;
+        }
+
+        return (int) ($staff->roles()->value('roles.id') ?? 0);
     }
 
     public function find(int $id): Question
