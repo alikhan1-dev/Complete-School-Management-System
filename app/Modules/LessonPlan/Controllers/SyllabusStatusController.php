@@ -3,9 +3,9 @@
 namespace App\Modules\LessonPlan\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\LessonPlan\Services\LessonPlanService;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -17,6 +17,7 @@ class SyllabusStatusController extends Controller
     public function __construct(
         protected PermissionService $permissions,
         protected LessonPlanService $lessons,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -41,6 +42,14 @@ class SyllabusStatusController extends Controller
                 'subject_group_id' => ['required', 'integer'],
                 'subject_id' => ['required', 'integer'],
             ]);
+            abort_unless(
+                $this->classTeacherScope->allowsClassSection(
+                    (int) $request->input('class_id'),
+                    (int) $request->input('section_id'),
+                    'union'
+                ),
+                403
+            );
             $tree = $this->lessons->syllabusStatus(
                 (int) $request->input('class_id'),
                 (int) $request->input('section_id'),
@@ -59,7 +68,7 @@ class SyllabusStatusController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Manage Syllabus Status',
             'contentView' => 'lessonplan::admin.status',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'filters' => $filters,
             'tree' => $tree,
             'searched' => $searched,

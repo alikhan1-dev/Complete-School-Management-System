@@ -5,6 +5,7 @@ namespace App\Modules\LessonPlan\Services;
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Homework\Services\HomeworkDocumentService;
 use App\Modules\LessonPlan\Models\SubjectSyllabus;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Timetable\Services\ClassTimetableService;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
@@ -26,6 +27,7 @@ class SyllabusManageService
         protected ClassTimetableService $timetable,
         protected LessonPlanService $lessons,
         protected HomeworkDocumentService $filetypes,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -155,13 +157,18 @@ class SyllabusManageService
     }
 
     /**
+     * CI Subjecttimetable_model::getSyllabussubject.
+     * When the logged-in viewer is a restricted class teacher, filter slots to their
+     * class/section matrix (even when viewing another staff member's week).
+     * Empty matrix → no filter (CI !empty quirk).
+     *
      * @return Collection<int, object>
      */
     public function slotsForStaffDay(int $staffId, string $day, ?int $sessionId = null): Collection
     {
         $sessionId = $sessionId ?: $this->currentSessionId();
 
-        return DB::table('subject_timetable')
+        $query = DB::table('subject_timetable')
             ->join('classes', 'classes.id', '=', 'subject_timetable.class_id')
             ->join('sections', 'sections.id', '=', 'subject_timetable.section_id')
             ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'subject_timetable.subject_group_subject_id')
@@ -169,7 +176,25 @@ class SyllabusManageService
             ->where('subject_timetable.session_id', $sessionId)
             ->where('subject_group_subjects.session_id', $sessionId)
             ->where('subject_timetable.day', $day)
-            ->where('subject_timetable.staff_id', $staffId)
+            ->where('subject_timetable.staff_id', $staffId);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix !== []) {
+                $query->where(function ($outer) use ($matrix) {
+                    foreach ($matrix as $classId => $sectionIds) {
+                        foreach ($sectionIds as $sectionId) {
+                            $outer->orWhere(function ($inner) use ($classId, $sectionId) {
+                                $inner->where('subject_timetable.class_id', (int) $classId)
+                                    ->where('subject_timetable.section_id', (int) $sectionId);
+                            });
+                        }
+                    }
+                });
+            }
+        }
+
+        return $query
             ->orderBy('subject_timetable.start_time')
             ->select([
                 'subject_timetable.*',

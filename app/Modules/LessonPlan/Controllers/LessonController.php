@@ -3,9 +3,9 @@
 namespace App\Modules\LessonPlan\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\LessonPlan\Services\LessonPlanService;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +19,7 @@ class LessonController extends Controller
     public function __construct(
         protected PermissionService $permissions,
         protected LessonPlanService $lessons,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -37,7 +38,7 @@ class LessonController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Lesson',
             'contentView' => 'lessonplan::admin.lesson',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'groups' => $groups,
             'editing' => null,
             'editLessons' => [],
@@ -77,6 +78,15 @@ class LessonController extends Controller
 
         $editing = $this->lessons->findLessonGroup($subjectGroupClassSectionsId, $subjectGroupSubjectId);
         abort_if($editing === null, 404);
+        abort_unless(
+            $this->lessons->canEditAsClassTeacher(
+                (int) $editing['classid'],
+                (int) $editing['sectionid'],
+                (int) $editing['subjectgroupsid'],
+                (int) $editing['subject_group_subject_id'],
+            ),
+            403
+        );
 
         $groups = $this->lessons->listLessonGroups();
         foreach ($groups as $i => $group) {
@@ -89,7 +99,7 @@ class LessonController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Edit Lesson',
             'contentView' => 'lessonplan::admin.lesson',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'groups' => $groups,
             'editing' => $editing,
             'editLessons' => $this->lessons->lessonsForSubject($subjectGroupSubjectId, $subjectGroupClassSectionsId),
@@ -113,6 +123,16 @@ class LessonController extends Controller
             'lessons' => ['nullable', 'array'],
             'lessons.*' => ['nullable', 'string', 'max:255'],
         ]);
+
+        abort_unless(
+            $this->lessons->canEditAsClassTeacher(
+                (int) $validated['class_id'],
+                (int) $validated['section_id'],
+                (int) $validated['subject_group_id'],
+                (int) $validated['subject_id'],
+            ),
+            403
+        );
 
         $updates = [];
         foreach ($request->all() as $key => $value) {

@@ -4,9 +4,9 @@ namespace App\Modules\LessonPlan\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Academics\Models\AcademicSession;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\LessonPlan\Services\LessonPlanService;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -19,6 +19,7 @@ class CopyLessonController extends Controller
     public function __construct(
         protected PermissionService $permissions,
         protected LessonPlanService $lessons,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -63,7 +64,7 @@ class CopyLessonController extends Controller
             'title' => 'Copy Old Lesson',
             'contentView' => 'lessonplan::admin.copylesson',
             'sessions' => AcademicSession::query()->orderByDesc('id')->get(),
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'currentSessionId' => $this->lessons->currentSessionId(),
             'filters' => $filters,
             'tree' => $tree,

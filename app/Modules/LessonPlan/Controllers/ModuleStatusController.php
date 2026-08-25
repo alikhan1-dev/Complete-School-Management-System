@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'LessonPlan',
             'status' => 'in_progress',
-            'message' => 'LessonPlan admin core done (lesson, topic, status, copy, weekly syllabus, forum). Deferred: student portal comments, class-teacher scope, DataTables AJAX, SaaS quota.',
+            'message' => 'LessonPlan admin core done (lesson, topic, status, copy, weekly syllabus, forum) + full admin class-teacher scope (lesson/topic/status/copy + weekly matrix). Deferred: student portal comments, DataTables AJAX, SaaS quota.',
             'slices' => [
                 'lesson' => 'done',
                 'topic' => 'done',
@@ -23,6 +23,11 @@ class ModuleStatusController extends Controller
                 'copy_lesson' => 'done',
                 'manage_lesson_plan_weekly' => 'done',
                 'forum' => 'done',
+                'class_teacher_lesson_topic' => 'done',
+                'weekly_class_teacher_matrix' => 'done',
+                'student_portal_comments' => 'deferred',
+                'datatables_ajax' => 'deferred',
+                'saas_quota' => 'deferred',
             ],
         ]);
     }

@@ -5,18 +5,20 @@ namespace App\Modules\LessonPlan\Services;
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\LessonPlan\Models\Lesson;
 use App\Modules\LessonPlan\Models\Topic;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 /**
  * CI Lessonplan_model — lesson + topic CRUD helpers.
- * Deferred: copy old lesson, weekly syllabus manage, forum, class-teacher auth, DataTables AJAX.
+ * Deferred: weekly syllabus class-teacher matrix, student portal comments, DataTables AJAX, SaaS.
  */
 class LessonPlanService
 {
     public function __construct(
         protected CurrentSessionResolver $currentSession,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -28,6 +30,103 @@ class LessonPlanService
         }
 
         return $id;
+    }
+
+    /**
+     * CI Lessonplan_model::ifclassteacher — class_teacher row OR matching subject_timetable.
+     */
+    public function canEditAsClassTeacher(
+        int $classId,
+        int $sectionId,
+        int $subjectGroupId,
+        int $subjectGroupSubjectId,
+    ): bool {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return true;
+        }
+
+        if (in_array($sectionId, $this->classTeacherScope->classTeacherOnlySectionIdsForClass($classId), true)) {
+            return true;
+        }
+
+        $staffId = $this->classTeacherScope->staffId();
+        if ($staffId <= 0) {
+            return false;
+        }
+
+        return DB::table('subject_timetable')
+            ->where('staff_id', $staffId)
+            ->where('session_id', $this->currentSessionId())
+            ->where('class_id', $classId)
+            ->where('section_id', $sectionId)
+            ->where('subject_group_id', $subjectGroupId)
+            ->where('subject_group_subject_id', $subjectGroupSubjectId)
+            ->exists();
+    }
+
+    /**
+     * CI get_myClassSection list filter. Empty matrix → no filter (CI quirk).
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    protected function filterByClassSectionMatrix(array $rows): array
+    {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return $rows;
+        }
+
+        $matrix = $this->classTeacherScope->myClassSectionMap();
+        if ($matrix === []) {
+            return $rows;
+        }
+
+        $allowed = [];
+        foreach ($matrix as $classId => $sectionIds) {
+            foreach ($sectionIds as $sectionId) {
+                $allowed[(int) $classId][(int) $sectionId] = true;
+            }
+        }
+
+        return array_values(array_filter($rows, function (array $row) use ($allowed) {
+            $classId = (int) ($row['classid'] ?? 0);
+            $sectionId = (int) ($row['sectionid'] ?? 0);
+
+            return $classId > 0 && $sectionId > 0 && isset($allowed[$classId][$sectionId]);
+        }));
+    }
+
+    /**
+     * Resolve class/section/subject_group for a lesson (topic update auth).
+     *
+     * @return array{class_id:int,section_id:int,subject_group_id:int,subject_group_subject_id:int}|null
+     */
+    public function lessonContext(int $lessonId): ?array
+    {
+        $row = DB::table('lesson')
+            ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'lesson.subject_group_subject_id')
+            ->join('subject_group_class_sections', 'subject_group_class_sections.id', '=', 'lesson.subject_group_class_sections_id')
+            ->join('class_sections', 'class_sections.id', '=', 'subject_group_class_sections.class_section_id')
+            ->where('lesson.id', $lessonId)
+            ->where('lesson.session_id', $this->currentSessionId())
+            ->select([
+                'class_sections.class_id',
+                'class_sections.section_id',
+                'subject_group_subjects.subject_group_id',
+                'lesson.subject_group_subject_id',
+            ])
+            ->first();
+
+        if ($row === null) {
+            return null;
+        }
+
+        return [
+            'class_id' => (int) $row->class_id,
+            'section_id' => (int) $row->section_id,
+            'subject_group_id' => (int) $row->subject_group_id,
+            'subject_group_subject_id' => (int) $row->subject_group_subject_id,
+        ];
     }
 
     /**
@@ -62,7 +161,7 @@ class LessonPlanService
     {
         $sessionId = $sessionId ?: $this->currentSessionId();
 
-        return DB::table('lesson')
+        $rows = DB::table('lesson')
             ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'lesson.subject_group_subject_id')
             ->join('subject_groups', 'subject_groups.id', '=', 'subject_group_subjects.subject_group_id')
             ->join('subjects', 'subjects.id', '=', 'subject_group_subjects.subject_id')
@@ -103,6 +202,8 @@ class LessonPlanService
             ->get()
             ->map(fn ($r) => (array) $r)
             ->all();
+
+        return $this->filterByClassSectionMatrix($rows);
     }
 
     /**
@@ -237,7 +338,7 @@ class LessonPlanService
     {
         $sessionId = $sessionId ?: $this->currentSessionId();
 
-        return DB::table('topic')
+        $rows = DB::table('topic')
             ->join('lesson', 'lesson.id', '=', 'topic.lesson_id')
             ->join('subject_group_subjects', 'subject_group_subjects.id', '=', 'lesson.subject_group_subject_id')
             ->join('subject_groups', 'subject_groups.id', '=', 'subject_group_subjects.subject_group_id')
@@ -279,6 +380,8 @@ class LessonPlanService
             ->get()
             ->map(fn ($r) => (array) $r)
             ->all();
+
+        return $this->filterByClassSectionMatrix($rows);
     }
 
     /**

@@ -18,7 +18,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 /**
  * CI admin/syllabus — weekly lesson plan manage (form POST instead of AJAX modals).
  * Privilege: manage_lesson_plan. Forum: lesson_plan_comments.
- * Deferred: student portal posting, class-teacher scope, SaaS quota.
+ * Deferred: student portal posting, SaaS quota.
  */
 class SyllabusManageController extends Controller
 {

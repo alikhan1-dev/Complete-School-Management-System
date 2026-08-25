@@ -3,9 +3,9 @@
 namespace App\Modules\LessonPlan\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Academics\Models\SchoolClass;
 use App\Modules\LessonPlan\Services\LessonPlanService;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -18,6 +18,7 @@ class TopicController extends Controller
     public function __construct(
         protected PermissionService $permissions,
         protected LessonPlanService $lessons,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -33,7 +34,7 @@ class TopicController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Topic',
             'contentView' => 'lessonplan::admin.topic',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'groups' => $groups,
             'editing' => null,
             'editTopics' => [],
@@ -76,10 +77,22 @@ class TopicController extends Controller
         }
         abort_if($editing === null, 404);
 
+        $context = $this->lessons->lessonContext($lessonId);
+        abort_if($context === null, 404);
+        abort_unless(
+            $this->lessons->canEditAsClassTeacher(
+                $context['class_id'],
+                $context['section_id'],
+                $context['subject_group_id'],
+                $context['subject_group_subject_id'],
+            ),
+            403
+        );
+
         return view('shared::layouts.admin', [
             'title' => 'Edit Topic',
             'contentView' => 'lessonplan::admin.topic',
-            'classes' => SchoolClass::query()->orderBy('class')->get(),
+            'classes' => $this->classTeacherScope->classesForDropdown(),
             'groups' => $groups,
             'editing' => $editing,
             'editTopics' => $this->lessons->topicsByLesson($lessonId),
@@ -92,6 +105,18 @@ class TopicController extends Controller
     public function update(Request $request, int $lessonId): RedirectResponse
     {
         abort_unless($this->permissions->hasPrivilege('topic', 'can_edit'), 403);
+
+        $context = $this->lessons->lessonContext($lessonId);
+        abort_if($context === null, 404);
+        abort_unless(
+            $this->lessons->canEditAsClassTeacher(
+                $context['class_id'],
+                $context['section_id'],
+                $context['subject_group_id'],
+                $context['subject_group_subject_id'],
+            ),
+            403
+        );
 
         $validated = $request->validate([
             'topic_delete' => ['nullable', 'array'],
