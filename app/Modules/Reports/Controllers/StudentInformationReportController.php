@@ -6,10 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Modules\Reports\Services\AlumniReportService;
 use App\Modules\Reports\Services\StudentInformationReportService;
 use App\Modules\Roles\Services\PermissionService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\DataTableResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
@@ -21,6 +21,7 @@ class StudentInformationReportController extends Controller
         protected PermissionService $permissions,
         protected StudentInformationReportService $reports,
         protected AlumniReportService $alumniReports,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -51,6 +52,13 @@ class StudentInformationReportController extends Controller
             ], [
                 'class_id.required' => 'The Class field is required.',
             ]);
+            abort_unless(
+                $this->reports->canAccessClass(
+                    (int) $filters['class_id'],
+                    $filters['section_id'] !== '' ? (int) $filters['section_id'] : null
+                ),
+                403
+            );
             $rows = $this->reports->studentReportRows(
                 (int) $filters['class_id'],
                 $filters['section_id'] !== '' ? (int) $filters['section_id'] : null,
@@ -137,6 +145,7 @@ class StudentInformationReportController extends Controller
     public function boys_girls_ratio(): View
     {
         abort_unless($this->permissions->hasPrivilege('student_gender_ratio_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         return view('shared::layouts.admin', array_merge([
             'title' => __('system.student_gender_ratio_report'),
@@ -148,6 +157,7 @@ class StudentInformationReportController extends Controller
     public function student_teacher_ratio(): View
     {
         abort_unless($this->permissions->hasPrivilege('student_teacher_ratio_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         return view('shared::layouts.admin', array_merge([
             'title' => __('system.student_teacher_ratio_report'),
@@ -174,6 +184,10 @@ class StudentInformationReportController extends Controller
                 'class_id.required' => 'The Class field is required.',
                 'section_id.required' => 'The Section field is required.',
             ]);
+            abort_unless(
+                $this->reports->canAccessClass((int) $filters['class_id'], (int) $filters['section_id']),
+                403
+            );
             $rows = $this->reports->guardianRows((int) $filters['class_id'], (int) $filters['section_id']);
         }
 
@@ -213,6 +227,7 @@ class StudentInformationReportController extends Controller
             'class_id.required' => 'The Class field is required.',
         ]);
         $classId = (int) $request->input('class_id');
+        abort_unless($this->reports->canAccessClass($classId), 403);
         $yearRaw = $request->input('year');
         $year = ($yearRaw === null || $yearRaw === '') ? null : (int) $yearRaw;
 
@@ -354,6 +369,10 @@ class StudentInformationReportController extends Controller
                 'class_id.required' => 'The Class field is required.',
                 'section_id.required' => 'The Section field is required.',
             ]);
+            abort_unless(
+                $this->reports->canAccessClass((int) $filters['class_id'], (int) $filters['section_id']),
+                403
+            );
             $subjects = $this->reports->classSubjectGroups((int) $filters['class_id'], (int) $filters['section_id']);
         }
 
@@ -370,6 +389,7 @@ class StudentInformationReportController extends Controller
     public function admission_report(): View
     {
         abort_unless($this->permissions->hasPrivilege('admission_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         return view('shared::layouts.admin', array_merge([
             'title' => __('system.admission_report'),
@@ -386,6 +406,7 @@ class StudentInformationReportController extends Controller
     public function admission_reportSearch(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('admission_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
         $request->validate([
             'search_type' => ['required'],
         ], [
@@ -471,6 +492,10 @@ class StudentInformationReportController extends Controller
                 'class_id.required' => 'The Class field is required.',
                 'section_id.required' => 'The Section field is required.',
             ]);
+            abort_unless(
+                $this->reports->canAccessClass((int) $filters['class_id'], (int) $filters['section_id']),
+                403
+            );
             $groups = $this->reports->siblingGroups((int) $filters['class_id'], (int) $filters['section_id']);
         }
 
@@ -507,6 +532,10 @@ class StudentInformationReportController extends Controller
                 'class_id.required' => 'The Class field is required.',
                 'section_id.required' => 'The Section field is required.',
             ]);
+            abort_unless(
+                $this->reports->canAccessClass((int) $filters['class_id'], (int) $filters['section_id']),
+                403
+            );
             $from = null;
             $to = null;
             if ($filters['search_type'] !== '') {
@@ -533,12 +562,14 @@ class StudentInformationReportController extends Controller
             'filter_label' => $filterLabel,
             'reports' => $this->reports,
             'adm_auto_insert' => $this->reports->admAutoInsert(),
+            'customFields' => $this->reports->studentTableCustomFields(),
         ], $this->navFlags()));
     }
 
     public function online_admission_report(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('online_admission_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = [
             'class_id' => $request->input('class_id', ''),
@@ -548,6 +579,15 @@ class StudentInformationReportController extends Controller
         $rows = [];
         $searched = $request->isMethod('post') || $request->filled('search');
         if ($searched) {
+            if ($filters['class_id'] !== '') {
+                abort_unless(
+                    $this->reports->canAccessClass(
+                        (int) $filters['class_id'],
+                        $filters['section_id'] !== '' ? (int) $filters['section_id'] : null
+                    ),
+                    403
+                );
+            }
             $payload = $this->reports->onlineAdmissionDataTable($request);
             $rows = $payload['data'];
         }
@@ -614,6 +654,13 @@ class StudentInformationReportController extends Controller
                 'session_id.required' => 'The '.__('system.session').' field is required.',
                 'class_id.required' => 'The '.__('system.class').' field is required.',
             ]);
+            abort_unless(
+                $this->reports->canAccessClass(
+                    (int) $filters['class_id'],
+                    $filters['section_id'] !== '' ? (int) $filters['section_id'] : null
+                ),
+                403
+            );
             $searched = true;
             $rows = $this->alumniReports->searchByFilter(
                 (int) $filters['session_id'],
@@ -645,13 +692,7 @@ class StudentInformationReportController extends Controller
             return [];
         }
 
-        return DB::table('class_sections')
-            ->join('sections', 'sections.id', '=', 'class_sections.section_id')
-            ->where('class_sections.class_id', $classId)
-            ->orderBy('sections.section')
-            ->select(['sections.id as section_id', 'sections.section'])
-            ->get()
-            ->all();
+        return $this->classTeacherScope->sectionsForClass($classId);
     }
 
     /**
@@ -673,6 +714,10 @@ class StudentInformationReportController extends Controller
                 'class_id.required' => 'The Class field is required.',
                 'section_id.required' => 'The Section field is required.',
             ]);
+            abort_unless(
+                $this->reports->canAccessClass((int) $filters['class_id'], (int) $filters['section_id']),
+                403
+            );
             $payload = $kind === 'parent'
                 ? $this->reports->parentCredentialDataTable($request)
                 : $this->reports->studentCredentialDataTable($request);

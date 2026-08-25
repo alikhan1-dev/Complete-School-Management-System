@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * CI Balancefees::index — due_fees_report (transport + class-teacher deferred).
+ * CI Balancefees::index — due_fees_report (incl. transport fee lines).
  */
 class BalanceFeesController extends Controller
 {
@@ -22,6 +22,7 @@ class BalanceFeesController extends Controller
     public function index(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('due_fees_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = [
             'class_id' => $request->input('class_id', ''),
@@ -37,6 +38,15 @@ class BalanceFeesController extends Controller
             ], [
                 'search_type.required' => 'The Search Type field is required.',
             ]);
+            if ($filters['class_id'] !== '') {
+                abort_unless(
+                    $this->reports->canAccessClass(
+                        (int) $filters['class_id'],
+                        $filters['section_id'] !== '' ? (int) $filters['section_id'] : null
+                    ),
+                    403
+                );
+            }
             $searched = true;
             $studentDueFee = $this->reports->dueFeesReport(
                 $filters['class_id'] !== '' ? (int) $filters['class_id'] : null,

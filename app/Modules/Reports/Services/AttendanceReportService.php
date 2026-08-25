@@ -3,6 +3,7 @@
 namespace App\Modules\Reports\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI Attendencereports: hub + daywise + daily + type + monthly + period + biometric.
- * Deferred: class-teacher class dropdown scope.
+ * Class-teacher: day_wise for day/monthly calendars; union for period/type; daily filters matrix.
  */
 class AttendanceReportService
 {
@@ -38,6 +39,7 @@ class AttendanceReportService
     public function __construct(
         protected CurrentSessionResolver $currentSession,
         protected SchoolContext $school,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -93,11 +95,51 @@ class AttendanceReportService
     }
 
     /**
+     * Classes for dropdowns.
+     * $dayWise=true → CI get_daywiseattendanceclass (class_teacher only).
+     * otherwise → CI class_model->get(classteacher=yes) union.
+     *
      * @return Collection<int, object>
      */
-    public function classes(): Collection
+    public function classes(bool $dayWise = false): Collection
     {
-        return DB::table('classes')->orderBy('class')->get();
+        return $dayWise
+            ? $this->classTeacherScope->classesForDayWiseAttendanceDropdown()
+            : $this->classTeacherScope->classesForDropdown();
+    }
+
+    /**
+     * CI access_denied when restricted teacher has no class/section matrix.
+     */
+    public function assertHasClassSectionMatrix(): void
+    {
+        if ($this->classTeacherScope->isRestricted() && $this->classTeacherScope->myClassSectionMap() === []) {
+            abort(403);
+        }
+    }
+
+    /**
+     * Whether restricted teacher may use class (+ optional section).
+     *
+     * @param  'union'|'day_wise'|'day_mark'  $mode
+     */
+    public function canAccessClassSection(int $classId, ?int $sectionId = null, string $mode = 'union'): bool
+    {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return true;
+        }
+        if ($classId <= 0) {
+            return true;
+        }
+        if ($sectionId !== null && $sectionId > 0) {
+            return $this->classTeacherScope->allowsClassSection($classId, $sectionId, $mode);
+        }
+
+        if ($mode === 'day_wise') {
+            return in_array($classId, $this->classTeacherScope->classTeacherOnlyClassIds(), true);
+        }
+
+        return in_array($classId, $this->classTeacherScope->restrictedClassIds(), true);
     }
 
     /**
@@ -392,6 +434,17 @@ class AttendanceReportService
      */
     public function studentMonthlyMatrix(int $classId, int $sectionId, string $monthName, ?string $postedYear): array
     {
+        if (! $this->canAccessClassSection($classId, $sectionId, 'day_wise')) {
+            return [
+                'resultlist' => [],
+                'student_array' => [],
+                'attendence_array' => [],
+                'monthAttendance' => [],
+                'year' => '',
+                'no_of_days' => 0,
+            ];
+        }
+
         $year = $this->resolveStudentCalendarYear($monthName, $postedYear);
         $monthNumber = (int) date('m', strtotime($monthName));
         $numOfDays = (int) cal_days_in_month(CAL_GREGORIAN, $monthNumber, $year);
@@ -693,6 +746,10 @@ class AttendanceReportService
      */
     public function studentDaywiseRows(int $classId, int $sectionId, string $date, ?int $mode): Collection
     {
+        if (! $this->canAccessClassSection($classId, $sectionId, 'day_wise')) {
+            return collect();
+        }
+
         $sessionId = (int) $this->currentSession->id();
         $query = DB::table('student_session')
             ->join('students', 'students.id', '=', 'student_session.student_id')
@@ -811,6 +868,20 @@ class AttendanceReportService
                 SUM(CASE WHEN attendence_type_id = 6 THEN 1 ELSE 0 END) AS half_day')
             ->get();
 
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                $sections = collect();
+            } else {
+                $sections = $sections->filter(function ($value) use ($matrix) {
+                    $classId = (int) $value->class_id;
+                    $sectionId = (int) $value->sections_id;
+
+                    return isset($matrix[$classId]) && in_array($sectionId, $matrix[$classId], true);
+                })->values();
+            }
+        }
+
         $rows = [];
         $allStudent = 0;
         $allPresent = 0;
@@ -870,6 +941,10 @@ class AttendanceReportService
         ?string $dateFrom = null,
         ?string $dateTo = null,
     ): array {
+        if (! $this->canAccessClassSection($classId, $sectionId, 'union')) {
+            return ['rows' => collect(), 'filter' => ''];
+        }
+
         $range = $this->dateRange($searchType !== '' ? $searchType : 'this_week', $dateFrom, $dateTo);
         $sessionId = (int) $this->currentSession->id();
         $query = DB::table('student_attendences')
@@ -1068,6 +1143,14 @@ class AttendanceReportService
      */
     public function classPeriodMonthlyAttendence(int $classId, int $sectionId, string $month, ?string $subjectId): array
     {
+        if (! $this->canAccessClassSection($classId, $sectionId, 'union')) {
+            return [
+                'class_students' => [],
+                'students_attendances' => [],
+                'no_of_days' => 0,
+            ];
+        }
+
         $monthData = $this->sessionMonthDetails(
             $this->currentSessionName(),
             (int) $this->school->get('start_month', 1),
@@ -1108,6 +1191,12 @@ class AttendanceReportService
         string $month,
         ?string $subjectId
     ): array {
+        if (! $this->canAccessClassSection($classId, $sectionId, 'union')) {
+            return [
+                'students_attendances' => [],
+                'no_of_days' => 0,
+            ];
+        }
         $monthData = $this->sessionMonthDetails(
             $this->currentSessionName(),
             (int) $this->school->get('start_month', 1),

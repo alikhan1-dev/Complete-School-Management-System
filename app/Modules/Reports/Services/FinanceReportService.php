@@ -4,6 +4,7 @@ namespace App\Modules\Reports\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Fees\Services\FeeCollectService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -11,7 +12,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI Financereports: hub + fee reports + remark/payroll/admission + income/expense list/group/balance.
- * Transport fee lines deferred. Class-teacher scope deferred.
+ * Class-teacher: empty-matrix deny + union student_session scope.
+ * Transport fee lines included when Transport module is active.
  */
 class FinanceReportService
 {
@@ -19,6 +21,7 @@ class FinanceReportService
         protected CurrentSessionResolver $currentSession,
         protected SchoolContext $school,
         protected FeeCollectService $fees,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -74,11 +77,41 @@ class FinanceReportService
     }
 
     /**
+     * Classes for dropdowns — CI class_model->get() with teacher restriction.
+     *
      * @return Collection<int, object>
      */
     public function classes(): Collection
     {
-        return DB::table('classes')->orderBy('class')->get();
+        return $this->classTeacherScope->classesForDropdown();
+    }
+
+    /**
+     * CI access_denied when restricted teacher has no class/section matrix.
+     */
+    public function assertHasClassSectionMatrix(): void
+    {
+        if ($this->classTeacherScope->isRestricted() && $this->classTeacherScope->myClassSectionMap() === []) {
+            abort(403);
+        }
+    }
+
+    /**
+     * Whether restricted teacher may use class (+ optional section).
+     */
+    public function canAccessClass(?int $classId, ?int $sectionId = null): bool
+    {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return true;
+        }
+        if ($classId === null || $classId <= 0) {
+            return true;
+        }
+        if ($sectionId !== null && $sectionId > 0) {
+            return $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union');
+        }
+
+        return in_array($classId, $this->classTeacherScope->restrictedClassIds(), true);
     }
 
     /**
@@ -96,17 +129,23 @@ class FinanceReportService
     }
 
     /**
-     * CI Financereports::studentacademicreport totals (transport deferred).
+     * CI Financereports::studentacademicreport totals (incl. transport via getTransStudentFees).
      *
      * @return list<object>
      */
     public function balanceFeesReport(?int $classId, ?int $sectionId, string $searchType): array
     {
+        if ($classId && ! $this->canAccessClass($classId, $sectionId)) {
+            return [];
+        }
+
         $students = $this->sessionStudents($classId, $sectionId);
         $rows = [];
 
         foreach ($students as $student) {
-            $ledger = $this->fees->getStudentFees((int) $student->student_session_id);
+            $ssid = (int) $student->student_session_id;
+            $ledger = $this->fees->getStudentFees($ssid);
+            $transportLines = $this->transportFeeLinesForBalance($ssid);
             $totalfee = 0.0;
             $deposit = 0.0;
             $discount = 0.0;
@@ -119,7 +158,17 @@ class FinanceReportService
                 $fine += (float) $line->paid_fine;
             }
 
+            foreach ($transportLines as $transport) {
+                $totalfee += (float) $transport->fees;
+                foreach ($this->decodeAmountDetail($transport->amount_detail) as $entry) {
+                    $deposit += (float) ($entry['amount'] ?? 0);
+                    $discount += (float) ($entry['amount_discount'] ?? 0);
+                    $fine += (float) ($entry['amount_fine'] ?? 0);
+                }
+            }
+
             $balance = $totalfee - ($deposit + $discount);
+            $hasLines = $ledger !== [] || $transportLines !== [];
             $obj = (object) [
                 'name' => $this->fullName($student),
                 'class' => $student->class,
@@ -133,7 +182,7 @@ class FinanceReportService
                 'discount' => round($discount, 2),
                 'fine' => round($fine, 2),
                 'balance' => round($balance, 2),
-                'payment_mode' => empty($ledger) ? 0 : 'N/A',
+                'payment_mode' => $hasLines ? 'N/A' : 0,
             ];
 
             if ($searchType === 'all') {
@@ -149,14 +198,19 @@ class FinanceReportService
     }
 
     /**
-     * CI Balancefees::index / due_fees_report (transport + class-teacher deferred).
+     * CI Balancefees::index / due_fees_report (incl. transport via getTransStudentFees).
      * Accrues overdue grand fine separately from paid fine; row visibility is view-side
      * (balance + grand_fine > 0) but we still return search_type-filtered students.
+     * Transport lines contribute amount/deposits but not grand_fine (CI fee objects omit due_date).
      *
      * @return list<object>
      */
     public function dueFeesReport(?int $classId, ?int $sectionId, string $searchType = 'all'): array
     {
+        if ($classId && ! $this->canAccessClass($classId, $sectionId)) {
+            return [];
+        }
+
         $students = $this->sessionStudents($classId, $sectionId);
         $today = now()->toDateString();
         $rows = [];
@@ -281,13 +335,14 @@ class FinanceReportService
     }
 
     /**
-     * Academic fee lines for Balancefees (transport deferred).
+     * Academic + transport fee lines for Balancefees (CI getTransStudentFees flatten).
+     * Transport lines omit due_date so grand_fine is not accrued (CI parity).
      *
      * @return list<object>
      */
     protected function dueFeesFeeLines(int $studentSessionId): array
     {
-        return DB::table('student_fees_master')
+        $lines = DB::table('student_fees_master')
             ->join('fee_session_groups', 'fee_session_groups.id', '=', 'student_fees_master.fee_session_group_id')
             ->join('fee_groups', 'fee_groups.id', '=', 'fee_session_groups.fee_groups_id')
             ->join('fee_groups_feetype', 'fee_groups_feetype.fee_session_group_id', '=', 'fee_session_groups.id')
@@ -325,6 +380,19 @@ class FinanceReportService
                 ];
             })
             ->all();
+
+        foreach ($this->transportFeeLinesForBalance($studentSessionId) as $transport) {
+            $lines[] = (object) [
+                'fee_groups_feetype_id' => 0,
+                'amount' => (float) $transport->fees,
+                'due_date' => null,
+                'fine_type' => null,
+                'fine_amount' => 0,
+                'amount_detail' => $transport->amount_detail,
+            ];
+        }
+
+        return $lines;
     }
 
     /**
@@ -334,6 +402,10 @@ class FinanceReportService
      */
     public function feesStatement(?int $classId, ?int $sectionId, ?int $studentId): array
     {
+        if ($classId && ! $this->canAccessClass($classId, $sectionId)) {
+            return [];
+        }
+
         $students = $this->sessionStudents($classId, $sectionId, $studentId);
         $out = [];
 
@@ -367,7 +439,10 @@ class FinanceReportService
                 'roll_no' => $student->roll_no ?? '',
                 'fees' => array_values($groups),
                 'student_discount_fee' => $this->fees->getStudentDiscounts($ssid),
-                'transport_fees' => [],
+                'transport_fees' => $this->transportFeesForStatement(
+                    $ssid,
+                    isset($student->route_pickup_point_id) ? (int) $student->route_pickup_point_id : null
+                ),
             ];
         }
 
@@ -381,6 +456,10 @@ class FinanceReportService
      */
     public function dueFeesStatement(?int $classId, ?int $sectionId, ?string $asOfDate = null): array
     {
+        if ($classId && ! $this->canAccessClass($classId, $sectionId)) {
+            return [];
+        }
+
         $date = $asOfDate ?: now()->toDateString();
         $dues = $this->dueFeeTypesByDate($date, $classId, $sectionId);
         $studentsList = [];
@@ -421,7 +500,8 @@ class FinanceReportService
         foreach ($studentsList as $ssid => $student) {
             $ids = array_values(array_unique($student['fee_groups_feetype_ids']));
             $studentsList[$ssid]['fees_list'] = $this->depositByFeeGroupFeeTypeArray($ssid, $ids);
-            $studentsList[$ssid]['transport_fees'] = [];
+            $routeId = $this->routePickupPointIdForSession((int) $ssid);
+            $studentsList[$ssid]['transport_fees'] = $this->transportFeesForStatement((int) $ssid, $routeId);
         }
 
         return $studentsList;
@@ -482,7 +562,7 @@ class FinanceReportService
     }
 
     /**
-     * CI getFeesDepositeByIdArray (transport deferred).
+     * CI getFeesDepositeByIdArray (academic + transport deposits).
      *
      * @param  list<int|string>  $ids
      * @return list<object>
@@ -496,7 +576,7 @@ class FinanceReportService
 
         $sessionId = (int) $this->currentSession->id();
 
-        return DB::table('student_fees_master')
+        $query = DB::table('student_fees_master')
             ->join('fee_session_groups', 'fee_session_groups.id', '=', 'student_fees_master.fee_session_group_id')
             ->join('student_session', 'student_session.id', '=', 'student_fees_master.student_session_id')
             ->join('students', 'students.id', '=', 'student_session.student_id')
@@ -529,9 +609,27 @@ class FinanceReportService
                 'students.father_name',
                 'classes.class',
                 'sections.section',
-            ])
-            ->get()
-            ->all();
+            ]);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return [];
+            }
+            $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
+        }
+
+        $academic = $query->get()->all();
+        $transport = $this->transportDepositsByIds($ids);
+
+        if ($academic === []) {
+            return $transport;
+        }
+        if ($transport === []) {
+            return $academic;
+        }
+
+        return array_merge($academic, $transport);
     }
 
     /**
@@ -557,6 +655,7 @@ class FinanceReportService
                 'students.father_name',
                 'students.mobileno',
                 'student_session.id as student_session_id',
+                'student_session.route_pickup_point_id',
                 'classes.class',
                 'sections.section',
             ]);
@@ -569,6 +668,14 @@ class FinanceReportService
         }
         if ($studentId) {
             $query->where('students.id', $studentId);
+        }
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return collect();
+            }
+            $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
         }
 
         return $query->get();
@@ -626,6 +733,14 @@ class FinanceReportService
             $query->where('student_session.section_id', $sectionId);
         }
 
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return collect();
+            }
+            $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
+        }
+
         return $query->get();
     }
 
@@ -673,7 +788,7 @@ class FinanceReportService
     {
         $sessionId = (int) $this->currentSession->id();
 
-        return DB::table('student_fees_master')
+        $query = DB::table('student_fees_master')
             ->join('fee_session_groups', 'fee_session_groups.id', '=', 'student_fees_master.fee_session_group_id')
             ->join('student_session', 'student_session.id', '=', 'student_fees_master.student_session_id')
             ->join('students', 'students.id', '=', 'student_session.student_id')
@@ -689,8 +804,20 @@ class FinanceReportService
             ->select([
                 'student_fees_deposite.id as student_fees_deposite_id',
                 'student_fees_deposite.amount_detail',
-            ])
-            ->get();
+            ]);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return collect();
+            }
+            $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
+        }
+
+        $academic = $query->get();
+        $transport = collect($this->transportCurrentSessionDeposits());
+
+        return $academic->concat($transport)->values();
     }
 
     protected function sumPaidAmountDiscount(mixed $raw): float
@@ -825,70 +952,108 @@ class FinanceReportService
     }
 
     /**
+     * CI feetype list + synthetic Transport Fees option.
+     *
      * @return Collection<int, object>
      */
     public function feeTypes(): Collection
     {
-        return DB::table('feetype')->orderBy('type')->get(['id', 'type', 'code']);
+        $types = DB::table('feetype')->orderBy('type')->get(['id', 'type', 'code']);
+        $types->push((object) [
+            'id' => 'transport_fees',
+            'type' => 'Transport Fees',
+            'code' => '',
+        ]);
+
+        return $types;
     }
 
     /**
-     * CI getFeeCollectionReport (transport deferred).
+     * CI getFeeCollectionReport (academic + transport deposits).
      *
+     * @param  int|string|null  $feetypeId  Numeric feetype id or 'transport_fees'
      * @return list<array<string, mixed>>
      */
     public function feeCollectionReport(
         string $startDate,
         string $endDate,
-        ?int $feetypeId = null,
+        int|string|null $feetypeId = null,
         ?int $receivedBy = null,
         ?int $classId = null,
         ?int $sectionId = null
     ): array {
+        if ($classId && ! $this->canAccessClass($classId, $sectionId)) {
+            return [];
+        }
+
         $sessionId = (int) $this->currentSession->id();
-        $query = DB::table('student_fees_deposite')
-            ->join('fee_groups_feetype', 'fee_groups_feetype.id', '=', 'student_fees_deposite.fee_groups_feetype_id')
-            ->join('fee_groups', 'fee_groups.id', '=', 'fee_groups_feetype.fee_groups_id')
-            ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
-            ->join('student_fees_master', 'student_fees_master.id', '=', 'student_fees_deposite.student_fees_master_id')
-            ->leftJoin('student_session', 'student_session.id', '=', 'student_fees_master.student_session_id')
-            ->join('classes', 'classes.id', '=', 'student_session.class_id')
-            ->join('sections', 'sections.id', '=', 'student_session.section_id')
-            ->join('students', 'students.id', '=', 'student_session.student_id')
-            ->where('fee_groups_feetype.session_id', $sessionId)
-            ->where('student_session.session_id', $sessionId)
-            ->select([
-                'student_fees_deposite.id',
-                'student_fees_deposite.student_fees_master_id',
-                'student_fees_deposite.fee_groups_feetype_id',
-                'student_fees_deposite.amount_detail',
-                'students.firstname',
-                'students.middlename',
-                'students.lastname',
-                'students.admission_no',
-                'student_session.class_id',
-                'classes.class',
-                'sections.section',
-                'student_session.section_id',
-                'student_session.student_id',
-                'fee_groups.name',
-                'feetype.type',
-                'feetype.code',
-                'feetype.is_system',
-                'student_fees_master.student_session_id',
-            ]);
+        $transportOnly = $feetypeId === 'transport_fees';
+        $academicFeetypeId = (is_numeric($feetypeId) && (int) $feetypeId > 0)
+            ? (int) $feetypeId
+            : null;
 
-        if ($feetypeId) {
-            $query->where('fee_groups_feetype.feetype_id', $feetypeId);
-        }
-        if ($classId) {
-            $query->where('student_session.class_id', $classId);
-        }
-        if ($sectionId) {
-            $query->where('student_session.section_id', $sectionId);
+        $deposits = collect();
+        if (! $transportOnly) {
+            $query = DB::table('student_fees_deposite')
+                ->join('fee_groups_feetype', 'fee_groups_feetype.id', '=', 'student_fees_deposite.fee_groups_feetype_id')
+                ->join('fee_groups', 'fee_groups.id', '=', 'fee_groups_feetype.fee_groups_id')
+                ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
+                ->join('student_fees_master', 'student_fees_master.id', '=', 'student_fees_deposite.student_fees_master_id')
+                ->leftJoin('student_session', 'student_session.id', '=', 'student_fees_master.student_session_id')
+                ->join('classes', 'classes.id', '=', 'student_session.class_id')
+                ->join('sections', 'sections.id', '=', 'student_session.section_id')
+                ->join('students', 'students.id', '=', 'student_session.student_id')
+                ->where('fee_groups_feetype.session_id', $sessionId)
+                ->where('student_session.session_id', $sessionId)
+                ->select([
+                    'student_fees_deposite.id',
+                    'student_fees_deposite.student_fees_master_id',
+                    'student_fees_deposite.fee_groups_feetype_id',
+                    'student_fees_deposite.amount_detail',
+                    'students.firstname',
+                    'students.middlename',
+                    'students.lastname',
+                    'students.admission_no',
+                    'student_session.class_id',
+                    'classes.class',
+                    'sections.section',
+                    'student_session.section_id',
+                    'student_session.student_id',
+                    'fee_groups.name',
+                    'feetype.type',
+                    'feetype.code',
+                    'feetype.is_system',
+                    'student_fees_master.student_session_id',
+                ]);
+
+            if ($academicFeetypeId !== null) {
+                $query->where('fee_groups_feetype.feetype_id', $academicFeetypeId);
+            }
+            if ($classId) {
+                $query->where('student_session.class_id', $classId);
+            }
+            if ($sectionId) {
+                $query->where('student_session.section_id', $sectionId);
+            }
+
+            if ($this->classTeacherScope->isRestricted()) {
+                $matrix = $this->classTeacherScope->myClassSectionMap();
+                if ($matrix === []) {
+                    return [];
+                }
+                $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
+            }
+
+            $deposits = $query->get();
         }
 
-        $deposits = $query->get();
+        $includeTransport = $this->fees->transportModuleActive()
+            && ($feetypeId === null || $feetypeId === '' || $transportOnly);
+        if ($includeTransport && $academicFeetypeId === null) {
+            $transport = $this->transportCollectionDeposits($classId, $sectionId);
+            $deposits = $deposits->concat($transport)->values();
+        }
+
         $staffMap = $this->staffNameMap();
 
         return $this->expandDepositPayments(
@@ -902,14 +1067,14 @@ class FinanceReportService
     }
 
     /**
-     * CI getOnlineFeeCollectionReport (transport deferred).
+     * CI getOnlineFeeCollectionReport (academic + transport deposits).
      *
      * @return list<array<string, mixed>>
      */
     public function onlineFeeCollectionReport(string $startDate, string $endDate): array
     {
         $sessionId = (int) $this->currentSession->id();
-        $deposits = DB::table('student_fees_deposite')
+        $query = DB::table('student_fees_deposite')
             ->join('fee_groups_feetype', 'fee_groups_feetype.id', '=', 'student_fees_deposite.fee_groups_feetype_id')
             ->join('fee_groups', 'fee_groups.id', '=', 'fee_groups_feetype.fee_groups_id')
             ->join('feetype', 'feetype.id', '=', 'fee_groups_feetype.feetype_id')
@@ -939,8 +1104,20 @@ class FinanceReportService
                 'feetype.code',
                 'feetype.is_system',
                 'student_fees_master.student_session_id',
-            ])
-            ->get();
+            ]);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return [];
+            }
+            $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
+        }
+
+        $deposits = $query->get();
+        if ($this->fees->transportModuleActive()) {
+            $deposits = $deposits->concat($this->transportCollectionDeposits(null, null))->values();
+        }
 
         return $this->expandDepositPayments(
             $deposits,
@@ -989,13 +1166,17 @@ class FinanceReportService
     }
 
     /**
-     * CI Financereports::duefeesremark / printduefeesremark (transport deferred).
+     * CI Financereports::duefeesremark / printduefeesremark (academic + overdue transport).
      * Uses due_date < asOfDate (CI strict less-than, not <= used by dueFeesStatement).
      *
      * @return array<int, array<string, mixed>>
      */
     public function dueFeesWithRemark(int $classId, int $sectionId, ?string $asOfDate = null): array
     {
+        if (! $this->canAccessClass($classId, $sectionId)) {
+            return [];
+        }
+
         $date = $asOfDate ?: now()->toDateString();
         $sessionId = (int) $this->currentSession->id();
 
@@ -1065,6 +1246,10 @@ class FinanceReportService
                 'students.gender',
             ])
             ->get();
+
+        if ($this->fees->transportModuleActive()) {
+            $dues = $dues->concat($this->transportDueFeesRemarkRows($classId, $sectionId, $date))->values();
+        }
 
         $students = [];
         foreach ($dues as $row) {
@@ -1592,6 +1777,289 @@ class FinanceReportService
         }
 
         return $map;
+    }
+
+    protected function routePickupPointIdForSession(int $studentSessionId): ?int
+    {
+        $id = DB::table('student_session')
+            ->where('id', $studentSessionId)
+            ->value('route_pickup_point_id');
+
+        return $id !== null && (int) $id > 0 ? (int) $id : null;
+    }
+
+    /**
+     * CI Studentfeemaster_model::getStudentTransportFees (statement / due fees attach).
+     *
+     * @return list<object>
+     */
+    protected function transportFeesForStatement(int $studentSessionId, ?int $routePickupPointId): array
+    {
+        if (! $this->fees->transportModuleActive()
+            || $studentSessionId <= 0
+            || $routePickupPointId === null
+            || $routePickupPointId <= 0) {
+            return [];
+        }
+
+        return DB::table('student_transport_fees')
+            ->join('transport_feemaster', 'transport_feemaster.id', '=', 'student_transport_fees.transport_feemaster_id')
+            ->join('route_pickup_point', 'route_pickup_point.id', '=', 'student_transport_fees.route_pickup_point_id')
+            ->leftJoin('student_fees_deposite', 'student_fees_deposite.student_transport_fee_id', '=', 'student_transport_fees.id')
+            ->where('student_transport_fees.student_session_id', $studentSessionId)
+            ->where('student_transport_fees.route_pickup_point_id', $routePickupPointId)
+            ->orderBy('student_transport_fees.id')
+            ->select([
+                'student_transport_fees.*',
+                'transport_feemaster.month',
+                'transport_feemaster.due_date',
+                'transport_feemaster.fine_amount',
+                'transport_feemaster.fine_type',
+                'transport_feemaster.fine_percentage',
+                'route_pickup_point.fees',
+                DB::raw('IFNULL(student_fees_deposite.id, 0) as student_fees_deposite_id'),
+                DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
+            ])
+            ->get()
+            ->all();
+    }
+
+    /**
+     * CI getTransStudentFees transport rows (all lines for student_session; no route filter).
+     *
+     * @return list<object{fees: float|int|string, amount_detail: mixed}>
+     */
+    protected function transportFeeLinesForBalance(int $studentSessionId): array
+    {
+        if (! $this->fees->transportModuleActive() || $studentSessionId <= 0) {
+            return [];
+        }
+
+        $sessionId = (int) $this->currentSession->id();
+
+        return DB::table('student_transport_fees')
+            ->leftJoin('student_fees_deposite', 'student_transport_fees.id', '=', 'student_fees_deposite.student_transport_fee_id')
+            ->join('transport_feemaster', 'student_transport_fees.transport_feemaster_id', '=', 'transport_feemaster.id')
+            ->join('student_session', 'student_session.id', '=', 'student_transport_fees.student_session_id')
+            ->join('route_pickup_point', 'route_pickup_point.id', '=', 'student_transport_fees.route_pickup_point_id')
+            ->where('student_session.session_id', $sessionId)
+            ->where('student_session.id', $studentSessionId)
+            ->orderByDesc('student_fees_deposite.id')
+            ->select([
+                'route_pickup_point.fees',
+                DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
+            ])
+            ->get()
+            ->all();
+    }
+
+    /**
+     * Transport deposit rows shaped for fee collection / online expandDepositPayments.
+     *
+     * @return Collection<int, object>
+     */
+    protected function transportCollectionDeposits(?int $classId, ?int $sectionId): Collection
+    {
+        $sessionId = (int) $this->currentSession->id();
+        $query = DB::table('student_fees_deposite')
+            ->join('student_transport_fees', 'student_transport_fees.id', '=', 'student_fees_deposite.student_transport_fee_id')
+            ->join('transport_feemaster', 'student_transport_fees.transport_feemaster_id', '=', 'transport_feemaster.id')
+            ->join('student_session', 'student_session.id', '=', 'student_transport_fees.student_session_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->where('student_session.session_id', $sessionId)
+            ->select([
+                'student_fees_deposite.id',
+                'student_fees_deposite.student_fees_master_id',
+                'student_fees_deposite.fee_groups_feetype_id',
+                'student_fees_deposite.amount_detail',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.admission_no',
+                'student_session.class_id',
+                'classes.class',
+                'sections.section',
+                'student_session.section_id',
+                'student_session.student_id',
+                DB::raw("'Transport Fees' as name"),
+                DB::raw("'Transport Fees' as type"),
+                'transport_feemaster.month as code',
+                DB::raw('0 as is_system'),
+                'student_transport_fees.student_session_id',
+            ]);
+
+        if ($classId) {
+            $query->where('student_session.class_id', $classId);
+        }
+        if ($sectionId) {
+            $query->where('student_session.section_id', $sectionId);
+        }
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return collect();
+            }
+            $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * @return list<object>
+     */
+    protected function transportCurrentSessionDeposits(): array
+    {
+        if (! $this->fees->transportModuleActive()) {
+            return [];
+        }
+
+        $sessionId = (int) $this->currentSession->id();
+        $query = DB::table('student_fees_deposite')
+            ->join('student_transport_fees', 'student_transport_fees.id', '=', 'student_fees_deposite.student_transport_fee_id')
+            ->join('transport_feemaster', 'student_transport_fees.transport_feemaster_id', '=', 'transport_feemaster.id')
+            ->join('student_session', 'student_session.id', '=', 'student_transport_fees.student_session_id')
+            ->where('student_session.session_id', $sessionId)
+            ->orderByDesc('student_fees_deposite.id')
+            ->select([
+                'student_fees_deposite.id as student_fees_deposite_id',
+                'student_fees_deposite.amount_detail',
+            ]);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return [];
+            }
+            $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
+        }
+
+        return $query->get()->all();
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return list<object>
+     */
+    protected function transportDepositsByIds(array $ids): array
+    {
+        if (! $this->fees->transportModuleActive() || $ids === []) {
+            return [];
+        }
+
+        $sessionId = (int) $this->currentSession->id();
+        $query = DB::table('student_fees_deposite')
+            ->join('student_transport_fees', 'student_transport_fees.id', '=', 'student_fees_deposite.student_transport_fee_id')
+            ->join('transport_feemaster', 'student_transport_fees.transport_feemaster_id', '=', 'transport_feemaster.id')
+            ->join('student_session', 'student_session.id', '=', 'student_transport_fees.student_session_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->where('student_session.session_id', $sessionId)
+            ->whereIn('student_fees_deposite.id', $ids)
+            ->select([
+                'student_fees_deposite.*',
+                'student_fees_deposite.id as student_fees_deposite_id',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'student_session.class_id',
+                'classes.class',
+                'sections.section',
+                'student_session.section_id',
+                'student_session.student_id',
+                DB::raw("'Transport Fees' as name"),
+                DB::raw("'Transport Fees' as type"),
+                DB::raw("'' as code"),
+                DB::raw('0 as is_system'),
+                'student_transport_fees.student_session_id',
+                'students.admission_no',
+                'students.father_name',
+            ]);
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return [];
+            }
+            $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
+        }
+
+        return $query->get()->all();
+    }
+
+    /**
+     * CI getDueStudentFeesByDateClassSection transport branch.
+     *
+     * @return Collection<int, object>
+     */
+    protected function transportDueFeesRemarkRows(int $classId, int $sectionId, string $date): Collection
+    {
+        $sessionId = (int) $this->currentSession->id();
+
+        return DB::table('student_transport_fees')
+            ->leftJoin('student_fees_deposite', 'student_transport_fees.id', '=', 'student_fees_deposite.student_transport_fee_id')
+            ->leftJoin('transport_feemaster', 'student_transport_fees.transport_feemaster_id', '=', 'transport_feemaster.id')
+            ->join('student_session', 'student_session.id', '=', 'student_transport_fees.student_session_id')
+            ->join('route_pickup_point', 'route_pickup_point.id', '=', 'student_transport_fees.route_pickup_point_id')
+            ->join('classes', 'classes.id', '=', 'student_session.class_id')
+            ->join('sections', 'sections.id', '=', 'student_session.section_id')
+            ->join('students', 'students.id', '=', 'student_session.student_id')
+            ->leftJoin('categories', 'students.category_id', '=', 'categories.id')
+            ->where('student_session.session_id', $sessionId)
+            ->where('student_session.class_id', $classId)
+            ->where('student_session.section_id', $sectionId)
+            ->where('transport_feemaster.due_date', '<', $date)
+            ->orderByDesc('student_fees_deposite.id')
+            ->select([
+                DB::raw('0 as previous_balance_amount'),
+                DB::raw('IFNULL(student_fees_deposite.amount_detail, 0) as amount_detail'),
+                'route_pickup_point.fees as amount',
+                DB::raw('0 as is_system'),
+                DB::raw("'' as fee_group"),
+                DB::raw("'Transport Fees' as fee_type"),
+                'transport_feemaster.month as fee_code',
+                'student_session.id as student_session_id',
+                'students.id',
+                'classes.class',
+                'sections.id as section_id',
+                'sections.section',
+                'students.admission_no',
+                'students.roll_no',
+                'students.admission_date',
+                'students.firstname',
+                'students.middlename',
+                'students.lastname',
+                'students.image',
+                'students.mobileno',
+                'students.email',
+                'students.state',
+                'students.city',
+                'students.pincode',
+                'students.religion',
+                'students.dob',
+                'students.current_address',
+                'students.permanent_address',
+                DB::raw('IFNULL(students.category_id, 0) as category_id'),
+                DB::raw('IFNULL(categories.category, "") as category'),
+                'students.adhar_no',
+                'students.samagra_id',
+                'students.bank_account_no',
+                'students.bank_name',
+                'students.ifsc_code',
+                'students.guardian_name',
+                'students.guardian_relation',
+                'students.guardian_phone',
+                'students.guardian_address',
+                'students.is_active',
+                'students.father_name',
+                'students.rte',
+                'students.gender',
+            ])
+            ->get();
     }
 
     /**

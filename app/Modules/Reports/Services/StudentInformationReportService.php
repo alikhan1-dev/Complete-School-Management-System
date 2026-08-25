@@ -2,7 +2,10 @@
 
 namespace App\Modules\Reports\Services;
 
+use App\Modules\Academics\Models\CustomField;
 use App\Modules\Academics\Services\CurrentSessionResolver;
+use App\Modules\Academics\Services\CustomFieldValueService;
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -17,6 +20,8 @@ class StudentInformationReportService
     public function __construct(
         protected CurrentSessionResolver $currentSession,
         protected SchoolContext $school,
+        protected ClassTeacherScopeService $classTeacherScope,
+        protected CustomFieldValueService $customFields,
     ) {
     }
 
@@ -54,7 +59,58 @@ class StudentInformationReportService
      */
     public function classes(): Collection
     {
-        return DB::table('classes')->orderBy('class')->get();
+        return $this->classTeacherScope->classesForDropdown();
+    }
+
+    /**
+     * CI access_denied when restricted teacher has no class/section matrix.
+     */
+    public function assertHasClassSectionMatrix(): void
+    {
+        if ($this->classTeacherScope->isRestricted() && $this->classTeacherScope->myClassSectionMap() === []) {
+            abort(403);
+        }
+    }
+
+    /**
+     * Whether restricted teacher may use class (+ optional section).
+     */
+    public function canAccessClass(?int $classId, ?int $sectionId = null): bool
+    {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return true;
+        }
+        if ($classId === null || $classId <= 0) {
+            return true;
+        }
+        if ($sectionId !== null && $sectionId > 0) {
+            return $this->classTeacherScope->allowsClassSection($classId, $sectionId, 'union');
+        }
+
+        return in_array($classId, $this->classTeacherScope->restrictedClassIds(), true);
+    }
+
+    /**
+     * Filter collection rows that expose class_id / section_id.
+     *
+     * @return Collection<int, object>
+     */
+    protected function filterCollectionByMatrix(Collection $rows): Collection
+    {
+        if (! $this->classTeacherScope->isRestricted()) {
+            return $rows;
+        }
+
+        $matrix = $this->classTeacherScope->myClassSectionMap();
+        if ($matrix === []) {
+            return collect();
+        }
+
+        $filtered = $this->classTeacherScope->filterRowsByMatrix(
+            $rows->map(fn ($r) => (array) $r)->all()
+        );
+
+        return collect($filtered)->map(fn (array $r) => (object) $r);
     }
 
     /**
@@ -66,7 +122,7 @@ class StudentInformationReportService
     {
         $sessionId = (int) $this->currentSession->id();
 
-        return DB::table('class_sections')
+        $rows = DB::table('class_sections')
             ->join('classes', 'classes.id', '=', 'class_sections.class_id')
             ->join('sections', 'sections.id', '=', 'class_sections.section_id')
             ->select([
@@ -80,6 +136,8 @@ class StudentInformationReportService
             ->orderBy('classes.class')
             ->orderBy('sections.section')
             ->get();
+
+        return $this->filterCollectionByMatrix($rows);
     }
 
     /**
@@ -91,7 +149,7 @@ class StudentInformationReportService
     {
         $sessionId = (int) $this->currentSession->id();
 
-        return DB::table('students')
+        $rows = DB::table('students')
             ->join('student_session', 'student_session.student_id', '=', 'students.id')
             ->join('classes', 'student_session.class_id', '=', 'classes.id')
             ->join('sections', 'sections.id', '=', 'student_session.section_id')
@@ -106,6 +164,8 @@ class StudentInformationReportService
             ->orderBy('sections.section')
             ->selectRaw('COUNT(*) as total_student, SUM(CASE WHEN students.gender = "Male" THEN 1 ELSE 0 END) AS `male`, SUM(CASE WHEN students.gender = "Female" THEN 1 ELSE 0 END) AS `female`, classes.class, sections.section, classes.id as class_id, sections.id as section_id')
             ->get();
+
+        return $this->filterCollectionByMatrix($rows);
     }
 
     /**
@@ -218,6 +278,10 @@ class StudentInformationReportService
      */
     public function studentReportRows(?int $classId, ?int $sectionId, ?int $categoryId, ?string $gender, ?string $rte): Collection
     {
+        if (! $this->canAccessClass($classId, $sectionId)) {
+            return collect();
+        }
+
         $sessionId = (int) $this->currentSession->id();
         $query = DB::table('students')
             ->join('student_session', 'student_session.student_id', '=', 'students.id')
@@ -244,6 +308,9 @@ class StudentInformationReportService
             ])
             ->orderBy('students.id');
 
+        if ($this->classTeacherScope->isRestricted() && ($classId === null || $classId <= 0)) {
+            $this->classTeacherScope->applyStudentSessionScope($query);
+        }
         if ($classId) {
             $query->where('student_session.class_id', $classId);
         }
@@ -356,6 +423,10 @@ class StudentInformationReportService
      */
     public function guardianRows(int $classId, int $sectionId): Collection
     {
+        if (! $this->canAccessClass($classId, $sectionId)) {
+            return collect();
+        }
+
         $sessionId = (int) $this->currentSession->id();
 
         return DB::table('students')
@@ -409,6 +480,10 @@ class StudentInformationReportService
      */
     public function historyRows(int $classId, ?int $year): Collection
     {
+        if (! $this->canAccessClass($classId)) {
+            return collect();
+        }
+
         $query = DB::table('students')
             ->join('student_session', 'students.id', '=', 'student_session.student_id')
             ->join('classes', 'student_session.class_id', '=', 'classes.id')
@@ -522,6 +597,10 @@ class StudentInformationReportService
      */
     public function loginCredentialStudents(?int $classId, ?int $sectionId): Collection
     {
+        if (! $this->canAccessClass($classId, $sectionId)) {
+            return collect();
+        }
+
         $sessionId = (int) $this->currentSession->id();
         $query = DB::table('students')
             ->join('student_session', 'student_session.student_id', '=', 'students.id')
@@ -538,6 +617,9 @@ class StudentInformationReportService
             ])
             ->orderBy('students.admission_no');
 
+        if ($this->classTeacherScope->isRestricted() && ($classId === null || $classId <= 0)) {
+            $this->classTeacherScope->applyStudentSessionScope($query);
+        }
         if ($classId) {
             $query->where('student_session.class_id', $classId);
         }
@@ -719,6 +801,10 @@ class StudentInformationReportService
      */
     public function classSubjectGroups(int $classId, int $sectionId): array
     {
+        if (! $this->canAccessClass($classId, $sectionId)) {
+            return [];
+        }
+
         $sessionId = (int) $this->currentSession->id();
         $rows = DB::table('subject_timetable')
             ->join('subject_group_subjects', 'subject_timetable.subject_group_subject_id', '=', 'subject_group_subjects.id')
@@ -767,7 +853,7 @@ class StudentInformationReportService
     {
         $sessionId = (int) $this->currentSession->id();
 
-        return DB::table('students')
+        $query = DB::table('students')
             ->join('student_session', 'student_session.student_id', '=', 'students.id')
             ->join('classes', 'student_session.class_id', '=', 'classes.id')
             ->join('sections', 'sections.id', '=', 'student_session.section_id')
@@ -790,8 +876,17 @@ class StudentInformationReportService
                 'sections.section',
                 DB::raw('IFNULL(categories.category, "") as category'),
             ])
-            ->orderBy('students.id')
-            ->get();
+            ->orderBy('students.id');
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $matrix = $this->classTeacherScope->myClassSectionMap();
+            if ($matrix === []) {
+                return collect();
+            }
+            $this->classTeacherScope->applyStudentSessionScope($query, $matrix);
+        }
+
+        return $query->get();
     }
 
     /**
@@ -865,6 +960,10 @@ class StudentInformationReportService
      */
     public function siblingGroups(int $classId, int $sectionId): array
     {
+        if (! $this->canAccessClass($classId, $sectionId)) {
+            return [];
+        }
+
         $sessionId = (int) $this->currentSession->id();
         $parentIds = DB::table('students')
             ->join('student_session', 'student_session.student_id', '=', 'students.id')
@@ -920,12 +1019,44 @@ class StudentInformationReportService
     }
 
     /**
-     * CI Student_model::student_profile without password select / broken custom-field joins.
+     * CI customfield_model::get_custom_fields('students', 1) for student_profile columns.
+     *
+     * @return \Illuminate\Support\Collection<int, CustomField>
+     */
+    public function studentTableCustomFields(): Collection
+    {
+        return $this->customFields->fieldsForTable('students');
+    }
+
+    /**
+     * CI student_profile custom-field cell (link type opens in new tab).
+     */
+    public function customFieldDisplay(object $student, object $field): string
+    {
+        $values = (array) ($student->table_custom ?? []);
+        $value = (string) ($values[(int) $field->id] ?? '');
+        if ($value === '') {
+            return '';
+        }
+
+        if ((string) ($field->type ?? '') === 'link') {
+            return '<a href="'.e($value).'" target="_blank">'.e($value).'</a>';
+        }
+
+        return e($value);
+    }
+
+    /**
+     * CI Student_model::student_profile without password select; table custom fields merged post-query.
      *
      * @return Collection<int, object>
      */
     public function studentProfileRows(int $classId, int $sectionId, ?string $from = null, ?string $to = null): Collection
     {
+        if (! $this->canAccessClass($classId, $sectionId)) {
+            return collect();
+        }
+
         $sessionId = (int) $this->currentSession->id();
         $query = DB::table('students')
             ->join('student_session', 'student_session.student_id', '=', 'students.id')
@@ -1005,7 +1136,17 @@ class StudentInformationReportService
             $query->whereRaw("DATE_FORMAT(students.admission_date, '%Y-%m-%d') BETWEEN ? AND ?", [$from, $to]);
         }
 
-        return $query->get();
+        $rows = $query->get();
+        $customMaps = $this->customFields->tableValuesByBelongIds(
+            'students',
+            $rows->pluck('id')->map(fn ($id) => (int) $id)->all()
+        );
+
+        return $rows->map(function ($student) use ($customMaps) {
+            $student->table_custom = $customMaps[(int) $student->id] ?? [];
+
+            return $student;
+        });
     }
 
     public function admAutoInsert(): bool
@@ -1025,6 +1166,10 @@ class StudentInformationReportService
      */
     public function onlineAdmissionRows(?int $classId, ?int $sectionId, ?int $status): Collection
     {
+        if ($classId && ! $this->canAccessClass($classId, $sectionId)) {
+            return collect();
+        }
+
         $query = DB::table('online_admissions')
             ->leftJoin('students', 'students.admission_no', '=', 'online_admissions.admission_no')
             ->leftJoin('student_session', 'student_session.student_id', '=', 'students.id')

@@ -53,6 +53,14 @@ class AttendanceReportController extends Controller
             ]);
             $date = $this->reports->parseDate($filters['date']);
             abort_unless($date !== null, 422);
+            abort_unless(
+                $this->reports->canAccessClassSection(
+                    (int) $filters['class_id'],
+                    (int) $filters['section_id'],
+                    'day_wise'
+                ),
+                403
+            );
             $mode = $filters['attendance_mode'] === '' ? null : (int) $filters['attendance_mode'];
             $rows = $this->reports->studentDaywiseRows(
                 (int) $filters['class_id'],
@@ -65,7 +73,7 @@ class AttendanceReportController extends Controller
         return view('shared::layouts.admin', array_merge([
             'title' => __('system.student_day_wise_attendance_report'),
             'contentView' => 'reports::admin.attendance.student_daywise',
-            'classes' => $this->reports->classes(),
+            'classes' => $this->reports->classes(true),
             'filters' => $filters,
             'rows' => $rows,
             'searched' => $searched,
@@ -112,6 +120,7 @@ class AttendanceReportController extends Controller
     public function daily_attendance_report(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('daily_attendance_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $dateInput = $request->input('date');
         $sqlDate = now()->toDateString();
@@ -168,6 +177,14 @@ class AttendanceReportController extends Controller
                 'class_id.required' => 'The Class field is required.',
             ]);
             $searched = true;
+            abort_unless(
+                $this->reports->canAccessClassSection(
+                    (int) $filters['class_id'],
+                    $filters['section_id'] !== '' ? (int) $filters['section_id'] : null,
+                    'union'
+                ),
+                403
+            );
             $payload = $this->reports->attendanceTypeReport(
                 (int) $filters['class_id'],
                 $filters['section_id'] !== '' ? (int) $filters['section_id'] : null,
@@ -222,6 +239,15 @@ class AttendanceReportController extends Controller
                 'month.required' => 'The Month field is required.',
             ]);
 
+            abort_unless(
+                $this->reports->canAccessClassSection(
+                    (int) $request->input('class_id'),
+                    (int) $request->input('section_id'),
+                    'day_wise'
+                ),
+                403
+            );
+
             $payload = $this->reports->studentMonthlyMatrix(
                 (int) $request->input('class_id'),
                 (int) $request->input('section_id'),
@@ -238,7 +264,7 @@ class AttendanceReportController extends Controller
         return view('shared::layouts.admin', array_merge([
             'title' => __('system.student_attendance_report'),
             'contentView' => 'reports::admin.attendance.class_attendance',
-            'classes' => $this->reports->classes(),
+            'classes' => $this->reports->classes(true),
             'monthlist' => $this->reports->monthDropdown(),
             'yearlist' => $this->reports->studentAttendanceYears(),
             'attendencetypeslist' => $this->reports->studentAttendanceTypes(),
@@ -337,6 +363,14 @@ class AttendanceReportController extends Controller
                 'month.required' => 'The Month field is required.',
             ]);
             $searched = true;
+            abort_unless(
+                $this->reports->canAccessClassSection(
+                    (int) $request->input('class_id'),
+                    (int) $request->input('section_id'),
+                    'union'
+                ),
+                403
+            );
             $subjectId = $request->filled('subject_id') ? (string) $request->input('subject_id') : null;
             $resultlist = $this->reports->classPeriodMonthlyAttendence(
                 (int) $request->input('class_id'),
@@ -389,6 +423,14 @@ class AttendanceReportController extends Controller
                 'month.required' => 'The Month field is required.',
             ]);
             $searched = true;
+            abort_unless(
+                $this->reports->canAccessClassSection(
+                    (int) $request->input('class_id'),
+                    (int) $request->input('section_id'),
+                    'union'
+                ),
+                403
+            );
             $subjectId = $request->filled('subject_id') ? (string) $request->input('subject_id') : null;
             $resultlist = $this->reports->studentPeriodMonthlyAttendence(
                 (int) $request->input('class_id'),

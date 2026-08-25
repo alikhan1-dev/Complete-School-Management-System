@@ -33,6 +33,7 @@ class FinanceReportController extends Controller
     public function studentacademicreport(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('balance_fees_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = [
             'class_id' => $request->input('class_id', ''),
@@ -48,6 +49,15 @@ class FinanceReportController extends Controller
             ], [
                 'search_type.required' => 'The Search Type field is required.',
             ]);
+            if ($request->filled('class_id')) {
+                abort_unless(
+                    $this->reports->canAccessClass(
+                        (int) $request->input('class_id'),
+                        $request->filled('section_id') ? (int) $request->input('section_id') : null
+                    ),
+                    403
+                );
+            }
             $searched = true;
             $rows = $this->reports->balanceFeesReport(
                 $request->filled('class_id') ? (int) $request->input('class_id') : null,
@@ -74,6 +84,7 @@ class FinanceReportController extends Controller
     public function reportbyname(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('fees_statement', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = [
             'class_id' => $request->input('class_id', ''),
@@ -84,6 +95,15 @@ class FinanceReportController extends Controller
         $searched = $request->isMethod('post');
 
         if ($searched) {
+            if ($request->filled('class_id')) {
+                abort_unless(
+                    $this->reports->canAccessClass(
+                        (int) $request->input('class_id'),
+                        $request->filled('section_id') ? (int) $request->input('section_id') : null
+                    ),
+                    403
+                );
+            }
             $studentDueFee = $this->reports->feesStatement(
                 $request->filled('class_id') ? (int) $request->input('class_id') : null,
                 $request->filled('section_id') ? (int) $request->input('section_id') : null,
@@ -105,6 +125,7 @@ class FinanceReportController extends Controller
     public function reportduefees(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('balance_fees_statement', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = [
             'class_id' => $request->input('class_id', ''),
@@ -114,6 +135,15 @@ class FinanceReportController extends Controller
         $searched = $request->isMethod('post');
 
         if ($searched) {
+            if ($request->filled('class_id')) {
+                abort_unless(
+                    $this->reports->canAccessClass(
+                        (int) $request->input('class_id'),
+                        $request->filled('section_id') ? (int) $request->input('section_id') : null
+                    ),
+                    403
+                );
+            }
             $studentDueFee = $this->reports->dueFeesStatement(
                 $request->filled('class_id') ? (int) $request->input('class_id') : null,
                 $request->filled('section_id') ? (int) $request->input('section_id') : null
@@ -134,6 +164,16 @@ class FinanceReportController extends Controller
     public function printreportduefees(Request $request): JsonResponse
     {
         abort_unless($this->permissions->hasPrivilege('balance_fees_statement', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
+        if ($request->filled('class_id')) {
+            abort_unless(
+                $this->reports->canAccessClass(
+                    (int) $request->input('class_id'),
+                    $request->filled('section_id') ? (int) $request->input('section_id') : null
+                ),
+                403
+            );
+        }
 
         $studentDueFee = $this->reports->dueFeesStatement(
             $request->filled('class_id') ? (int) $request->input('class_id') : null,
@@ -151,6 +191,7 @@ class FinanceReportController extends Controller
     public function reportdailycollection(Request $request): View
     {
         abort_unless($this->permissions->hasPrivilege('daily_collection_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = [
             'date_from' => $request->input('date_from', ''),
@@ -189,6 +230,7 @@ class FinanceReportController extends Controller
     public function feeCollectionStudentDeposit(Request $request): JsonResponse
     {
         abort_unless($this->permissions->hasPrivilege('daily_collection_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $feesId = (string) $request->input('fees_id', '');
         $ids = $feesId === '' ? [] : explode(',', $feesId);
@@ -207,6 +249,7 @@ class FinanceReportController extends Controller
     {
         // Hub privilege (CI method checks collect_fees — menu uses fees_collection_report).
         abort_unless($this->permissions->hasPrivilege('fees_collection_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = [
             'search_type' => $request->input('search_type', ''),
@@ -228,6 +271,15 @@ class FinanceReportController extends Controller
             ], [
                 'search_type.required' => 'The Search Duration field is required.',
             ]);
+            if ($filters['class_id'] !== '') {
+                abort_unless(
+                    $this->reports->canAccessClass(
+                        (int) $filters['class_id'],
+                        $filters['section_id'] !== '' ? (int) $filters['section_id'] : null
+                    ),
+                    403
+                );
+            }
             $searched = true;
             $range = $this->reports->dateRange(
                 (string) $filters['search_type'],
@@ -236,10 +288,14 @@ class FinanceReportController extends Controller
             );
             $group = (string) $filters['group'];
             $subtotal = $group !== '';
+            $feetypeId = $filters['feetype_id'] !== '' ? $filters['feetype_id'] : null;
+            if (is_numeric($feetypeId)) {
+                $feetypeId = (int) $feetypeId;
+            }
             $rows = $this->reports->feeCollectionReport(
                 $range['from'],
                 $range['to'],
-                $filters['feetype_id'] !== '' ? (int) $filters['feetype_id'] : null,
+                $feetypeId,
                 $filters['collect_by'] !== '' ? (int) $filters['collect_by'] : null,
                 $filters['class_id'] !== '' ? (int) $filters['class_id'] : null,
                 $filters['section_id'] !== '' ? (int) $filters['section_id'] : null
@@ -267,6 +323,7 @@ class FinanceReportController extends Controller
     {
         // Hub privilege (CI onlinefees_report has no rbac check).
         abort_unless($this->permissions->hasPrivilege('online_fees_collection_report', 'can_view'), 403);
+        $this->reports->assertHasClassSectionMatrix();
 
         $filters = [
             'search_type' => $request->input('search_type', ''),
@@ -322,6 +379,10 @@ class FinanceReportController extends Controller
                 'section_id.required' => 'The Section field is required.',
             ]);
             $searched = true;
+            abort_unless(
+                $this->reports->canAccessClass((int) $filters['class_id'], (int) $filters['section_id']),
+                403
+            );
             $studentRemainFees = $this->reports->dueFeesWithRemark(
                 (int) $filters['class_id'],
                 (int) $filters['section_id']
@@ -346,6 +407,7 @@ class FinanceReportController extends Controller
 
         $classId = (int) $request->input('class_id');
         $sectionId = (int) $request->input('section_id');
+        abort_unless($this->reports->canAccessClass($classId, $sectionId), 403);
         $students = $this->reports->dueFeesWithRemark($classId, $sectionId);
         $page = view('reports::admin.finance._print_due_fees_remark', [
             'student_remain_fees' => $students,

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Reports\Services;
 
+use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -9,12 +10,13 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CI Report::alumnireport + Student_model::search_alumniStudentReport.
- * Requires alumni_students row (inner join). Deferred: class-teacher scope, custom fields, add-details modal.
+ * Requires alumni_students row (inner join). Deferred: custom fields, add-details modal.
  */
 class AlumniReportService
 {
     public function __construct(
         protected SchoolContext $school,
+        protected ClassTeacherScopeService $classTeacherScope,
     ) {
     }
 
@@ -61,7 +63,7 @@ class AlumniReportService
      */
     public function classes(): Collection
     {
-        return DB::table('classes')->orderBy('class')->get();
+        return $this->classTeacherScope->classesForDropdown();
     }
 
     /**
@@ -86,6 +88,19 @@ class AlumniReportService
     {
         if ($sessionId <= 0 || $classId <= 0) {
             return collect();
+        }
+
+        if ($this->classTeacherScope->isRestricted()) {
+            $allowedClasses = $this->classTeacherScope->restrictedClassIds();
+            if ($allowedClasses === [] || ! in_array($classId, $allowedClasses, true)) {
+                return collect();
+            }
+            if ($sectionId !== null && $sectionId > 0) {
+                $allowedSections = $this->classTeacherScope->restrictedSectionIdsForClass($classId);
+                if (! in_array($sectionId, $allowedSections, true)) {
+                    return collect();
+                }
+            }
         }
 
         $sessionQuery = DB::table('alumni_students')

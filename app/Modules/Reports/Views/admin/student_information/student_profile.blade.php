@@ -114,6 +114,9 @@
                         <th>{{ __('system.guardian_phone') }}</th>
                     @endif
                     <th>{{ __('system.room_no') }}</th>
+                    @foreach($customFields as $field)
+                        <th>{{ $field->name }}</th>
+                    @endforeach
                 </tr>
             </thead>
             <tbody>
@@ -157,6 +160,9 @@
                                 <td>{{ $student->guardian_phone }}</td>
                             @endif
                             <td>{{ $student->room_no }}</td>
+                            @foreach($customFields as $field)
+                                <td>{!! $reports->customFieldDisplay($student, $field) !!}</td>
+                            @endforeach
                         </tr>
                     @empty
                         <tr>
