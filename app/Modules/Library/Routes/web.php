@@ -34,6 +34,8 @@ Route::middleware(['staff.auth'])->group(function () {
         ->name('library.books.import');
     Route::get('admin/book/exportformat', [BookController::class, 'exportFormat'])
         ->name('library.books.exportformat');
+    Route::get('admin/book/issue_report', [BookController::class, 'issueReport'])
+        ->name('library.books.issue_report');
 
     // CI admin/member — list + enroll + surrender + issue/return
     Route::get('admin/member', [MemberController::class, 'index'])->name('library.members.index');

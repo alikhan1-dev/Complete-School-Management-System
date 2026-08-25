@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Modules\Academics\Services\CustomFieldValueService;
 use App\Modules\Leave\Services\LeaveRequestService;
 use App\Modules\Payroll\Services\PayrollService;
-use App\Modules\Roles\Models\Role;
 use App\Modules\Roles\Services\PermissionService;
 use App\Modules\Settings\Models\SchSetting;
 use App\Modules\Shared\Services\DataTableResponse;
@@ -18,6 +17,7 @@ use App\Modules\Staff\Services\StaffAdmissionService;
 use App\Modules\Staff\Services\StaffDeleteService;
 use App\Modules\Staff\Services\StaffDocumentService;
 use App\Modules\Staff\Services\StaffImportService;
+use App\Modules\Staff\Services\StaffListService;
 use App\Modules\Staff\Services\StaffPhotoService;
 use App\Modules\Staff\Services\StaffProfileService;
 use App\Modules\Staff\Services\StaffRatingService;
@@ -43,6 +43,7 @@ class StaffController extends Controller
         protected StaffPhotoService $photos,
         protected StaffDeleteService $deletion,
         protected StaffImportService $importer,
+        protected StaffListService $staffList,
         protected PayrollService $payroll,
         protected SchoolContext $school,
         protected StaffTimelineService $timeline,
@@ -71,7 +72,7 @@ class StaffController extends Controller
         /** @var Staff|null $actor */
         $actor = Auth::guard('staff')->user();
 
-        $rows = Staff::query()->orderBy('id')->limit(500)->get()->map(function (Staff $staff) use ($canDelete, $actor) {
+        $rows = $this->staffList->activeStaffQuery()->limit(500)->get()->map(function (Staff $staff) use ($canDelete, $actor) {
             $profileUrl = route('staff.profile', $staff->id);
             $editUrl = route('staff.edit', $staff->id);
 
@@ -109,7 +110,7 @@ class StaffController extends Controller
         return view('shared::layouts.admin', [
             'title' => 'Add Staff',
             'contentView' => 'staff::admin.create',
-            'roles' => Role::query()->orderBy('id')->get(),
+            'roles' => $this->staffList->rolesForFilter(),
             'departments' => DB::table('department')->where('is_active', 'yes')->orderBy('id')->get(),
             'designations' => DB::table('staff_designation')->where('is_active', 'yes')->orderBy('id')->get(),
             'leaveTypes' => DB::table('leave_types')->orderBy('id')->get(),
@@ -166,7 +167,7 @@ class StaffController extends Controller
             'contentView' => 'staff::admin.edit',
             'staff' => $staff,
             'staffRoleId' => (int) ($staffRow['role_id'] ?? 0),
-            'roles' => Role::query()->orderBy('id')->get(),
+            'roles' => $this->staffList->rolesForFilter(),
             'departments' => DB::table('department')->where('is_active', 'yes')->orderBy('id')->get(),
             'designations' => DB::table('staff_designation')->where('is_active', 'yes')->orderBy('id')->get(),
             'leaveTypes' => DB::table('leave_types')->orderBy('id')->get(),
@@ -355,7 +356,7 @@ class StaffController extends Controller
             'title' => __('system.staff_import'),
             'contentView' => 'staff::admin.import',
             'fields' => StaffImportService::DISPLAY_FIELDS,
-            'roles' => Role::query()->orderBy('id')->get(),
+            'roles' => $this->staffList->rolesForFilter(),
             'departments' => DB::table('department')->where('is_active', 'yes')->orderBy('id')->get(),
             'designations' => DB::table('staff_designation')->where('is_active', 'yes')->orderBy('id')->get(),
         ]);

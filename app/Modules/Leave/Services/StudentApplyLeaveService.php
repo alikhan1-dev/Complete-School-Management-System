@@ -5,6 +5,9 @@ namespace App\Modules\Leave\Services;
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Leave\Models\StudentApplyLeave;
 use App\Modules\Shared\Services\ClassTeacherScopeService;
+use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Staff\Models\Staff;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -24,6 +27,7 @@ class StudentApplyLeaveService
     public function __construct(
         protected CurrentSessionResolver $currentSession,
         protected ClassTeacherScopeService $classTeacherScope,
+        protected SchoolContext $school,
     ) {
     }
 
@@ -68,6 +72,7 @@ class StudentApplyLeaveService
             ->join('student_session', 'student_session.id', '=', 'student_applyleave.student_session_id')
             ->join('students', 'students.id', '=', 'student_session.student_id')
             ->leftJoin('staff', 'staff.id', '=', 'student_applyleave.approve_by')
+            ->leftJoin('staff_roles as approve_staff_roles', 'approve_staff_roles.staff_id', '=', 'staff.id')
             ->join('classes', 'student_session.class_id', '=', 'classes.id')
             ->join('sections', 'sections.id', '=', 'student_session.section_id')
             ->where('students.is_active', 'yes')
@@ -92,6 +97,8 @@ class StudentApplyLeaveService
         if ($this->classTeacherScope->isRestricted()) {
             $this->classTeacherScope->applyStudentSessionScope($query);
         }
+
+        $this->applySuperadminApproveByFilter($query);
 
         if ($classId !== null && $classId > 0) {
             $query->where('classes.id', $classId);
@@ -262,5 +269,31 @@ class StudentApplyLeaveService
             self::STATUS_DISAPPROVED => 'Disapproved',
             default => 'Pending',
         };
+    }
+
+    /**
+     * CI apply_leave_model::get — hide rows approved by superadmin staff for non-superadmin viewers.
+     */
+    protected function applySuperadminApproveByFilter(Builder $query): void
+    {
+        /** @var Staff|null $staff */
+        $staff = Auth::guard('staff')->user();
+        if (! $staff) {
+            return;
+        }
+
+        $roleId = (int) ($staff->roles()->value('roles.id') ?? 0);
+        if ($roleId === 7) {
+            return;
+        }
+
+        if ($this->school->superadminRestriction() !== 'disabled') {
+            return;
+        }
+
+        $query->where(function ($q) {
+            $q->whereNull('approve_staff_roles.role_id')
+                ->orWhere('approve_staff_roles.role_id', '!=', 7);
+        });
     }
 }

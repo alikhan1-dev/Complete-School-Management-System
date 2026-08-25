@@ -6,16 +6,24 @@ use App\Modules\Attendance\Models\StaffAttendance;
 use App\Modules\Attendance\Models\StaffAttendanceType;
 use App\Modules\Reports\Services\AttendanceReportService;
 use App\Modules\Roles\Models\Role;
+use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Staff\Models\Staff;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
  * CI Staffattendancemodel — staff day attendance search + addorUpdate + profile month lookup.
- * SMS, biometric auto-mark, and superadmin-visibility filter deferred.
+ * SMS and biometric auto-mark deferred.
  */
 class StaffAttendanceService
 {
+    public function __construct(
+        protected SchoolContext $school,
+    ) {
+    }
     public const TYPE_PRESENT = 1;
 
     public const TYPE_LATE = 2;
@@ -43,10 +51,13 @@ class StaffAttendanceService
      */
     public function rolesForFilter(): Collection
     {
-        return Role::query()
+        $query = Role::query()
             ->where('is_active', 'yes')
-            ->orderBy('id')
-            ->get(['id', 'name']);
+            ->orderBy('id');
+
+        $this->applySuperadminStaffQueryFilter($query);
+
+        return $query->get(['id', 'name']);
     }
 
     /**
@@ -117,6 +128,8 @@ class StaffAttendanceService
         if ($roleName !== 'select') {
             $query->where('roles.name', $roleName);
         }
+
+        $this->applySuperadminStaffQueryFilter($query);
 
         return $query->orderBy('staff.employee_id')->get();
     }
@@ -288,5 +301,26 @@ class StaffAttendanceService
         }
 
         return $counts;
+    }
+
+    /**
+     * CI Staff_model::getStaffRole + Staffattendancemodel search* — roles.id != 7 when restriction disabled.
+     */
+    protected function applySuperadminStaffQueryFilter(Builder|\Illuminate\Database\Query\Builder $query): void
+    {
+        /** @var Staff|null $staff */
+        $staff = Auth::guard('staff')->user();
+        if (! $staff) {
+            return;
+        }
+
+        $roleId = (int) ($staff->roles()->value('roles.id') ?? 0);
+        if ($roleId === 7) {
+            return;
+        }
+
+        if ($this->school->superadminRestriction() === 'disabled') {
+            $query->where('roles.id', '!=', 7);
+        }
     }
 }

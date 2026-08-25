@@ -6,8 +6,11 @@ use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Fees\Services\FeeCollectService;
 use App\Modules\Shared\Services\ClassTeacherScopeService;
 use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Staff\Models\Staff;
 use Carbon\Carbon;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -1322,13 +1325,13 @@ class FinanceReportService
     }
 
     /**
-     * CI Payroll_model::getbetweenpayrollReport (superadmin hide deferred).
+     * CI Payroll_model::getbetweenpayrollReport.
      *
      * @return list<object>
      */
     public function betweenPayrollReport(string $startDate, string $endDate): array
     {
-        return DB::table('staff')
+        $query = DB::table('staff')
             ->join('staff_payslip', 'staff_payslip.staff_id', '=', 'staff.id')
             ->leftJoin('staff_designation', 'staff.designation', '=', 'staff_designation.id')
             ->leftJoin('department', 'staff.department', '=', 'department.id')
@@ -1344,9 +1347,32 @@ class FinanceReportService
                 'staff_designation.designation',
                 'department.department_name as department',
                 'staff_payslip.*',
-            ])
-            ->get()
-            ->all();
+            ]);
+
+        $this->applySuperadminStaffQueryFilter($query);
+
+        return $query->get()->all();
+    }
+
+    /**
+     * CI Payroll_model superadmin_visible — roles.id != 7 when restriction disabled.
+     */
+    protected function applySuperadminStaffQueryFilter(Builder $query): void
+    {
+        /** @var Staff|null $staff */
+        $staff = Auth::guard('staff')->user();
+        if (! $staff) {
+            return;
+        }
+
+        $roleId = (int) ($staff->roles()->value('roles.id') ?? 0);
+        if ($roleId === 7) {
+            return;
+        }
+
+        if ($this->school->superadminRestriction() === 'disabled') {
+            $query->where('roles.id', '!=', 7);
+        }
     }
 
     /**

@@ -5,6 +5,9 @@ namespace App\Modules\Leave\Services;
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Leave\Models\StaffLeaveRequest;
 use App\Modules\Roles\Models\Role;
+use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Staff\Models\Staff;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +16,7 @@ use RuntimeException;
 
 /**
  * CI Leaverequest_model + admin leave request flows.
- * Deferred: SaaS storage quota, mail/SMS, superadmin_visible filter, staff self-apply portal.
+ * Deferred: SaaS storage quota, mail/SMS, staff self-apply portal.
  */
 class LeaveRequestService
 {
@@ -26,6 +29,7 @@ class LeaveRequestService
 
     public function __construct(
         protected CurrentSessionResolver $currentSession,
+        protected SchoolContext $school,
     ) {
     }
 
@@ -83,6 +87,8 @@ class LeaveRequestService
         if ($staffId !== null) {
             $query->where('staff_leave_request.staff_id', $staffId);
         }
+
+        $this->applySuperadminStaffQueryFilter($query);
 
         $rows = $query->get()->map(fn ($row) => (array) $row)->all();
 
@@ -471,12 +477,16 @@ class LeaveRequestService
      */
     public function activeStaffList(): array
     {
-        return DB::table('staff')
-            ->where('is_active', 1)
-            ->orderBy('name')
-            ->get(['id', 'name', 'surname', 'employee_id'])
-            ->map(fn ($r) => (array) $r)
-            ->all();
+        $query = DB::table('staff')
+            ->leftJoin('staff_roles', 'staff_roles.staff_id', '=', 'staff.id')
+            ->leftJoin('roles', 'staff_roles.role_id', '=', 'roles.id')
+            ->where('staff.is_active', 1)
+            ->orderBy('staff.name')
+            ->select(['staff.id', 'staff.name', 'staff.surname', 'staff.employee_id']);
+
+        $this->applySuperadminStaffQueryFilter($query);
+
+        return $query->get()->map(fn ($r) => (array) $r)->all();
     }
 
     /**
@@ -526,5 +536,26 @@ class LeaveRequestService
             ->get()
             ->map(fn ($r) => (array) $r)
             ->all();
+    }
+
+    /**
+     * CI Leaverequest_model::staff_leave_request / Staff_model::searchFullText — roles.id != 7.
+     */
+    protected function applySuperadminStaffQueryFilter(Builder $query): void
+    {
+        /** @var Staff|null $staff */
+        $staff = Auth::guard('staff')->user();
+        if (! $staff) {
+            return;
+        }
+
+        $roleId = (int) ($staff->roles()->value('roles.id') ?? 0);
+        if ($roleId === 7) {
+            return;
+        }
+
+        if ($this->school->superadminRestriction() === 'disabled') {
+            $query->where('roles.id', '!=', 7);
+        }
     }
 }

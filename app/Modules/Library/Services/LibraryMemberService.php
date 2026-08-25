@@ -4,18 +4,22 @@ namespace App\Modules\Library\Services;
 
 use App\Modules\Academics\Services\CurrentSessionResolver;
 use App\Modules\Library\Models\LibraryMember;
+use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Staff\Models\Staff;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
  * CI admin/member — list / enroll student & staff / surrender / detail for issue.
- * Deferred: superadmin_visible staff filtering.
  */
 class LibraryMemberService
 {
     public function __construct(
         protected CurrentSessionResolver $currentSession,
+        protected SchoolContext $school,
     ) {
     }
 
@@ -55,8 +59,11 @@ class LibraryMemberService
                 'staff.surname as lastname',
                 'staff.contact_no as phone',
                 'staff.employee_id',
+                'staff.id as staff_id',
+                DB::raw('(SELECT role_id FROM staff_roles WHERE staff_id = staff.id AND is_active = 1 LIMIT 1) as staff_role_id'),
             ])
-            ->get();
+            ->get()
+            ->filter(fn (object $row): bool => ! $this->shouldExcludeSuperadminStaffMember((int) ($row->staff_role_id ?? 0)));
 
         return $students->concat($staff)->sortBy('lib_member_id')->values();
     }
@@ -105,17 +112,22 @@ class LibraryMemberService
     }
 
     /**
-     * CI Teacher_model::getLibraryTeacher (without superadmin filter).
+     * CI Teacher_model::getLibraryTeacher.
      *
      * @return Collection<int, object>
      */
     public function listStaffCandidates(): Collection
     {
-        return DB::table('staff')
+        $query = DB::table('staff')
             ->leftJoin('libarary_members', function ($join) {
                 $join->on('libarary_members.member_id', '=', 'staff.id')
                     ->where('libarary_members.member_type', '=', 'teacher');
             })
+            ->leftJoin('staff_roles', function ($join) {
+                $join->on('staff_roles.staff_id', '=', 'staff.id')
+                    ->where('staff_roles.is_active', '=', 1);
+            })
+            ->leftJoin('roles', 'roles.id', '=', 'staff_roles.role_id')
             ->where('staff.is_active', 1)
             ->orderBy('staff.id')
             ->select([
@@ -128,8 +140,11 @@ class LibraryMemberService
                 'staff.gender',
                 DB::raw('IFNULL(libarary_members.id, 0) as libarary_member_id'),
                 DB::raw('IFNULL(libarary_members.library_card_no, "") as library_card_no'),
-            ])
-            ->get();
+            ]);
+
+        $this->applySuperadminStaffQueryFilter($query);
+
+        return $query->get();
     }
 
     public function enrollStudent(int $studentId, string $libraryCardNo): LibraryMember
@@ -242,5 +257,48 @@ class LibraryMemberService
             'library_card_no' => $card,
             'is_active' => 'no',
         ]);
+    }
+
+    /**
+     * CI Member::index — omit staff library members with role 7 when restriction is disabled.
+     */
+    protected function shouldExcludeSuperadminStaffMember(int $memberStaffRoleId): bool
+    {
+        if ($memberStaffRoleId !== 7) {
+            return false;
+        }
+
+        if ($this->school->superadminRestriction() !== 'disabled') {
+            return false;
+        }
+
+        return $this->viewerRoleId() !== 7;
+    }
+
+    /**
+     * CI Teacher_model::getLibraryTeacher — roles.id != 7 for non-superadmin viewers.
+     */
+    protected function applySuperadminStaffQueryFilter(Builder $query): void
+    {
+        if ($this->school->superadminRestriction() !== 'disabled') {
+            return;
+        }
+
+        if ($this->viewerRoleId() === 7) {
+            return;
+        }
+
+        $query->where('roles.id', '!=', 7);
+    }
+
+    protected function viewerRoleId(): int
+    {
+        /** @var Staff|null $staff */
+        $staff = Auth::guard('staff')->user();
+        if (! $staff) {
+            return 0;
+        }
+
+        return (int) ($staff->roles()->value('roles.id') ?? 0);
     }
 }

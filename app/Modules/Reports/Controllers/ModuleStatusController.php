@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Reports',
             'status' => 'in_progress',
-            'message' => 'Student information (incl. alumni report + class-teacher scope + student_profile table custom fields + alumni report table custom fields + class-section view-students modal) + Attendencereports full (incl. class-teacher scope) + Financereports (incl. class-teacher scope + transport fee lines) + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js.',
+            'message' => 'Student information (incl. alumni report + class-teacher scope + student_profile table custom fields + alumni report table custom fields + class-section view-students modal) + Attendencereports full (incl. class-teacher scope + staff attendance superadmin_visible) + Financereports (incl. class-teacher scope + transport fee lines) + Balancefees/due_fees_report + Human Resource hub/staff_report + Lesson Plan syllabus/teacher reports + Online Exam hub/exams report persist done. Deferred: client print/excel checkbox parity, CI pixel-parity JS/DataTables/Chart.js.',
             'slices' => [
                 'student_information_hub' => 'done',
                 'student_report' => 'done',
@@ -39,6 +39,7 @@ class ModuleStatusController extends Controller
                 'attendance_reports_monthly_calendars' => 'done',
                 'attendance_reports_period_biometric' => 'done',
                 'attendance_reports_class_teacher' => 'done',
+                'attendance_reports_staff_superadmin_visible' => 'done',
                 'finance_reports_hub_balance_statement_daily' => 'done',
                 'finance_reports_collection_online' => 'done',
                 'finance_reports_remark_payroll_onlineadmission' => 'done',

@@ -6,6 +6,9 @@ use App\Modules\Attendance\Models\StaffAttendanceType;
 use App\Modules\Payroll\Models\PayslipAllowance;
 use App\Modules\Payroll\Models\StaffPayslip;
 use App\Modules\Roles\Models\Role;
+use App\Modules\Shared\Services\SchoolContext;
+use App\Modules\Staff\Models\Staff;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +16,7 @@ use InvalidArgumentException;
 
 /**
  * CI Payroll_model + Payroll controller helpers — staff payslip generate / pay / report.
- * Deferred: currency format helpers, SMS/mail on pay, payslip PDF header image, superadmin_visible filter.
+ * Deferred: currency format helpers, SMS/mail on pay, payslip PDF header image.
  */
 class PayrollService
 {
@@ -41,6 +44,11 @@ class PayrollService
         'cheque' => 'Cheque',
         'online' => 'Transfer to Bank Account',
     ];
+
+    public function __construct(
+        protected SchoolContext $school,
+    ) {
+    }
 
     /**
      * CI Customlib::getMonthDropdown — keys are English month names (January…).
@@ -108,6 +116,8 @@ class PayrollService
         if ($empName !== '') {
             $query->where('staff.name', $empName);
         }
+
+        $this->applySuperadminStaffQueryFilter($query);
 
         return $query->get()->map(fn ($row) => (array) $row)->all();
     }
@@ -417,6 +427,8 @@ class PayrollService
             $query->where('roles.name', $role);
         }
 
+        $this->applySuperadminStaffQueryFilter($query);
+
         return $query->get()->map(fn ($row) => (array) $row)->all();
     }
 
@@ -525,5 +537,26 @@ class PayrollService
             'attendanceType' => $this->attendanceTypes(),
             'alloted_leave' => $this->allotedLeave($staffId),
         ];
+    }
+
+    /**
+     * CI Payroll_model::searchEmployee / getpayrollReport — roles.id != 7 when restriction disabled.
+     */
+    protected function applySuperadminStaffQueryFilter(Builder $query): void
+    {
+        /** @var Staff|null $staff */
+        $staff = Auth::guard('staff')->user();
+        if (! $staff) {
+            return;
+        }
+
+        $roleId = (int) ($staff->roles()->value('roles.id') ?? 0);
+        if ($roleId === 7) {
+            return;
+        }
+
+        if ($this->school->superadminRestriction() === 'disabled') {
+            $query->where('roles.id', '!=', 7);
+        }
     }
 }

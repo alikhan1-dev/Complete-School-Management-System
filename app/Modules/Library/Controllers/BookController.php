@@ -3,6 +3,7 @@
 namespace App\Modules\Library\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Library\Services\BookIssueService;
 use App\Modules\Library\Services\BookService;
 use App\Modules\Roles\Services\PermissionService;
 use Illuminate\Http\RedirectResponse;
@@ -11,14 +12,14 @@ use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * CI admin/book — list/create/edit/delete/import.
- * Deferred: getAvailQuantity, issue reports.
+ * CI admin/book — list/create/edit/delete/import + issue report list.
  */
 class BookController extends Controller
 {
     public function __construct(
         protected PermissionService $permissions,
         protected BookService $books,
+        protected BookIssueService $issues,
     ) {
     }
 
@@ -132,6 +133,20 @@ class BookController extends Controller
             echo $content;
         }, 'import_book_sample_file.csv', [
             'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    /**
+     * CI admin/book/issue_report — currently issued books (no date filter).
+     */
+    public function issueReport(): View
+    {
+        abort_unless($this->permissions->hasPrivilege('books', 'can_view'), 403);
+
+        return view('shared::layouts.admin', [
+            'title' => 'Book Issue Report',
+            'contentView' => 'library::admin.books.issue_report',
+            'rows' => $this->issues->issuedMemberBooks(),
         ]);
     }
 

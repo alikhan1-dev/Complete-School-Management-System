@@ -15,7 +15,7 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Payroll',
             'status' => 'done',
-            'message' => 'Payroll admin core + report done. Deferred: currency helpers, payslip print header image, SMS/mail, superadmin_visible filter.',
+            'message' => 'Payroll admin core + report done (incl. superadmin_visible staff filtering). Deferred: currency helpers, payslip print header image, SMS/mail.',
             'slices' => [
                 'staff_list_search' => 'done',
                 'generate_payslip' => 'done',
@@ -24,6 +24,7 @@ class ModuleStatusController extends Controller
                 'view_payslip' => 'done',
                 'delete_revert' => 'done',
                 'payroll_report' => 'done',
+                'payroll_superadmin_visible' => 'done',
             ],
         ]);
     }

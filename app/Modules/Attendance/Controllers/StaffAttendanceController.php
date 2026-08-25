@@ -12,7 +12,7 @@ use InvalidArgumentException;
 
 /**
  * CI admin/Staffattendance — staff day attendance mark + save.
- * Deferred: SMS, profile month view, biometric/QR auto-mark, superadmin-visibility filter.
+ * Deferred: SMS, profile month view, biometric/QR auto-mark.
  */
 class StaffAttendanceController extends Controller
 {

@@ -128,4 +128,68 @@ class BookIssueService
         ]);
         $issue->save();
     }
+
+    /**
+     * CI Bookissue_model::getissueMemberBooks — all currently issued books (staff + students).
+     *
+     * @return Collection<int, object>
+     */
+    public function issuedMemberBooks(): Collection
+    {
+        $staffRows = DB::table('book_issues')
+            ->leftJoin('books', 'books.id', '=', 'book_issues.book_id')
+            ->leftJoin('libarary_members', 'libarary_members.id', '=', 'book_issues.member_id')
+            ->leftJoin('staff', 'staff.id', '=', 'libarary_members.member_id')
+            ->where('book_issues.is_returned', 0)
+            ->where('libarary_members.member_type', 'teacher')
+            ->select([
+                'libarary_members.id as members_id',
+                'libarary_members.library_card_no',
+                'book_issues.id',
+                'staff.name as fname',
+                'staff.surname as lname',
+                DB::raw("'' as admission"),
+                'libarary_members.member_type',
+                'book_issues.return_date',
+                'book_issues.duereturn_date',
+                'book_issues.issue_date',
+                'book_issues.is_returned',
+                'books.book_title',
+                'books.book_no',
+                'books.author',
+            ])
+            ->get();
+
+        $studentRows = DB::table('book_issues')
+            ->leftJoin('books', 'books.id', '=', 'book_issues.book_id')
+            ->leftJoin('libarary_members', 'libarary_members.id', '=', 'book_issues.member_id')
+            ->leftJoin('students', 'students.id', '=', 'libarary_members.member_id')
+            ->where('book_issues.is_returned', 0)
+            ->where('libarary_members.member_type', 'student')
+            ->select([
+                'libarary_members.id as members_id',
+                'libarary_members.library_card_no',
+                'book_issues.id',
+                'students.firstname as fname',
+                'students.lastname as lname',
+                'students.admission_no as admission',
+                'libarary_members.member_type',
+                'book_issues.return_date',
+                'book_issues.duereturn_date',
+                'book_issues.issue_date',
+                'book_issues.is_returned',
+                'books.book_title',
+                'books.book_no',
+                'books.author',
+            ])
+            ->get();
+
+        return $staffRows->concat($studentRows)->map(function (object $row): object {
+            $row->issue_by = trim(((string) ($row->fname ?? '')).' '.((string) ($row->lname ?? '')));
+            $row->member_type_label = ($row->member_type ?? '') === 'student' ? 'Student' : 'Staff';
+            $row->due_return_date = $row->duereturn_date ?? $row->return_date;
+
+            return $row;
+        })->values();
+    }
 }

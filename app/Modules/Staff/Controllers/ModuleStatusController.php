@@ -12,9 +12,10 @@ class ModuleStatusController extends Controller
         return response()->json([
             'module' => 'Staff',
             'status' => 'in_progress',
-            'message' => 'Staff list/DataTables + create/edit + profile (incl. payroll + photo + leave summary + rating) + attendance AJAX + documents (incl. create/edit upload) + timeline + disable/enable + delete + import + SaaS quota hooks + credential notification hooks + teachers rating admin list + department/designation masters done. Deferred: live credential mail/SMS gateways.',
+            'message' => 'Staff list/DataTables + create/edit + profile (incl. payroll + photo + leave summary + rating) + attendance AJAX + documents (incl. create/edit upload) + timeline + disable/enable + delete + import + SaaS quota hooks + credential notification hooks + teachers rating admin list + department/designation masters + staff list superadmin_visible done. Deferred: live credential mail/SMS gateways.',
             'slices' => [
                 'list_datatable' => 'done',
+                'staff_list_superadmin_visible' => 'done',
                 'create' => 'done',
                 'edit' => 'done',
                 'profile' => 'done',
